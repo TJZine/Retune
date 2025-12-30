@@ -1,0 +1,709 @@
+# Module: EPG (Electronic Program Guide) UI
+
+## Metadata
+- **ID**: `epg-ui`
+- **Path**: `src/modules/ui/epg/`
+- **Primary File**: `EPGComponent.ts`
+- **Test File**: `EPGComponent.test.ts`
+- **Dependencies**: `navigation`, `channel-scheduler`, `channel-manager`
+- **Complexity**: high
+- **Estimated LoC**: 700
+
+## Purpose
+
+Provides the visual program guide interface displaying channels vertically and time horizontally in a grid format. Implements virtualized rendering for performance, focus management for D-pad navigation, and real-time updates with current time indicator. Designed for 10-foot TV viewing experience.
+
+## Public Interface
+
+```typescript
+/**
+ * EPG Component Interface
+ * Electronic Program Guide grid with virtualized rendering
+ */
+export interface IEPGComponent {
+  // Lifecycle
+  initialize(config: EPGConfig): void;
+  destroy(): void;
+  
+  // Visibility
+  show(): void;
+  hide(): void;
+  toggle(): void;
+  isVisible(): boolean;
+  
+  // Data Loading
+  loadChannels(channels: ChannelConfig[]): void;
+  loadScheduleForChannel(
+    channelId: string, 
+    schedule: ScheduleWindow
+  ): void;
+  refreshCurrentTime(): void;
+  
+  // Navigation
+  focusChannel(channelIndex: number): void;
+  focusProgram(channelIndex: number, programIndex: number): void;
+  focusNow(): void;
+  
+  scrollToTime(time: number): void;
+  scrollToChannel(channelIndex: number): void;
+  
+  // Input Handling
+  handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handleSelect(): boolean;
+  handleBack(): boolean;
+  
+  // State
+  getState(): EPGState;
+  getFocusedProgram(): ScheduledProgram | null;
+  
+  // Events
+  on<K extends keyof EPGEventMap>(
+    event: K, 
+    handler: (payload: EPGEventMap[K]) => void
+  ): void;
+  off<K extends keyof EPGEventMap>(
+    event: K, 
+    handler: (payload: EPGEventMap[K]) => void
+  ): void;
+}
+
+/**
+ * EPG Info Panel Interface
+ * Program details overlay
+ */
+export interface IEPGInfoPanel {
+  show(program: ScheduledProgram): void;
+  hide(): void;
+  update(program: ScheduledProgram): void;
+}
+```
+
+## Required Exports
+
+```typescript
+// src/modules/ui/epg/index.ts
+export { EPGComponent } from './EPGComponent';
+export { EPGInfoPanel } from './EPGInfoPanel';
+export { EPGVirtualizer } from './EPGVirtualizer';
+export type { IEPGComponent, IEPGInfoPanel } from './interfaces';
+export type {
+  EPGConfig,
+  EPGState,
+  EPGFocusPosition,
+  EPGChannelRow,
+  EPGProgramCell,
+  VirtualizedGridState
+} from './types';
+```
+
+## Implementation Requirements
+
+### MUST Implement:
+
+1. **Virtualized Grid Rendering**
+   - Only render visible cells plus buffer (max ~200 DOM elements)
+   - Recycle DOM elements when scrolling
+   - Buffer: 2 rows above/below, 60 minutes left/right
+
+2. **Time-Based Layout**
+   - Programs positioned by start time × pixels-per-minute
+   - Program width = duration × pixels-per-minute
+   - Handle programs spanning grid boundaries
+
+3. **Current Time Indicator**
+   - Vertical red line at current time position
+   - Updates every minute
+   - Visible even when scrolled
+
+4. **D-Pad Navigation**
+   - Left/Right: Move focus between programs (time axis)
+   - Up/Down: Move focus between channels
+   - At boundaries: scroll grid or reject movement
+   - Focus transitions smoothly with animation
+
+5. **Focus Ring + Info Panel**
+   - Focused cell has prominent highlight (scale, glow)
+   - Info panel shows detailed program info
+   - Updates as focus changes
+
+6. **TV-Safe Rendering**
+   - 5% safe zone margins
+   - Minimum text size: 24px
+   - High contrast colors
+
+### MUST NOT:
+
+1. Create more than ~200 DOM elements for grid cells
+2. Re-render entire grid on small state changes
+3. Use opacity animations (prefer transform for performance)
+4. Block main thread during scroll/render
+
+### State Management:
+
+```typescript
+interface EPGInternalState {
+  isVisible: boolean;
+  channels: ChannelConfig[];
+  schedules: Map<string, ScheduleWindow>;
+  focusedCell: EPGFocusPosition | null;
+  scrollPosition: {
+    channelOffset: number;
+    timeOffset: number;
+  };
+  currentTime: number;
+  lastRenderTime: number;
+}
+```
+
+- **Persistence**: None (UI state is ephemeral)
+- **Initialization**: Hidden, no focus
+
+### Error Handling:
+
+| Scenario | Handling |
+|----------|----------|
+| Schedule not loaded | Show "Loading..." placeholder |
+| Empty channel | Show "No programs" message |
+| Focus on boundary | Return false from navigation |
+
+## Layout Specification
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [App Logo]                      PROGRAM GUIDE                   12:45 PM    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│              │  12:00 PM   │  12:30 PM   │   1:00 PM   │   1:30 PM   │  2:0 │
+├──────────────┼─────────────┴─────────────┼─────────────┼─────────────┼──────┤
+│ 1  Sci-Fi    │        Blade Runner       │  Total      │   The Matrix      │
+│    Channel   │          (1982)           │  Recall     │     (1999)        │
+├──────────────┼───────────────────────────┴─────────────┼───────────────────┤
+│ 2  Comedy    │   The Office S03E12    │ The Office S03E13 │ The Office S03 │
+│    Classics  │   "Traveling Salesman" │ "The Return"      │ "Ben Franklin" │
+├──────────────┼────────────────────────┴───────────────────┴─────────────────┤
+│ 3  80s       │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+│    Action ◄──┼░░░░░░░░░ Die Hard (1988) ░░░░░░░[FOCUSED]░░░░░░░░░░░░░░░░░░░░│
+│              │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+├──────────────┼─────────────────────────────────────────┬────────────────────┤
+│ 4  Drama     │          The Godfather (1972)          │ The Godfather Part │
+│              │                                        │      II (1974)     │
+├──────────────┼────────────────────────────┬───────────┴────────────────────┤
+│ 5  Kids      │  Toy Story   │  Toy Story 2  │        Finding Nemo          │
+│              │    (1995)    │    (1999)     │           (2003)             │
+├──────────────┴────────────────────────────┴────────────────────────────────┤
+│                              INFO PANEL                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  DIE HARD (1988)                                    ★★★★☆  R        │   │
+│  │  12:15 PM - 2:27 PM (2h 12m)                                       │   │
+│  │  NYPD cop John McClane goes on a Christmas vacation...              │   │
+│  │  [Watch Now]     [More Info]                                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                            ▲
+                      Current Time Indicator
+```
+
+## Method Specifications
+
+### `handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean`
+
+**Purpose**: Handle D-pad navigation within the grid.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| direction | 'up' \| 'down' \| 'left' \| 'right' | Yes | Navigation direction |
+
+**Returns**: `true` if navigation handled, `false` if at boundary
+
+**Implementation Notes**:
+```typescript
+handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean {
+  const { focusedCell, channels, scrollPosition } = this.state;
+  
+  if (!focusedCell) {
+    // No focus - focus first visible cell
+    this.focusProgram(scrollPosition.channelOffset, 0);
+    return true;
+  }
+  
+  switch (direction) {
+    case 'up':
+      if (focusedCell.channelIndex > 0) {
+        // Find program at same time in previous channel
+        const prevChannel = focusedCell.channelIndex - 1;
+        const targetTime = focusedCell.program.scheduledStartTime + 
+                          focusedCell.program.elapsedMs;
+        this.focusProgramAtTime(prevChannel, targetTime);
+        return true;
+      }
+      return false; // At top
+      
+    case 'down':
+      if (focusedCell.channelIndex < channels.length - 1) {
+        const nextChannel = focusedCell.channelIndex + 1;
+        const targetTime = focusedCell.program.scheduledStartTime + 
+                          focusedCell.program.elapsedMs;
+        this.focusProgramAtTime(nextChannel, targetTime);
+        return true;
+      }
+      return false; // At bottom
+      
+    case 'left':
+      return this.focusPreviousProgram();
+      
+    case 'right':
+      return this.focusNextProgram();
+  }
+}
+```
+
+---
+
+### `focusProgram(channelIndex: number, programIndex: number): void`
+
+**Purpose**: Focus a specific program cell.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| channelIndex | number | Yes | Channel row index |
+| programIndex | number | Yes | Program index within channel |
+
+**Side Effects**:
+- Updates focused cell state
+- Scrolls grid if needed to show focused cell
+- Updates info panel
+- Emits `focusChange` event
+
+**Implementation Notes**:
+```typescript
+focusProgram(channelIndex: number, programIndex: number): void {
+  const schedule = this.getScheduleForChannel(channelIndex);
+  if (!schedule || programIndex >= schedule.programs.length) return;
+  
+  const program = schedule.programs[programIndex];
+  const channel = this.state.channels[channelIndex];
+  
+  // Remove focus from previous cell
+  if (this.state.focusedCell?.cellElement) {
+    this.state.focusedCell.cellElement.classList.remove('focused');
+  }
+  
+  // Find or render new cell
+  const cellElement = this.getCellElement(channelIndex, programIndex);
+  if (cellElement) {
+    cellElement.classList.add('focused');
+  }
+  
+  // Update state
+  this.state.focusedCell = {
+    channelIndex,
+    programIndex,
+    program,
+    cellElement
+  };
+  
+  // Ensure visible
+  this.ensureCellVisible(channelIndex, program);
+  
+  // Update info panel
+  this.infoPanel.update(program);
+  
+  // Emit event
+  this.emit('focusChange', this.state.focusedCell);
+}
+```
+
+## Virtualization Strategy
+
+### Algorithm:
+
+```typescript
+class EPGVirtualizer {
+  private config: EPGConfig;
+  private elementPool: Map<string, HTMLElement> = new Map();
+  private visibleCells: Map<string, EPGProgramCell> = new Map();
+  
+  private readonly ROW_BUFFER = 2;
+  private readonly TIME_BUFFER_MINUTES = 60;
+  
+  calculateVisibleRange(state: EPGState): VirtualizedGridState {
+    const { scrollPosition } = state;
+    
+    return {
+      visibleRows: this.range(
+        Math.max(0, scrollPosition.channelOffset - this.ROW_BUFFER),
+        Math.min(
+          this.totalChannels,
+          scrollPosition.channelOffset + this.config.visibleChannels + this.ROW_BUFFER
+        )
+      ),
+      visibleTimeRange: {
+        start: scrollPosition.timeOffset - this.TIME_BUFFER_MINUTES,
+        end: scrollPosition.timeOffset + 
+             (this.config.visibleHours * 60) + 
+             this.TIME_BUFFER_MINUTES
+      },
+      recycledElements: this.elementPool
+    };
+  }
+  
+  renderVisibleCells(
+    channels: ChannelConfig[],
+    schedules: Map<string, ScheduleWindow>,
+    range: VirtualizedGridState
+  ): void {
+    const newVisibleCells = new Map<string, EPGProgramCell>();
+    
+    // Determine needed cells
+    for (const rowIndex of range.visibleRows) {
+      const channel = channels[rowIndex];
+      const schedule = schedules.get(channel.id);
+      if (!schedule) continue;
+      
+      for (const program of schedule.programs) {
+        if (this.overlapsTimeRange(program, range.visibleTimeRange)) {
+          const cellKey = `${channel.id}-${program.scheduledStartTime}`;
+          newVisibleCells.set(cellKey, this.createCell(program, rowIndex));
+        }
+      }
+    }
+    
+    // Recycle cells no longer visible
+    for (const [key, cell] of this.visibleCells) {
+      if (!newVisibleCells.has(key)) {
+        this.recycleElement(key, cell);
+      }
+    }
+    
+    // Render new cells
+    for (const [key, cell] of newVisibleCells) {
+      if (!this.visibleCells.has(key)) {
+        this.renderCell(key, cell);
+      }
+    }
+    
+    this.visibleCells = newVisibleCells;
+  }
+}
+```
+
+### Virtualization Edge Cases
+
+| Edge Case | Scenario | Handling Strategy |
+|-----------|----------|-------------------|
+| Very long program | Program spans 6+ hours, exceeding visible window width | Render only visible portion, use scroll region for clipping |
+| Many short programs | 30+ programs per hour (e.g., music videos) | Batch render in groups of 10, use requestAnimationFrame |
+| Single program channel | 24-hour movie channel with one item | Use min-width of 200px, don't shrink below readable size |
+| Rapid scrolling | User holds down arrow key | Throttle render calls to max 30/sec, skip intermediate positions |
+| Focus during scroll | Focus leaves visible area during scroll | Lock focus element in DOM until scroll completes, then recycle |
+| Program boundary | Program starts at 11:59 PM, ends across midnight | Clip program at day boundary OR render spanning (configurable) |
+| Zero-duration items | Plex item with 0ms duration | Filter out during schedule load, never display in grid |
+| Overlapping programs | Scheduler bug causes overlap | Render both, newest on top with z-index |
+| Empty channel row | Channel has no programs loaded yet | Show skeleton cells with loading animation |
+| Viewport resize | TV display mode change (zoom) | Recalculate visible cells on resize, debounce 250ms |
+
+### Performance Budgets for Virtualization
+
+| Operation | Target | Max Allowed |
+|-----------|--------|-------------|
+| Initial grid render | 50ms | 100ms |
+| Single scroll update | 8ms | 16ms (60fps) |
+| Cell creation | 0.5ms | 1ms |
+| Cell recycle | 0.1ms | 0.5ms |
+| Focus update | 5ms | 10ms |
+| DOM element count | 150 | 200 |
+
+## Internal Architecture
+
+### Private Methods:
+- `_renderGrid()`: Full grid render (initial/resize)
+- `_renderVisibleCells(range)`: Virtualized partial render
+- `_recycleElement(key, cell)`: Return element to pool
+- `_getOrCreateElement()`: Get from pool or create new
+- `_calculateCellPosition(program)`: Compute left/width
+- `_updateCurrentTimeIndicator()`: Move time line
+- `_ensureCellVisible(channel, program)`: Scroll if needed
+- `_focusProgramAtTime(channel, time)`: Find program at time
+- `_startTimeUpdateInterval()`: Begin minute ticker
+
+### Class Diagram:
+```
+┌─────────────────────────────────┐
+│        EPGComponent             │
+├─────────────────────────────────┤
+│ - config: EPGConfig             │
+│ - state: EPGState               │
+│ - virtualizer: EPGVirtualizer   │
+│ - infoPanel: IEPGInfoPanel      │
+│ - containerElement: HTMLElement │
+│ - gridElement: HTMLElement      │
+│ - timeIndicator: HTMLElement    │
+│ - eventEmitter: EventEmitter    │
+├─────────────────────────────────┤
+│ + initialize(config): void      │
+│ + destroy(): void               │
+│ + show(): void                  │
+│ + hide(): void                  │
+│ + toggle(): void                │
+│ + isVisible(): boolean          │
+│ + loadChannels(channels): void  │
+│ + loadScheduleForChannel()      │
+│ + focusChannel(index): void     │
+│ + focusProgram(ch, prog): void  │
+│ + focusNow(): void              │
+│ + handleNavigation(): boolean   │
+│ + handleSelect(): boolean       │
+│ + handleBack(): boolean         │
+│ + getState(): EPGState          │
+│ + on(event, handler): void      │
+│ - _renderGrid(): void           │
+│ - _renderVisibleCells(): void   │
+│ - _updateTimeIndicator(): void  │
+│ - _ensureCellVisible(): void    │
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
+│        EPGInfoPanel             │
+├─────────────────────────────────┤
+│ - containerElement: HTMLElement │
+│ - isVisible: boolean            │
+├─────────────────────────────────┤
+│ + show(program): void           │
+│ + hide(): void                  │
+│ + update(program): void         │
+└─────────────────────────────────┘
+```
+
+## Events Emitted
+
+| Event Name | Payload Type | When Emitted |
+|------------|--------------|--------------|
+| `open` | `void` | EPG becomes visible |
+| `close` | `void` | EPG becomes hidden |
+| `focusChange` | `EPGFocusPosition` | Focus moves to new cell |
+| `channelSelected` | `{ channel, program }` | User presses OK on cell |
+| `programSelected` | `ScheduledProgram` | User selects a program |
+| `timeScroll` | `{ direction, newOffset }` | Time axis scrolls |
+| `channelScroll` | `{ direction, newOffset }` | Channel axis scrolls |
+
+## Events Consumed
+
+| Event Name | Source Module | Handler Behavior |
+|------------|---------------|------------------|
+| `scheduleSync` | `channel-scheduler` | Refresh visible cells |
+| `channelUpdated` | `channel-manager` | Reload channel schedules |
+
+## CSS Specification
+
+```css
+/* EPG Container */
+.epg-container {
+  position: absolute;
+  top: 5%; left: 5%;
+  width: 90%; height: 90%;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 1000;
+  display: none;
+}
+
+.epg-container.visible {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grid */
+.epg-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  overflow: hidden;
+}
+
+/* Channel column */
+.epg-channel-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.epg-channel-row {
+  height: 80px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Program cells */
+.epg-cell {
+  position: absolute;
+  height: 76px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.epg-cell.focused {
+  background: var(--focus-color);
+  transform: scale(1.02);
+  z-index: 10;
+  box-shadow: 0 0 20px rgba(0, 168, 225, 0.5);
+}
+
+.epg-cell.current {
+  border-left: 4px solid #ff4444;
+}
+
+.epg-cell-title {
+  font-size: 24px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epg-cell-time {
+  font-size: 18px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* Current time indicator */
+.epg-time-indicator {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: #ff4444;
+  z-index: 100;
+}
+```
+
+## Test Specification
+
+### Unit Tests Required:
+
+```typescript
+describe('EPGComponent', () => {
+  describe('virtualization', () => {
+    it('should render only visible cells plus buffer', () => {
+      // 50 channels, 48 half-hours = 2400 potential cells
+      // Should render max ~200
+    });
+    
+    it('should recycle cells when scrolling', () => {
+      // Scroll down, verify element count stays stable
+    });
+  });
+  
+  describe('navigation', () => {
+    it('should move focus right to next program', () => {
+      // Focus program, press right
+      // Verify focus on next program
+    });
+    
+    it('should move focus up/down between channels', () => {
+      // Focus program, press up/down
+      // Verify focus on same-time program in other channel
+    });
+    
+    it('should return false at boundaries', () => {
+      // Focus first channel, press up → false
+      // Focus last channel, press down → false
+    });
+    
+    it('should scroll when focus moves outside visible area', () => {
+      // Focus near edge, move past edge
+      // Verify scroll offset updated
+    });
+  });
+  
+  describe('time indicator', () => {
+    it('should position indicator at current time', () => {
+      // Mock Date.now
+      // Verify indicator left position
+    });
+    
+    it('should update position every minute', () => {
+      // Advance time, trigger update
+      // Verify position changed
+    });
+  });
+  
+  describe('selection', () => {
+    it('should emit channelSelected on OK press', () => {
+      // Focus cell, press OK
+      // Verify event emitted with correct channel/program
+    });
+  });
+});
+```
+
+### Performance Tests:
+
+```typescript
+describe('Performance', () => {
+  it('should render 5-channel × 3-hour window in <100ms', () => {
+    // Time grid render
+  });
+  
+  it('should maintain 60fps during scroll', () => {
+    // Measure frame times during continuous scroll
+  });
+});
+```
+
+## File Structure
+
+```
+src/modules/ui/epg/
+├── index.ts              # Public exports
+├── EPGComponent.ts       # Main component
+├── EPGVirtualizer.ts     # DOM virtualization
+├── EPGInfoPanel.ts       # Program details panel
+├── EPGTimeHeader.ts      # Time axis header
+├── EPGChannelList.ts     # Channel column
+├── interfaces.ts         # IEPGComponent interface
+├── types.ts              # EPG-specific types
+├── styles.css            # EPG styles
+├── constants.ts          # Layout constants
+└── __tests__/
+    ├── EPGComponent.test.ts
+    └── EPGVirtualizer.test.ts
+```
+
+## Implementation Checklist
+
+- [ ] Create file structure
+- [ ] Implement container and grid layout
+- [ ] Implement EPGVirtualizer with element pooling
+- [ ] Implement time header with scrolling
+- [ ] Implement channel list column
+- [ ] Implement program cell rendering
+- [ ] Implement current time indicator
+- [ ] Implement D-pad navigation
+- [ ] Implement focus handling with animations
+- [ ] Implement info panel
+- [ ] Implement scroll-when-focus-leaves
+- [ ] Write unit tests for navigation
+- [ ] Write performance tests for virtualization
+- [ ] Add JSDoc comments to all public methods
+- [ ] Verify against acceptance criteria
+
+## Acceptance Criteria
+
+This module is COMPLETE when:
+1. [ ] Grid displays 5 channels × 3 hours at 60fps
+2. [ ] D-pad navigation works correctly in all directions
+3. [ ] Virtualization keeps DOM under 200 elements
+4. [ ] Current time indicator shows and updates
+5. [ ] Focus ring is visible from 10 feet away
+6. [ ] Info panel updates as focus changes
+7. [ ] OK press emits selection event
+8. [ ] All unit and performance tests pass
+9. [ ] No TypeScript compilation errors

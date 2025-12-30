@@ -1,0 +1,652 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2024-12-30T07:00:00.000Z",
+  "projectName": "Retune",
+  
+  "directories": [
+    {
+      "path": "src",
+      "purpose": "Source code root"
+    },
+    {
+      "path": "src/modules",
+      "purpose": "Feature modules organized by domain"
+    },
+    {
+      "path": "src/modules/plex",
+      "purpose": "Plex API integration modules"
+    },
+    {
+      "path": "src/modules/plex/auth",
+      "purpose": "Plex OAuth authentication"
+    },
+    {
+      "path": "src/modules/plex/discovery",
+      "purpose": "Plex server discovery and connection management"
+    },
+    {
+      "path": "src/modules/plex/library",
+      "purpose": "Plex library enumeration and content retrieval"
+    },
+    {
+      "path": "src/modules/plex/stream",
+      "purpose": "Stream URL resolution and session management"
+    },
+    {
+      "path": "src/modules/scheduler",
+      "purpose": "Channel and schedule management modules"
+    },
+    {
+      "path": "src/modules/scheduler/channel-manager",
+      "purpose": "Channel CRUD and content resolution"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler",
+      "purpose": "Deterministic schedule generation"
+    },
+    {
+      "path": "src/modules/player",
+      "purpose": "Video playback abstraction"
+    },
+    {
+      "path": "src/modules/ui",
+      "purpose": "UI components"
+    },
+    {
+      "path": "src/modules/ui/epg",
+      "purpose": "Electronic Program Guide component"
+    },
+    {
+      "path": "src/modules/ui/overlays",
+      "purpose": "Player overlays (info, channel banner)"
+    },
+    {
+      "path": "src/modules/ui/screens",
+      "purpose": "Full-screen views (auth, settings, etc.)"
+    },
+    {
+      "path": "src/modules/navigation",
+      "purpose": "Remote control and focus management"
+    },
+    {
+      "path": "src/modules/lifecycle",
+      "purpose": "Application lifecycle and error recovery"
+    },
+    {
+      "path": "src/utils",
+      "purpose": "Shared utility functions"
+    },
+    {
+      "path": "src/config",
+      "purpose": "Application configuration"
+    },
+    {
+      "path": "public",
+      "purpose": "Static assets served as-is"
+    },
+    {
+      "path": "public/css",
+      "purpose": "CSS stylesheets"
+    },
+    {
+      "path": "public/assets",
+      "purpose": "Images, fonts, and other assets"
+    },
+    {
+      "path": "dist",
+      "purpose": "Built application for deployment"
+    },
+    {
+      "path": "tests",
+      "purpose": "Test files"
+    },
+    {
+      "path": "tests/unit",
+      "purpose": "Unit tests"
+    },
+    {
+      "path": "tests/integration",
+      "purpose": "Integration tests"
+    },
+    {
+      "path": "tools",
+      "purpose": "Build and deployment scripts"
+    }
+  ],
+  
+  "files": [
+    {
+      "path": "src/index.ts",
+      "module": "root",
+      "type": "entry",
+      "description": "Application entry point - bootstraps the app"
+    },
+    {
+      "path": "src/App.ts",
+      "module": "root",
+      "type": "implementation",
+      "description": "Main application class"
+    },
+    {
+      "path": "src/Orchestrator.ts",
+      "module": "app-orchestrator",
+      "type": "implementation",
+      "description": "Module coordinator - manages inter-module communication"
+    },
+    {
+      "path": "src/types/index.ts",
+      "module": "shared",
+      "type": "types",
+      "description": "Re-exports all shared types"
+    },
+    {
+      "path": "src/config/index.ts",
+      "module": "shared",
+      "type": "config",
+      "description": "Application configuration and constants"
+    },
+    {
+      "path": "src/utils/EventEmitter.ts",
+      "module": "event-emitter",
+      "type": "implementation",
+      "description": "Typed event emitter utility"
+    },
+    {
+      "path": "src/utils/result.ts",
+      "module": "shared",
+      "type": "utility",
+      "description": "Result type utilities for error handling"
+    },
+    {
+      "path": "src/utils/uuid.ts",
+      "module": "shared",
+      "type": "utility",
+      "description": "UUID generation utility"
+    },
+    
+    {
+      "path": "src/modules/plex/auth/index.ts",
+      "module": "plex-auth",
+      "type": "exports",
+      "description": "Public exports for plex-auth module"
+    },
+    {
+      "path": "src/modules/plex/auth/PlexAuth.ts",
+      "module": "plex-auth",
+      "type": "implementation",
+      "description": "Plex OAuth authentication handler"
+    },
+    {
+      "path": "src/modules/plex/auth/interfaces.ts",
+      "module": "plex-auth",
+      "type": "types",
+      "description": "IPlexAuth interface definition"
+    },
+    {
+      "path": "src/modules/plex/auth/constants.ts",
+      "module": "plex-auth",
+      "type": "constants",
+      "description": "Auth-specific constants"
+    },
+    {
+      "path": "src/modules/plex/auth/__tests__/PlexAuth.test.ts",
+      "module": "plex-auth",
+      "type": "test",
+      "description": "Unit tests for PlexAuth"
+    },
+    
+    {
+      "path": "src/modules/plex/discovery/index.ts",
+      "module": "plex-server-discovery",
+      "type": "exports",
+      "description": "Public exports for discovery module"
+    },
+    {
+      "path": "src/modules/plex/discovery/PlexServerDiscovery.ts",
+      "module": "plex-server-discovery",
+      "type": "implementation",
+      "description": "Server discovery and connection management"
+    },
+    {
+      "path": "src/modules/plex/discovery/interfaces.ts",
+      "module": "plex-server-discovery",
+      "type": "types",
+      "description": "IPlexServerDiscovery interface"
+    },
+    {
+      "path": "src/modules/plex/discovery/__tests__/PlexServerDiscovery.test.ts",
+      "module": "plex-server-discovery",
+      "type": "test",
+      "description": "Unit tests for server discovery"
+    },
+    
+    {
+      "path": "src/modules/plex/library/index.ts",
+      "module": "plex-library",
+      "type": "exports",
+      "description": "Public exports for library module"
+    },
+    {
+      "path": "src/modules/plex/library/PlexLibrary.ts",
+      "module": "plex-library",
+      "type": "implementation",
+      "description": "Library enumeration and content retrieval"
+    },
+    {
+      "path": "src/modules/plex/library/interfaces.ts",
+      "module": "plex-library",
+      "type": "types",
+      "description": "IPlexLibrary interface"
+    },
+    {
+      "path": "src/modules/plex/library/__tests__/PlexLibrary.test.ts",
+      "module": "plex-library",
+      "type": "test",
+      "description": "Unit tests for library access"
+    },
+    
+    {
+      "path": "src/modules/plex/stream/index.ts",
+      "module": "plex-stream-resolver",
+      "type": "exports",
+      "description": "Public exports for stream resolver module"
+    },
+    {
+      "path": "src/modules/plex/stream/PlexStreamResolver.ts",
+      "module": "plex-stream-resolver",
+      "type": "implementation",
+      "description": "Stream URL resolution and session management"
+    },
+    {
+      "path": "src/modules/plex/stream/interfaces.ts",
+      "module": "plex-stream-resolver",
+      "type": "types",
+      "description": "IPlexStreamResolver interface"
+    },
+    {
+      "path": "src/modules/plex/stream/__tests__/PlexStreamResolver.test.ts",
+      "module": "plex-stream-resolver",
+      "type": "test",
+      "description": "Unit tests for stream resolution"
+    },
+    
+    {
+      "path": "src/modules/scheduler/channel-manager/index.ts",
+      "module": "channel-manager",
+      "type": "exports",
+      "description": "Public exports for channel manager"
+    },
+    {
+      "path": "src/modules/scheduler/channel-manager/ChannelManager.ts",
+      "module": "channel-manager",
+      "type": "implementation",
+      "description": "Channel CRUD and content resolution"
+    },
+    {
+      "path": "src/modules/scheduler/channel-manager/ContentResolver.ts",
+      "module": "channel-manager",
+      "type": "implementation",
+      "description": "Resolves content from Plex sources"
+    },
+    {
+      "path": "src/modules/scheduler/channel-manager/interfaces.ts",
+      "module": "channel-manager",
+      "type": "types",
+      "description": "IChannelManager interface"
+    },
+    {
+      "path": "src/modules/scheduler/channel-manager/__tests__/ChannelManager.test.ts",
+      "module": "channel-manager",
+      "type": "test",
+      "description": "Unit tests for channel manager"
+    },
+    
+    {
+      "path": "src/modules/scheduler/scheduler/index.ts",
+      "module": "channel-scheduler",
+      "type": "exports",
+      "description": "Public exports for scheduler"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/ChannelScheduler.ts",
+      "module": "channel-scheduler",
+      "type": "implementation",
+      "description": "Deterministic schedule generation"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/ScheduleCalculator.ts",
+      "module": "channel-scheduler",
+      "type": "implementation",
+      "description": "Core scheduling algorithm (pure functions)"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/ShuffleGenerator.ts",
+      "module": "channel-scheduler",
+      "type": "implementation",
+      "description": "Deterministic PRNG and shuffle"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/interfaces.ts",
+      "module": "channel-scheduler",
+      "type": "types",
+      "description": "IChannelScheduler interface"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/__tests__/ChannelScheduler.test.ts",
+      "module": "channel-scheduler",
+      "type": "test",
+      "description": "Unit tests for scheduler"
+    },
+    {
+      "path": "src/modules/scheduler/scheduler/__tests__/ShuffleGenerator.test.ts",
+      "module": "channel-scheduler",
+      "type": "test",
+      "description": "Unit tests for shuffle generator"
+    },
+    
+    {
+      "path": "src/modules/player/index.ts",
+      "module": "video-player",
+      "type": "exports",
+      "description": "Public exports for video player"
+    },
+    {
+      "path": "src/modules/player/VideoPlayer.ts",
+      "module": "video-player",
+      "type": "implementation",
+      "description": "HTML5 video abstraction for webOS"
+    },
+    {
+      "path": "src/modules/player/SubtitleManager.ts",
+      "module": "video-player",
+      "type": "implementation",
+      "description": "Subtitle track management"
+    },
+    {
+      "path": "src/modules/player/interfaces.ts",
+      "module": "video-player",
+      "type": "types",
+      "description": "IVideoPlayer interface"
+    },
+    {
+      "path": "src/modules/player/__tests__/VideoPlayer.test.ts",
+      "module": "video-player",
+      "type": "test",
+      "description": "Unit tests for video player"
+    },
+    
+    {
+      "path": "src/modules/ui/epg/index.ts",
+      "module": "epg-ui",
+      "type": "exports",
+      "description": "Public exports for EPG"
+    },
+    {
+      "path": "src/modules/ui/epg/EPGComponent.ts",
+      "module": "epg-ui",
+      "type": "implementation",
+      "description": "Main EPG grid component"
+    },
+    {
+      "path": "src/modules/ui/epg/EPGVirtualizer.ts",
+      "module": "epg-ui",
+      "type": "implementation",
+      "description": "DOM virtualization for grid"
+    },
+    {
+      "path": "src/modules/ui/epg/EPGInfoPanel.ts",
+      "module": "epg-ui",
+      "type": "implementation",
+      "description": "Program details panel"
+    },
+    {
+      "path": "src/modules/ui/epg/EPGTimeHeader.ts",
+      "module": "epg-ui",
+      "type": "implementation",
+      "description": "Time axis header"
+    },
+    {
+      "path": "src/modules/ui/epg/EPGChannelList.ts",
+      "module": "epg-ui",
+      "type": "implementation",
+      "description": "Channel list column"
+    },
+    {
+      "path": "src/modules/ui/epg/interfaces.ts",
+      "module": "epg-ui",
+      "type": "types",
+      "description": "IEPGComponent interface"
+    },
+    {
+      "path": "src/modules/ui/epg/styles.css",
+      "module": "epg-ui",
+      "type": "styles",
+      "description": "EPG CSS styles"
+    },
+    {
+      "path": "src/modules/ui/epg/__tests__/EPGComponent.test.ts",
+      "module": "epg-ui",
+      "type": "test",
+      "description": "Unit tests for EPG"
+    },
+    
+    {
+      "path": "src/modules/ui/overlays/PlayerOverlay.ts",
+      "module": "ui-overlays",
+      "type": "implementation",
+      "description": "Progress bar and controls overlay"
+    },
+    {
+      "path": "src/modules/ui/overlays/ChannelBanner.ts",
+      "module": "ui-overlays",
+      "type": "implementation",
+      "description": "Channel change banner"
+    },
+    {
+      "path": "src/modules/ui/overlays/InfoOverlay.ts",
+      "module": "ui-overlays",
+      "type": "implementation",
+      "description": "Current program info overlay"
+    },
+    
+    {
+      "path": "src/modules/ui/screens/AuthScreen.ts",
+      "module": "ui-screens",
+      "type": "implementation",
+      "description": "Plex authentication screen"
+    },
+    {
+      "path": "src/modules/ui/screens/ServerSelectScreen.ts",
+      "module": "ui-screens",
+      "type": "implementation",
+      "description": "Server selection screen"
+    },
+    {
+      "path": "src/modules/ui/screens/ChannelEditScreen.ts",
+      "module": "ui-screens",
+      "type": "implementation",
+      "description": "Channel creation/editing screen"
+    },
+    {
+      "path": "src/modules/ui/screens/SettingsScreen.ts",
+      "module": "ui-screens",
+      "type": "implementation",
+      "description": "App settings screen"
+    },
+    {
+      "path": "src/modules/ui/screens/ErrorScreen.ts",
+      "module": "ui-screens",
+      "type": "implementation",
+      "description": "Error display screen"
+    },
+    
+    {
+      "path": "src/modules/navigation/index.ts",
+      "module": "navigation",
+      "type": "exports",
+      "description": "Public exports for navigation"
+    },
+    {
+      "path": "src/modules/navigation/NavigationManager.ts",
+      "module": "navigation",
+      "type": "implementation",
+      "description": "Screen and focus management"
+    },
+    {
+      "path": "src/modules/navigation/FocusManager.ts",
+      "module": "navigation",
+      "type": "implementation",
+      "description": "Focus tracking and spatial navigation"
+    },
+    {
+      "path": "src/modules/navigation/RemoteHandler.ts",
+      "module": "navigation",
+      "type": "implementation",
+      "description": "Remote control key handling"
+    },
+    {
+      "path": "src/modules/navigation/interfaces.ts",
+      "module": "navigation",
+      "type": "types",
+      "description": "INavigationManager interface"
+    },
+    {
+      "path": "src/modules/navigation/__tests__/NavigationManager.test.ts",
+      "module": "navigation",
+      "type": "test",
+      "description": "Unit tests for navigation"
+    },
+    
+    {
+      "path": "src/modules/lifecycle/index.ts",
+      "module": "app-lifecycle",
+      "type": "exports",
+      "description": "Public exports for lifecycle"
+    },
+    {
+      "path": "src/modules/lifecycle/AppLifecycle.ts",
+      "module": "app-lifecycle",
+      "type": "implementation",
+      "description": "Application lifecycle management"
+    },
+    {
+      "path": "src/modules/lifecycle/ErrorRecovery.ts",
+      "module": "app-lifecycle",
+      "type": "implementation",
+      "description": "Error recovery strategies"
+    },
+    {
+      "path": "src/modules/lifecycle/StateManager.ts",
+      "module": "app-lifecycle",
+      "type": "implementation",
+      "description": "Persistent state management"
+    },
+    {
+      "path": "src/modules/lifecycle/interfaces.ts",
+      "module": "app-lifecycle",
+      "type": "types",
+      "description": "IAppLifecycle interface"
+    },
+    {
+      "path": "src/modules/lifecycle/__tests__/AppLifecycle.test.ts",
+      "module": "app-lifecycle",
+      "type": "test",
+      "description": "Unit tests for lifecycle"
+    },
+    
+    {
+      "path": "public/index.html",
+      "module": "root",
+      "type": "static",
+      "description": "HTML entry point"
+    },
+    {
+      "path": "public/css/main.css",
+      "module": "root",
+      "type": "styles",
+      "description": "Main stylesheet"
+    },
+    {
+      "path": "public/css/tv-focus.css",
+      "module": "root",
+      "type": "styles",
+      "description": "Focus ring and TV UI styles"
+    },
+    
+    {
+      "path": "appinfo.json",
+      "module": "root",
+      "type": "manifest",
+      "description": "webOS application manifest"
+    },
+    {
+      "path": "package.json",
+      "module": "root",
+      "type": "config",
+      "description": "NPM package configuration"
+    },
+    {
+      "path": "tsconfig.json",
+      "module": "root",
+      "type": "config",
+      "description": "TypeScript configuration"
+    },
+    
+    {
+      "path": "tools/build.js",
+      "module": "tools",
+      "type": "script",
+      "description": "Build script using esbuild"
+    },
+    {
+      "path": "tools/package-ipk.js",
+      "module": "tools",
+      "type": "script",
+      "description": "IPK packaging for webOS"
+    },
+    {
+      "path": "tools/deploy-tv.js",
+      "module": "tools",
+      "type": "script",
+      "description": "Deploy to TV in dev mode"
+    }
+  ],
+  
+  "summary": {
+    "totalFiles": 82,
+    "totalDirectories": 26,
+    "byType": {
+      "implementation": 33,
+      "types": 12,
+      "test": 12,
+      "exports": 9,
+      "config": 3,
+      "styles": 3,
+      "script": 3,
+      "static": 1,
+      "entry": 1,
+      "manifest": 1,
+      "utility": 2,
+      "constants": 1
+    },
+    "byModule": {
+      "plex-auth": 5,
+      "plex-server-discovery": 4,
+      "plex-library": 4,
+      "plex-stream-resolver": 4,
+      "channel-manager": 5,
+      "channel-scheduler": 7,
+      "video-player": 5,
+      "epg-ui": 9,
+      "navigation": 6,
+      "app-lifecycle": 6,
+      "app-orchestrator": 1,
+      "event-emitter": 1,
+      "shared": 4,
+      "ui-overlays": 3,
+      "ui-screens": 5,
+      "root": 8,
+      "tools": 3
+    }
+  }
+}
