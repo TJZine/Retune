@@ -582,6 +582,91 @@ class EPGVirtualizer {
   background: #ff4444;
   z-index: 100;
 }
+
+/* Info Panel Styles */
+.epg-info-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 180px;
+  background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.8));
+  padding: 16px 24px;
+  display: flex;
+  gap: 24px;
+}
+
+.epg-info-poster {
+  width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.epg-info-content {
+  flex: 1;
+  min-width: 0; /* Critical for text-overflow to work */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.epg-info-title {
+  font-size: 32px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.epg-info-meta {
+  font-size: 18px;
+  color: rgba(255,255,255,0.7);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.epg-info-description {
+  font-size: 20px;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.9);
+  /* Multi-line truncation with ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: calc(20px * 1.4 * 3); /* font-size * line-height * lines */
+}
+
+.epg-info-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: auto;
+}
+
+.epg-info-button {
+  padding: 12px 32px;
+  font-size: 18px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.epg-info-button:focus,
+.epg-info-button.focused {
+  background: var(--focus-color);
+  border-color: white;
+  outline: none;
+}
+
+.epg-info-button.primary {
+  background: var(--primary-color);
+}
 ```
 
 ## Test Specification

@@ -9,6 +9,21 @@
 - **Complexity**: high
 - **Estimated LoC**: 500
 
+## API Reference
+
+> [!TIP]
+> **Official Documentation**: Use Context7 with `/websites/developer_plex_tv_pms` for latest API specs.  
+> **Local Examples**: See `spec-pack/artifact-9-plex-api-examples.md` for JSON response samples.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /library/sections` | List all library sections |
+| `GET /library/sections/{id}/all` | Get library contents (paginated) |
+| `GET /library/metadata/{ratingKey}` | Get item metadata with Media/Part info |
+| `GET /library/metadata/{key}/children` | Get seasons/episodes |
+| `GET /library/sections/{id}/collections` | Get library collections |
+| `GET /hubs/search?query={term}` | Global search across libraries |
+
 ## Purpose
 
 Provides access to Plex media libraries, enabling enumeration of library sections, browsing content (movies, shows, episodes), retrieving metadata, handling pagination for large libraries, and generating authenticated URLs for images and thumbnails.
@@ -102,6 +117,65 @@ export type {
    - Parse Plex XML/JSON responses
    - Map to consistent TypeScript types
    - Handle missing optional fields gracefully
+
+### Error Handling:
+
+| Error Scenario | Error Type | Recovery Action | User Message |
+|---------------|------------|-----------------|--------------|
+| Network timeout | `NETWORK_TIMEOUT` | Retry with exponential backoff (max 3 attempts) | "Connection timed out. Retrying..." |
+| Server unreachable | `SERVER_UNREACHABLE` | Trigger server re-discovery | "Server unavailable. Reconnecting..." |
+| 401 Unauthorized | `AUTH_EXPIRED` | Emit `authExpired` event, redirect to auth | "Session expired. Please sign in again." |
+| 404 Not Found | `ITEM_NOT_FOUND` | Return `null`, log warning | (Handle silently) |
+| 500+ Server Error | `SERVER_ERROR` | Retry once after 2s delay | "Server error. Retrying..." |
+| Empty response | `EMPTY_RESPONSE` | Return empty array, log warning | (Handle silently) |
+| Parse error | `PARSE_ERROR` | Log error with response body, return empty | "Unable to load content." |
+| Rate limited (429) | `RATE_LIMITED` | Backoff per `Retry-After` header | "Too many requests. Please wait." |
+
+**Error Recovery Implementation:**
+```typescript
+private async fetchWithRetry<T>(
+  url: string,
+  options: FetchOptions = {},
+  retries = 3
+): Promise<T> {
+  const delays = [1000, 2000, 4000]; // Exponential backoff
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: { ...this.auth.getAuthHeaders(), ...options.headers },
+        signal: AbortSignal.timeout(options.timeout ?? 10000)
+      });
+      
+      if (response.status === 401) {
+        this.emit('authExpired');
+        throw new PlexLibraryError('AUTH_EXPIRED', 'Authentication expired');
+      }
+      
+      if (response.status === 429) {
+        const retryAfter = parseInt(response.headers.get('Retry-After') ?? '5');
+        await this.delay(retryAfter * 1000);
+        continue;
+      }
+      
+      if (response.status === 404) {
+        return null as T;
+      }
+      
+      if (!response.ok) {
+        throw new PlexLibraryError('SERVER_ERROR', `HTTP ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await this.delay(delays[attempt]);
+    }
+  }
+  throw new PlexLibraryError('MAX_RETRIES', 'Max retries exceeded');
+}
+```
 
 ### MUST NOT:
 
@@ -375,6 +449,59 @@ describe('PlexLibrary', () => {
     });
   });
 });
+```
+
+## Mock Requirements
+
+### Required Mocks
+```typescript
+// Mock fetch for Plex API calls
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+// Mock dependencies
+const mockPlexAuth: IPlexAuth = {
+  getAuthHeaders: () => ({ 'X-Plex-Token': 'mock-token' }),
+  getCurrentUser: () => ({ token: 'mock-token', userId: '123' }),
+};
+
+const mockPlexDiscovery: IPlexServerDiscovery = {
+  getActiveConnectionUri: () => 'http://192.168.1.100:32400',
+  getSelectedServer: () => mockServer,
+};
+```
+
+### Mock Data Fixtures
+```typescript
+const mockLibrarySectionsResponse = {
+  MediaContainer: {
+    Directory: [
+      { key: '1', title: 'Movies', type: 'movie', uuid: 'lib-1' },
+      { key: '2', title: 'TV Shows', type: 'show', uuid: 'lib-2' }
+    ]
+  }
+};
+
+const mockMediaItemResponse = {
+  MediaContainer: {
+    Metadata: [{
+      ratingKey: '12345',
+      title: 'Test Movie',
+      year: 2023,
+      duration: 7200000,
+      Media: [{ container: 'mp4', videoCodec: 'h264', audioCodec: 'aac' }]
+    }]
+  }
+};
+
+const mockShowSeasonsResponse = {
+  MediaContainer: {
+    Metadata: [
+      { ratingKey: 's1', title: 'Season 1', index: 1 },
+      { ratingKey: 's2', title: 'Season 2', index: 2 }
+    ]
+  }
+};
 ```
 
 ## File Structure

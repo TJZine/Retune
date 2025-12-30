@@ -548,6 +548,41 @@ export const STORAGE_MIGRATIONS: Record<number, (data: unknown) => unknown> = {
   // 3: migrateV2ToV3,
 };
 
+/**
+ * Current storage schema version.
+ * Increment this when making breaking changes to stored data structures.
+ */
+export const STORAGE_SCHEMA_VERSION = 1;
+
+/**
+ * Run all pending migrations on stored data.
+ * Call this when loading data from localStorage.
+ * 
+ * @example
+ * ```typescript
+ * const raw = JSON.parse(localStorage.getItem('retune_channels'));
+ * const migrated = migrateStoredData<ChannelStorageData>(raw);
+ * localStorage.setItem('retune_channels', JSON.stringify(migrated));
+ * ```
+ */
+export function migrateStoredData<T>(
+  data: { version?: number } & Record<string, unknown>
+): T {
+  let current = { ...data };
+  const storedVersion = current.version ?? 1;
+  
+  for (let v = storedVersion; v < STORAGE_SCHEMA_VERSION; v++) {
+    const migration = STORAGE_MIGRATIONS[v + 1];
+    if (migration) {
+      console.log(`[Storage] Migrating from v${v} to v${v + 1}`);
+      current = migration(current) as typeof current;
+    }
+  }
+  
+  current.version = STORAGE_SCHEMA_VERSION;
+  return current as T;
+}
+
 // ============================================
 // TYPESCRIPT CONFIGURATION (MINOR-004)
 // ============================================

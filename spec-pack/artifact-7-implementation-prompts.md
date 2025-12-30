@@ -2,6 +2,9 @@
 
 These prompts are self-contained instructions for AI coding agents to implement individual modules. Each prompt contains everything needed to implement the module without external dependencies.
 
+> [!IMPORTANT]
+> **TypeScript Configuration**: All modules must compile with strict TypeScript settings. See `artifact-5-config.ts` for the required `tsconfig.json` compiler options including `strict: true`, `noUnusedLocals`, `noImplicitReturns`, and `target: ES2020` (Chromium 68 compatibility).
+
 ---
 
 ## Prompt 1: Event Emitter Utility (Priority 1)

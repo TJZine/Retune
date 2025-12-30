@@ -9,6 +9,21 @@
 - **Complexity**: medium
 - **Estimated LoC**: 350
 
+## API Reference
+
+> [!TIP]
+> **Official Documentation**: Use Context7 with `/websites/developer_plex_tv_pms` for latest API specs.  
+> **Local Examples**: See `spec-pack/artifact-9-plex-api-examples.md` for JSON response samples.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST https://plex.tv/api/v2/pins` | Create PIN for OAuth flow |
+| `GET https://plex.tv/api/v2/pins/{id}` | Check if PIN claimed (poll for authToken) |
+| `GET https://plex.tv/api/v2/user` | Validate token and get user profile |
+
+> [!IMPORTANT]
+> **JWT Authentication (Sept 2025)**: Plex has implemented JWT tokens with 7-day expiry. While the PIN flow remains the same, the returned `authToken` may now be a short-lived JWT. Check official docs if token validation fails unexpectedly—may need to implement token refresh logic.
+
 ## Purpose
 
 Handles Plex OAuth authentication using the PIN-based flow optimized for TV interfaces. Manages token storage, validation, and credential lifecycle. This is the foundational module that all Plex API calls depend on for authentication headers.

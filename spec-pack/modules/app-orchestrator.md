@@ -293,7 +293,25 @@ private async resolveStreamForProgram(program: ScheduledProgram): Promise<Stream
 describe('AppOrchestrator', () => {
   describe('start', () => {
     it('should initialize all modules in correct order', async () => {
-      // Track init order
+      const initOrder: string[] = [];
+      mockLifecycle.initialize.mockImplementation(() => {
+        initOrder.push('lifecycle');
+        return Promise.resolve();
+      });
+      mockNavigation.initialize.mockImplementation(() => {
+        initOrder.push('navigation');
+        return Promise.resolve();
+      });
+      mockPlexAuth.initialize.mockImplementation(() => {
+        initOrder.push('plexAuth');
+        return Promise.resolve();
+      });
+      
+      await orchestrator.start();
+      
+      // Phase 1 modules should init before Phase 2
+      expect(initOrder.indexOf('lifecycle')).toBeLessThan(initOrder.indexOf('plexAuth'));
+      expect(initOrder.indexOf('navigation')).toBeLessThan(initOrder.indexOf('plexAuth'));
     });
     
     it('should navigate to auth if no saved credentials', async () => {
@@ -315,6 +333,31 @@ describe('AppOrchestrator', () => {
       await orchestrator.start();
       expect(navigation.getCurrentScreen()).toBe('auth');
     });
+    
+    it('should navigate to server-select if server connection fails', async () => {
+      mockSavedStateWithAuth();
+      mockValidToken();
+      mockDiscovery.selectServer.mockResolvedValue(false);
+      await orchestrator.start();
+      expect(navigation.getCurrentScreen()).toBe('server-select');
+    });
+    
+    it('should display error screen on critical failure', async () => {
+      mockLifecycle.initialize.mockRejectedValue(new Error('Init failed'));
+      await orchestrator.start();
+      expect(lifecycle.reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'INITIALIZATION_FAILED' })
+      );
+    });
+    
+    it('should provide retry action on initialization failure', async () => {
+      mockLifecycle.initialize.mockRejectedValue(new Error('Init failed'));
+      await orchestrator.start();
+      const errorCall = lifecycle.reportError.mock.calls[0][0];
+      expect(errorCall.actions).toContainEqual(
+        expect.objectContaining({ label: 'Retry', isPrimary: true })
+      );
+    });
   });
   
   describe('switchToChannel', () => {
@@ -332,26 +375,242 @@ describe('AppOrchestrator', () => {
       await orchestrator.switchToChannel('ch1');
       expect(lifecycle.saveState).toHaveBeenCalled();
     });
+    
+    it('should show channel banner on switch', async () => {
+      await orchestrator.switchToChannel('ch1');
+      expect(ui.showChannelBanner).toHaveBeenCalledWith(mockChannel);
+    });
+    
+    it('should handle non-existent channel gracefully', async () => {
+      mockChannelManager.getChannel.mockReturnValue(null);
+      await expect(orchestrator.switchToChannel('invalid')).resolves.not.toThrow();
+      expect(console.error).toHaveBeenCalledWith('Channel not found:', 'invalid');
+    });
+    
+    it('should resolve channel content before loading scheduler', async () => {
+      const resolveOrder: string[] = [];
+      mockChannelManager.resolveChannelContent.mockImplementation(async () => {
+        resolveOrder.push('resolve');
+        return { orderedItems: [] };
+      });
+      mockScheduler.loadChannel.mockImplementation(() => {
+        resolveOrder.push('load');
+      });
+      
+      await orchestrator.switchToChannel('ch1');
+      expect(resolveOrder).toEqual(['resolve', 'load']);
+    });
+  });
+  
+  describe('switchToChannelByNumber', () => {
+    it('should find channel by number and switch', async () => {
+      mockChannelManager.getChannelByNumber.mockReturnValue(mockChannel);
+      await orchestrator.switchToChannelByNumber(5);
+      expect(orchestrator.switchToChannel).toHaveBeenCalledWith(mockChannel.id);
+    });
+    
+    it('should show error overlay for invalid channel number', async () => {
+      mockChannelManager.getChannelByNumber.mockReturnValue(null);
+      await orchestrator.switchToChannelByNumber(999);
+      expect(ui.showError).toHaveBeenCalledWith('Channel 999 not found');
+    });
+  });
+  
+  describe('EPG management', () => {
+    it('should open EPG and focus first channel', () => {
+      orchestrator.openEPG();
+      expect(epg.show).toHaveBeenCalled();
+      expect(epg.focusNow).toHaveBeenCalled();
+    });
+    
+    it('should close EPG', () => {
+      orchestrator.closeEPG();
+      expect(epg.hide).toHaveBeenCalled();
+    });
+    
+    it('should toggle EPG from closed to open', () => {
+      mockEPG.isVisible.mockReturnValue(false);
+      orchestrator.toggleEPG();
+      expect(epg.show).toHaveBeenCalled();
+    });
+    
+    it('should toggle EPG from open to closed', () => {
+      mockEPG.isVisible.mockReturnValue(true);
+      orchestrator.toggleEPG();
+      expect(epg.hide).toHaveBeenCalled();
+    });
   });
   
   describe('event wiring', () => {
+    beforeEach(() => {
+      orchestrator.setupEventWiring();
+    });
+    
     it('should load stream on programStart', async () => {
-      setupWiring();
       scheduler.emit('programStart', mockProgram);
       await flushPromises();
       expect(videoPlayer.loadStream).toHaveBeenCalled();
     });
     
+    it('should seek to correct offset on programStart', async () => {
+      const programWithOffset = { ...mockProgram, elapsedMs: 30000 };
+      scheduler.emit('programStart', programWithOffset);
+      await flushPromises();
+      expect(videoPlayer.loadStream).toHaveBeenCalledWith(
+        expect.objectContaining({ startPositionMs: 30000 })
+      );
+    });
+    
     it('should advance scheduler on video ended', () => {
-      setupWiring();
       videoPlayer.emit('ended');
       expect(scheduler.skipToNext).toHaveBeenCalled();
     });
     
+    it('should skip on unrecoverable video error', () => {
+      videoPlayer.emit('error', { recoverable: false, code: 'DECODE_ERROR' });
+      expect(scheduler.skipToNext).toHaveBeenCalled();
+    });
+    
+    it('should NOT skip on recoverable video error', () => {
+      videoPlayer.emit('error', { recoverable: true, code: 'NETWORK_ERROR' });
+      expect(scheduler.skipToNext).not.toHaveBeenCalled();
+    });
+    
     it('should switch channel on channelUp', () => {
-      setupWiring();
       navigation.emit('keyPress', { button: 'channelUp' });
-      expect(orchestrator.switchToNextChannel).toHaveBeenCalled();
+      expect(channelManager.getNextChannel).toHaveBeenCalled();
+    });
+    
+    it('should switch channel on channelDown', () => {
+      navigation.emit('keyPress', { button: 'channelDown' });
+      expect(channelManager.getPreviousChannel).toHaveBeenCalled();
+    });
+    
+    it('should toggle EPG on guide button', () => {
+      const toggleSpy = jest.spyOn(orchestrator, 'toggleEPG');
+      navigation.emit('keyPress', { button: 'guide' });
+      expect(toggleSpy).toHaveBeenCalled();
+    });
+    
+    it('should close EPG and switch channel on channelSelected', async () => {
+      epg.emit('channelSelected', { channel: mockChannel, program: mockProgram });
+      await flushPromises();
+      expect(epg.hide).toHaveBeenCalled();
+      expect(orchestrator.switchToChannel).toHaveBeenCalledWith(mockChannel.id);
+    });
+    
+    it('should pause playback on app pause', () => {
+      lifecycle.emit('pause');
+      expect(videoPlayer.pause).toHaveBeenCalled();
+      expect(scheduler.stopSyncTimer).toHaveBeenCalled();
+    });
+    
+    it('should resume playback on app resume', () => {
+      lifecycle.emit('resume');
+      expect(scheduler.syncToCurrentTime).toHaveBeenCalled();
+      expect(videoPlayer.play).toHaveBeenCalled();
+    });
+  });
+  
+  describe('error handling', () => {
+    it('should skip to next when stream resolution fails', async () => {
+      mockStreamResolver.resolveStream.mockRejectedValue(new Error('Resolution failed'));
+      scheduler.emit('programStart', mockProgram);
+      await flushPromises();
+      expect(scheduler.skipToNext).toHaveBeenCalled();
+    });
+    
+    it('should log stream resolution errors', async () => {
+      mockStreamResolver.resolveStream.mockRejectedValue(new Error('Resolution failed'));
+      scheduler.emit('programStart', mockProgram);
+      await flushPromises();
+      expect(console.error).toHaveBeenCalledWith('Failed to load stream:', expect.any(Error));
+    });
+  });
+  
+  describe('shutdown', () => {
+    it('should save state before shutdown', async () => {
+      await orchestrator.shutdown();
+      expect(lifecycle.saveState).toHaveBeenCalled();
+    });
+    
+    it('should stop video player on shutdown', async () => {
+      await orchestrator.shutdown();
+      expect(videoPlayer.stop).toHaveBeenCalled();
+    });
+    
+    it('should destroy all modules on shutdown', async () => {
+      await orchestrator.shutdown();
+      expect(epg.destroy).toHaveBeenCalled();
+      expect(navigation.destroy).toHaveBeenCalled();
+    });
+  });
+  
+  describe('getModuleStatus', () => {
+    it('should return status of all modules', () => {
+      const status = orchestrator.getModuleStatus();
+      expect(status.has('plexAuth')).toBe(true);
+      expect(status.has('channelScheduler')).toBe(true);
+      expect(status.has('videoPlayer')).toBe(true);
+    });
+    
+    it('should report module as ready when initialized', async () => {
+      await orchestrator.start();
+      const status = orchestrator.getModuleStatus();
+      expect(status.get('plexAuth')?.status).toBe('ready');
+    });
+  });
+});
+```
+
+### Integration Test Scenarios:
+
+```typescript
+describe('AppOrchestrator Integration', () => {
+  describe('Full startup flow', () => {
+    it('should complete auth → server connect → channel load → playback', async () => {
+      // Setup mocks for full happy path
+      mockSavedStateWithAuth({ token: 'valid', serverId: 'server1' });
+      mockValidToken();
+      mockDiscovery.selectServer.mockResolvedValue(true);
+      mockChannelManager.loadChannels.mockResolvedValue();
+      mockChannelManager.getCurrentChannel.mockReturnValue(mockChannel);
+      
+      await orchestrator.start();
+      
+      expect(plexAuth.validateToken).toHaveBeenCalled();
+      expect(plexDiscovery.selectServer).toHaveBeenCalledWith('server1');
+      expect(channelManager.loadChannels).toHaveBeenCalled();
+      expect(scheduler.loadChannel).toHaveBeenCalled();
+      expect(navigation.getCurrentScreen()).toBe('player');
+    });
+  });
+  
+  describe('Channel switching end-to-end', () => {
+    it('should resolve content, load scheduler, and start playback', async () => {
+      const events: string[] = [];
+      
+      videoPlayer.on('stateChange', () => events.push('videoStateChange'));
+      scheduler.on('programStart', () => events.push('programStart'));
+      
+      await orchestrator.switchToChannel('ch1');
+      await flushPromises();
+      
+      expect(channelManager.resolveChannelContent).toHaveBeenCalled();
+      expect(scheduler.loadChannel).toHaveBeenCalled();
+      expect(scheduler.syncToCurrentTime).toHaveBeenCalled();
+    });
+  });
+  
+  describe('Error recovery flow', () => {
+    it('should retry failed server connections', async () => {
+      mockDiscovery.selectServer
+        .mockRejectedValueOnce(new Error('Network'))
+        .mockResolvedValueOnce(true);
+      
+      // First attempt fails, retry succeeds
+      await orchestrator.start();
+      expect(plexDiscovery.selectServer).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -9,6 +9,20 @@
 - **Complexity**: medium
 - **Estimated LoC**: 320
 
+## API Reference
+
+> [!TIP]
+> **Official Documentation**: Use Context7 with `/websites/developer_plex_tv_pms` for latest API specs.  
+> **Local Examples**: See `spec-pack/artifact-9-plex-api-examples.md` for JSON response samples.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /library/metadata/{key}` | Get stream info (Media/Part/Stream arrays) |
+| `GET /library/parts/{id}/file.{ext}` | Direct play URL |
+| `GET /video/:/transcode/universal/start.m3u8` | HLS transcode URL |
+| `POST /:/timeline` | Report playback progress |
+| `DELETE /transcode/sessions/{key}` | Kill transcode session |
+
 ## Purpose
 
 Resolves playback URLs from Plex Media Server, handling the decision between direct play and transcoding based on media compatibility. Manages playback sessions for progress tracking and generates properly formatted stream requests.
@@ -407,6 +421,80 @@ describe('PlexStreamResolver', () => {
     });
   });
 });
+```
+
+## Mock Requirements
+
+### Required Mocks
+```typescript
+// Mock fetch for Plex API calls
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+// Mock dependencies
+const mockPlexAuth: IPlexAuth = {
+  getAuthHeaders: () => ({ 'X-Plex-Token': 'mock-token' }),
+  getCurrentUser: () => ({ token: 'mock-token', userId: '123' }),
+  getConfig: () => ({ clientIdentifier: 'test-client-id' })
+};
+
+const mockPlexDiscovery: IPlexServerDiscovery = {
+  getActiveConnectionUri: () => 'http://192.168.1.100:32400',
+  getHttpsConnection: () => ({ uri: 'https://secure.plex.direct:32400' }),
+  getRelayConnection: () => ({ uri: 'https://relay.plex.direct:32400' })
+};
+
+const mockPlexLibrary: IPlexLibrary = {
+  getItem: jest.fn()
+};
+```
+
+### Mock Data Fixtures
+```typescript
+// Compatible content (direct play)
+const mockCompatibleItem = {
+  ratingKey: '12345',
+  media: [{
+    container: 'mp4',
+    videoCodec: 'h264',
+    audioCodec: 'aac',
+    width: 1920,
+    height: 1080,
+    bitrate: 8000,
+    parts: [{ key: '/library/parts/12345/file.mp4', streams: [] }]
+  }]
+};
+
+// Incompatible content (needs transcoding)
+const mockIncompatibleItem = {
+  ratingKey: '67890',
+  media: [{
+    container: 'avi',
+    videoCodec: 'mpeg4',
+    audioCodec: 'mp2',
+    width: 720,
+    height: 480,
+    bitrate: 4000,
+    parts: [{ key: '/library/parts/67890/file.avi', streams: [] }]
+  }]
+};
+
+// Transcode decision response
+const mockTranscodeDecision = {
+  MediaContainer: {
+    Video: [{ Media: [{ Part: [{ key: '/transcode/...' }] }] }]
+  }
+};
+```
+
+### Helper Functions
+```typescript
+function createItem(overrides: Partial<typeof mockCompatibleItem.media[0]>) {
+  return {
+    ...mockCompatibleItem,
+    media: [{ ...mockCompatibleItem.media[0], ...overrides }]
+  };
+}
 ```
 
 ## File Structure

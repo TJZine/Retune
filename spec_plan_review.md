@@ -33,7 +33,6 @@ Execute the following review phases IN ORDER. Do not skip phases.
 
 Check that ALL required artifacts exist:
 
-```markdown
 | Artifact | Status | Notes |
 |----------|--------|-------|
 | Dependency Graph (JSON) | ✅ Present / ❌ Missing / ⚠️ Incomplete | |
@@ -44,17 +43,14 @@ Check that ALL required artifacts exist:
 | File Manifest | ✅ / ❌ / ⚠️ | |
 | Implementation Prompts | ✅ / ❌ / ⚠️ | |
 | Verification Checklist | ✅ / ❌ / ⚠️ | |
-```
 
 ### 1.2 Module Coverage Check
 
 For EACH module mentioned in the architectural plan:
 
-```markdown
 | Module | Has Spec | Has Types | Has Tests | Has Prompt | Has Contract |
 |--------|----------|-----------|-----------|------------|--------------|
 | [name] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
-```
 
 ### 1.3 Structural Completeness Score
 
@@ -74,7 +70,6 @@ Structural Completeness: [XX]%
 
 For the Shared Types Package, verify:
 
-```markdown
 ### Type Coverage
 | Domain | Types Defined | Types Referenced in Specs | Missing |
 |--------|---------------|---------------------------|---------|
@@ -85,7 +80,6 @@ For the Shared Types Package, verify:
 | UI/EPG | X | Y | [list] |
 | Navigation | X | Y | [list] |
 | Lifecycle | X | Y | [list] |
-```
 
 ### 2.2 Type Consistency Check
 

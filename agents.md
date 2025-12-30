@@ -3,7 +3,6 @@
 - **Docs lookup = context7**: pull short, dated snippets from official sources/best-practice docs for each claim. If unavailable, log the fallback.
 - **Search = Codanna first**: prefer Codanna MCP discovery tools (`semantic_search_docs`, `semantic_search_with_context`, `find_symbol`) for evidence sweeps; fall back to `ripgrep` when Codanna is unavailable or insufficient. Respect repo ignores and log the fallback method used.
 - **Discovery/Context = Codanna MCP**: use Codanna for symbol-aware context (`find_symbol`, `get_calls`, `find_callers`, `analyze_impact`) during analysis. Advisors still propose diffs; Codex executes per CODEX.md.
-- **Context lean**: Advisors remind Codex to follow CODEX’s Sequential Thinking Context Management rules (condense `process_thought` output, keep roughly the last 7–10 thoughts in working memory, and lean on MCP history for archives).
 - **Metadata accuracy**: Flag hallucinated Sequential Thinking metadata—`files_touched`, `tests_to_run`, `dependencies`, `risk_level`, `confidence_score`, etc. should stay empty/default unless there is real evidence.
 
 ## Standard Flow
@@ -37,3 +36,19 @@
 - **Verification guidance**
   - Cross-check impacted files from Codanna’s results against the actual diff; document how tests/rollbacks cover each high-risk area.
   - When context is unclear, prefer broader discovery (lower threshold or higher limit) over assuming coverage.
+
+  ## Plex API Reference (Project-Specific)
+When working with Plex Media Server API endpoints in this project:
+
+1. **Official Documentation**: Use Context7 with library ID `/websites/developer_plex_tv_pms` to fetch the latest official Plex API docs.
+2. **Local Reference**: See `spec-pack/artifact-9-plex-api-examples.md` for curated JSON response examples specific to this application.
+3. **Key Endpoints**:
+   - Authentication: `https://plex.tv/api/v2/pins` (OAuth PIN flow)
+   - Server Discovery: `https://plex.tv/api/v2/resources` (server list with connections)
+   - Library Access: `/library/sections`, `/library/metadata/{key}`
+   - Streaming: `/video/:/transcode/universal/start.m3u8` (HLS)
+4. **Required Headers**:
+   - `Accept: application/json` (responses default to XML otherwise)
+   - `X-Plex-Token: {token}` for all authenticated requests
+   - Client identification: `X-Plex-Client-Identifier`, `X-Plex-Product`, `X-Plex-Version`
+5. **JWT Authentication (as of Sept 2025)**: Plex has implemented JWT with short-lived tokens (7-day expiry). Check official docs for current auth patterns.

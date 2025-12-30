@@ -319,6 +319,97 @@ shuffle<T>(items: T[], seed: number): T[] {
 
 ## Internal Architecture
 
+### Timer Drift Resync Algorithm
+
+> [!IMPORTANT]
+> JavaScript timers (setInterval) are not precise and can drift, especially when the browser tab is inactive or system is under load.
+
+**Drift Detection and Correction:**
+```typescript
+interface SyncTimerState {
+  expectedNextTick: number;
+  maxDriftMs: number;     // 500ms threshold
+  resyncThreshold: number; // 2000ms - trigger hard resync
+  interval: number;
+}
+
+private syncTimerState: SyncTimerState = {
+  expectedNextTick: 0,
+  maxDriftMs: 500,
+  resyncThreshold: 2000,
+  interval: 0
+};
+
+private _startSyncTimer(): void {
+  const INTERVAL_MS = 1000;
+  
+  this.syncTimerState.expectedNextTick = Date.now() + INTERVAL_MS;
+  
+  this.syncTimerState.interval = window.setInterval(() => {
+    const now = Date.now();
+    const drift = now - this.syncTimerState.expectedNextTick;
+    
+    // Case 1: Normal tick (within tolerance)
+    if (Math.abs(drift) < this.syncTimerState.maxDriftMs) {
+      this.syncToCurrentTime();
+      this.syncTimerState.expectedNextTick = now + INTERVAL_MS;
+      return;
+    }
+    
+    // Case 2: Significant drift detected (system was suspended, tab inactive)
+    if (drift > this.syncTimerState.resyncThreshold) {
+      console.warn(`[Scheduler] Timer drift detected: ${drift}ms, performing hard resync`);
+      
+      // Force recalculate current program from scratch
+      this._hardResync();
+      
+      // Reset expected tick
+      this.syncTimerState.expectedNextTick = now + INTERVAL_MS;
+      return;
+    }
+    
+    // Case 3: Minor drift - adjust timing
+    this.syncToCurrentTime();
+    
+    // Adjust next tick to compensate
+    const adjustment = Math.min(drift, 100); // Cap adjustment at 100ms
+    this.syncTimerState.expectedNextTick = now + INTERVAL_MS - adjustment;
+    
+  }, INTERVAL_MS);
+}
+
+/**
+ * Hard resync: Called when drift exceeds threshold (e.g., after system resume)
+ * Recalculates everything from wall-clock time
+ */
+private _hardResync(): void {
+  const now = Date.now();
+  
+  // Get the actual current program
+  const currentProgram = this.getProgramAtTime(now);
+  const previousCurrent = this.state.currentProgram;
+  
+  // Check if program changed during the drift period
+  if (previousCurrent && 
+      currentProgram.item.ratingKey !== previousCurrent.item.ratingKey) {
+    // We missed a program transition - emit events
+    this.emit('programEnd', previousCurrent);
+    this.emit('programStart', currentProgram);
+  }
+  
+  // Update state
+  this.state.currentProgram = currentProgram;
+  this.state.nextProgram = this.getNextProgram();
+  
+  // Emit sync event with drift flag
+  this.emit('scheduleSync', {
+    ...this.getState(),
+    wasHardResync: true,
+    detectedDriftMs: now - (previousCurrent?.scheduledEndTime ?? now)
+  });
+}
+```
+
 ### Private Methods:
 - `_buildIndex(config)`: Create ScheduleIndex from config
 - `_binarySearchForItem(position)`: O(log n) item lookup

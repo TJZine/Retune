@@ -337,6 +337,98 @@ async setSubtitleTrack(trackId: string | null): Promise<void> {
 }
 ```
 
+---
+
+### `setAudioTrack(trackId: string): Promise<void>`
+
+**Purpose**: Switch active audio track.
+
+**Parameters**:
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| trackId | string | Yes | Audio track ID to activate |
+
+**Side Effects**:
+- Switches audio track
+- Updates state
+- May briefly interrupt audio
+
+**Error Handling**:
+| Error Scenario | Handling | User Impact |
+|---------------|----------|-------------|
+| Track not found | Throw `TRACK_NOT_FOUND`, keep current track | Show "Track unavailable" notification |
+| HLS track switch fails | Retry once, then throw `TRACK_SWITCH_FAILED` | Show "Unable to switch audio" notification |
+| Track switch timeout (5s) | Cancel switch, restore previous | Show "Audio switch timed out" |
+| Codec not supported | Throw `CODEC_UNSUPPORTED` | Show "Audio format not supported" |
+
+**Implementation Notes**:
+```typescript
+async setAudioTrack(trackId: string): Promise<void> {
+  const availableTracks = this.getAvailableAudio();
+  const targetTrack = availableTracks.find(t => t.id === trackId);
+  
+  if (!targetTrack) {
+    throw new VideoPlayerError('TRACK_NOT_FOUND', `Audio track ${trackId} not found`);
+  }
+  
+  const previousTrackId = this.state.activeAudioId;
+  
+  try {
+    // For HLS streams, audio tracks are managed by the video element
+    const audioTracks = this.videoElement.audioTracks;
+    
+    // Set timeout for track switch
+    const switchPromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new VideoPlayerError('TRACK_SWITCH_TIMEOUT', 'Audio switch timed out'));
+      }, 5000);
+      
+      // Find and enable the target track
+      for (let i = 0; i < audioTracks.length; i++) {
+        if (audioTracks[i].id === trackId) {
+          audioTracks[i].enabled = true;
+        } else {
+          audioTracks[i].enabled = false;
+        }
+      }
+      
+      // Wait for audio to start playing with new track
+      const checkInterval = setInterval(() => {
+        // Verify the track switch took effect
+        if (audioTracks[targetTrack.index]?.enabled) {
+          clearTimeout(timeout);
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+    
+    await switchPromise;
+    
+    this.state.activeAudioId = trackId;
+    this.emit('trackChange', { type: 'audio', trackId });
+    
+  } catch (error) {
+    // Attempt to restore previous track
+    if (previousTrackId) {
+      try {
+        await this._restoreAudioTrack(previousTrackId);
+      } catch (restoreError) {
+        console.error('Failed to restore previous audio track:', restoreError);
+      }
+    }
+    throw error;
+  }
+}
+
+private async _restoreAudioTrack(trackId: string): Promise<void> {
+  const audioTracks = this.videoElement.audioTracks;
+  for (let i = 0; i < audioTracks.length; i++) {
+    audioTracks[i].enabled = audioTracks[i].id === trackId;
+  }
+}
+```
+
 ## Internal Architecture
 
 ### Private Methods:

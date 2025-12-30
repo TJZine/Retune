@@ -134,7 +134,133 @@ export type {
    ready → terminating → (exit)
    ```
 
-4. **Network Monitoring**
+   **State Machine Diagram (Mermaid):**
+   ```mermaid
+   stateDiagram-v2
+       [*] --> initializing
+       initializing --> authenticating: No saved auth
+       initializing --> loading_data: Has saved auth
+       
+       authenticating --> loading_data: Auth success
+       authenticating --> error: Auth failed
+       
+       loading_data --> ready: Data loaded
+       loading_data --> error: Load failed
+       
+       ready --> backgrounded: App hidden
+       backgrounded --> ready: App visible
+       ready --> terminating: Exit requested
+       
+       error --> authenticating: Retry auth
+       error --> ready: Retry success
+       error --> terminating: Exit
+       
+       terminating --> [*]
+       
+       note right of ready
+           Normal operating state
+           Playback active
+       end note
+       
+       note right of backgrounded
+           Video paused
+           Timers stopped
+           State saved
+       end note
+   ```
+
+4. **Storage Migration Function**
+
+   > [!IMPORTANT]
+   > State version upgrades must be handled gracefully to prevent data loss.
+
+   ```typescript
+   interface MigrationConfig {
+     currentVersion: number;
+     migrations: Record<number, (state: any) => any>;
+   }
+   
+   const STORAGE_CONFIG = {
+     STATE_KEY: 'retune_app_state',
+     STATE_VERSION: 2,  // Increment when schema changes
+   };
+   
+   const MIGRATIONS: Record<number, (state: any) => any> = {
+     // v1 → v2: Added userPreferences.theme
+     1: (state) => ({
+       ...state,
+       version: 2,
+       userPreferences: {
+         ...state.userPreferences,
+         theme: 'dark'  // New field with default
+       }
+     }),
+     
+     // v2 → v3: Renamed channelConfigs to channels
+     2: (state) => ({
+       ...state,
+       version: 3,
+       channels: state.channelConfigs,
+       channelConfigs: undefined  // Remove old field
+     })
+   };
+   
+   /**
+    * Migrate stored state to current version
+    */
+   function migrateState(state: any): PersistentState {
+     if (!state || typeof state.version !== 'number') {
+       // Invalid state, return null to trigger fresh start
+       console.warn('[StateManager] Invalid state format, resetting');
+       return null;
+     }
+     
+     let currentState = state;
+     const targetVersion = STORAGE_CONFIG.STATE_VERSION;
+     
+     while (currentState.version < targetVersion) {
+       const migration = MIGRATIONS[currentState.version];
+       
+       if (!migration) {
+         console.error(`[StateManager] Missing migration for version ${currentState.version}`);
+         // Can't migrate, return null
+         return null;
+       }
+       
+       console.log(`[StateManager] Migrating v${currentState.version} → v${currentState.version + 1}`);
+       currentState = migration(currentState);
+     }
+     
+     return currentState as PersistentState;
+   }
+   ```
+   
+   **Migration Test Cases:**
+   ```typescript
+   describe('StateManager migrations', () => {
+     it('should migrate v1 state to current version', () => {
+       const v1State = { version: 1, plexAuth: {...}, channelConfigs: [] };
+       const migrated = migrateState(v1State);
+       expect(migrated.version).toBe(STORAGE_CONFIG.STATE_VERSION);
+       expect(migrated.userPreferences.theme).toBeDefined();
+     });
+     
+     it('should handle missing version gracefully', () => {
+       const invalidState = { plexAuth: {...} }; // No version
+       const result = migrateState(invalidState);
+       expect(result).toBeNull();
+     });
+     
+     it('should handle future version gracefully', () => {
+       const futureState = { version: 999, ... };
+       // Don't downgrade, but don't crash
+       const result = migrateState(futureState);
+       expect(result.version).toBe(999);
+     });
+   });
+   ```
+
+5. **Network Monitoring**
    - Check `navigator.onLine` property
    - Listen to `online`/`offline` events
    - Periodic connectivity test to Plex server

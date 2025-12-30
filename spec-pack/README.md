@@ -42,6 +42,7 @@ Retune creates a traditional TV experience from your Plex library:
 | 6 | File Manifest | `artifact-6-file-manifest.json` | Complete list of files to create |
 | 7 | Implementation Prompts | `artifact-7-implementation-prompts.md` | Self-contained AI agent prompts |
 | 8 | Verification Checklist | `artifact-8-verification-checklist.md` | Test and validation checklist |
+| 9 | Plex API Examples | `artifact-9-plex-api-examples.md` | JSON response examples for Plex endpoints |
 
 ---
 

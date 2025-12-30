@@ -9,6 +9,17 @@
 - **Complexity**: medium
 - **Estimated LoC**: 280
 
+## API Reference
+
+> [!TIP]
+> **Official Documentation**: Use Context7 with `/websites/developer_plex_tv_pms` for latest API specs.  
+> **Local Examples**: See `spec-pack/artifact-9-plex-api-examples.md` for JSON response samples.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1` | Get available servers with connections |
+| `GET {serverUri}/identity` | Test server connectivity, get machineIdentifier |
+
 ## Purpose
 
 Discovers and manages Plex Media Servers accessible to the authenticated user. Tests available connections (LAN, WAN, relay) to find the fastest route, handles server selection, and persists the chosen server for future sessions.
@@ -81,6 +92,75 @@ export type {
    - Local (LAN) connections first
    - Remote (WAN) connections second  
    - Relay connections last (bandwidth limited)
+
+6. **Mixed Content Handling (HTTP/HTTPS)**
+   
+   > [!WARNING]
+   > WebOS apps served over HTTPS may block HTTP requests due to browser security policies.
+
+   ```typescript
+   interface MixedContentConfig {
+     /** Prefer HTTPS connections when available */
+     preferHttps: boolean;
+     /** Attempt HTTP upgrade to HTTPS for local connections */
+     tryHttpsUpgrade: boolean;
+     /** Allow HTTP for local connections only */
+     allowLocalHttp: boolean;
+     /** Log mixed content warnings */
+     logWarnings: boolean;
+   }
+   
+   const DEFAULT_MIXED_CONTENT_CONFIG: MixedContentConfig = {
+     preferHttps: true,
+     tryHttpsUpgrade: true,
+     allowLocalHttp: true,  // LAN connections may not have certs
+     logWarnings: true
+   };
+   ```
+   
+   **Connection Selection Algorithm:**
+   ```typescript
+   selectConnection(connections: PlexConnection[]): PlexConnection | null {
+     // 1. Prefer HTTPS connections
+     const httpsConns = connections.filter(c => c.uri.startsWith('https://'));
+     const httpConns = connections.filter(c => c.uri.startsWith('http://'));
+     
+     // 2. For HTTPS connections, test in priority order (local > remote > relay)
+     for (const conn of this.sortByPriority(httpsConns)) {
+       if (await this.testConnection(conn)) return conn;
+     }
+     
+     // 3. For HTTP connections, only allow if local AND config permits
+     if (this.config.allowLocalHttp) {
+       const localHttpConns = httpConns.filter(c => c.local && !c.relay);
+       for (const conn of localHttpConns) {
+         if (await this.testConnection(conn)) {
+           if (this.config.logWarnings) {
+             console.warn('[Discovery] Using HTTP connection - HTTPS unavailable');
+           }
+           return conn;
+         }
+       }
+     }
+     
+     // 4. Try HTTPS upgrade for HTTP connections
+     if (this.config.tryHttpsUpgrade) {
+       for (const conn of httpConns) {
+         const httpsUri = conn.uri.replace('http://', 'https://');
+         const upgradedConn = { ...conn, uri: httpsUri };
+         if (await this.testConnection(upgradedConn)) return upgradedConn;
+       }
+     }
+     
+     return null;
+   }
+   ```
+   
+   **webOS-Specific Considerations:**
+   - webOS 3.x+ apps typically run in a secure context
+   - Local HTTP may be blocked; test during development
+   - Plex servers with valid certs (via plex.direct) should work over HTTPS
+   - For LAN-only servers without certs, user may need to configure app permissions
 
 ### MUST NOT:
 
@@ -347,6 +427,61 @@ describe('PlexServerDiscovery', () => {
     });
   });
 });
+```
+
+## Mock Requirements
+
+### Required Mocks
+```typescript
+// Mock fetch for plex.tv API calls
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+// Mock localStorage for persistence
+const mockLocalStorage = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn()
+};
+Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+
+// Mock performance.now() for latency measurement
+jest.spyOn(performance, 'now').mockReturnValue(0);
+```
+
+### Mock Data Fixtures
+```typescript
+const mockServerListResponse = [
+  {
+    clientIdentifier: 'server-abc123',
+    name: 'Home Server',
+    sourceTitle: 'test-user',
+    ownerId: '12345',
+    owned: true,
+    provides: 'server',
+    connections: [
+      { uri: 'http://192.168.1.100:32400', local: true, relay: false },
+      { uri: 'https://external.plex.direct:32400', local: false, relay: false },
+      { uri: 'https://relay.plex.direct:32400', local: false, relay: true }
+    ]
+  }
+];
+
+const mockIdentityResponse = {
+  MediaContainer: { machineIdentifier: 'server-abc123' }
+};
+```
+
+### Mock PlexAuth Dependency
+```typescript
+const mockPlexAuth: IPlexAuth = {
+  getAuthHeaders: () => ({
+    'X-Plex-Token': 'mock-token',
+    'X-Plex-Client-Identifier': 'mock-client-id'
+  }),
+  getCurrentUser: () => ({ token: 'mock-token', userId: '123' }),
+  // ... other methods
+};
 ```
 
 ## File Structure

@@ -137,6 +137,34 @@ export type {
 3. Lose focus during screen transitions
 4. Allow navigation outside modal when open
 
+### Root Screen Back Behavior:
+
+When the user presses Back on a root screen (no history to go back to):
+
+| Screen | Back Button Behavior |
+|--------|---------------------|
+| `player` | Show exit confirmation modal |
+| `auth` | Show exit confirmation modal |
+| `server-select` | Navigate back to `auth` |
+| `settings` | Navigate to `player` |
+| `channel-editor` | Navigate to `player` with save prompt |
+
+**Exit Confirmation Modal:**
+```typescript
+// When back pressed on root player screen
+if (this.state.screenStack.length === 0 && screen === 'player') {
+  this.openModal('exit-confirm', {
+    title: 'Exit Retune?',
+    message: 'Are you sure you want to exit?',
+    actions: [
+      { label: 'Exit', action: () => webOS.platformBack(), isPrimary: false },
+      { label: 'Cancel', action: () => this.closeModal(), isPrimary: true }
+    ]
+  });
+  return false;
+}
+```
+
 ### State Management:
 
 ```typescript
@@ -195,6 +223,88 @@ const KEY_MAP: Map<number, RemoteButton> = new Map([
   [457, 'info'],
   [458, 'guide'],
 ]);
+```
+
+### Channel Number Input Handling
+
+When the user presses number keys (0-9), the navigation manager collects digits to form a channel number:
+
+```typescript
+interface ChannelNumberInput {
+  digits: string;              // Accumulated digits (e.g., "12" after pressing 1 then 2)
+  timeoutMs: number;           // Time to wait for next digit (default: 2000ms)
+  maxDigits: number;           // Maximum digits to collect (default: 3)
+  timer: number | null;        // Active timeout handle
+}
+
+private channelInput: ChannelNumberInput = {
+  digits: '',
+  timeoutMs: 2000,
+  maxDigits: 3,
+  timer: null
+};
+```
+
+**Input Algorithm:**
+```typescript
+private handleNumberKey(digit: string): void {
+  // Clear existing timeout
+  if (this.channelInput.timer) {
+    clearTimeout(this.channelInput.timer);
+  }
+  
+  // Append digit
+  this.channelInput.digits += digit;
+  
+  // Show overlay with current digits
+  this.emit('channelInputUpdate', { 
+    digits: this.channelInput.digits,
+    isComplete: false 
+  });
+  
+  // If max digits reached, commit immediately
+  if (this.channelInput.digits.length >= this.channelInput.maxDigits) {
+    this.commitChannelNumber();
+    return;
+  }
+  
+  // Set timeout to commit after delay
+  this.channelInput.timer = window.setTimeout(() => {
+    this.commitChannelNumber();
+  }, this.channelInput.timeoutMs);
+}
+
+private commitChannelNumber(): void {
+  const channelNumber = parseInt(this.channelInput.digits, 10);
+  
+  // Reset input state
+  this.channelInput.digits = '';
+  this.channelInput.timer = null;
+  
+  // Emit event for orchestrator to handle
+  this.emit('channelNumberEntered', { channelNumber });
+  this.emit('channelInputUpdate', { digits: '', isComplete: true });
+}
+```
+
+**Timeout Behavior:**
+| Scenario | Behavior |
+|----------|----------|
+| User presses '5' | Show "5" overlay, wait 2s, then switch to channel 5 |
+| User presses '1', then '2' within 2s | Show "1" → "12", wait 2s, switch to channel 12 |
+| User presses '1', '0', '5' | Show "1" → "10" → "105", switch immediately (3 digits) |
+| User presses '0' | Show "0", wait 2s, switch to channel 0 (or show error) |
+
+**Channel Input Overlay:**
+```typescript
+// UI component listens for channelInputUpdate events
+navigation.on('channelInputUpdate', ({ digits, isComplete }) => {
+  if (isComplete || digits === '') {
+    hideChannelInputOverlay();
+  } else {
+    showChannelInputOverlay(digits);
+  }
+});
 ```
 
 ## Method Specifications

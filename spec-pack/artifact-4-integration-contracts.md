@@ -167,6 +167,110 @@ Orchestrator        PlexStreamResolver        VideoPlayer
 
 ---
 
+## Contract: PlexLibrary ↔ ChannelManager
+
+### Contract ID: `library-to-channel-manager`
+
+### Direction: ChannelManager → PlexLibrary (Manager reads from Library)
+
+### Interaction Pattern:
+- [x] Direct method call
+- [ ] Event-based
+- [ ] Callback registration
+
+### Contract Definition:
+
+**ChannelManager expects PlexLibrary to provide:**
+```typescript
+interface ExpectedFromPlexLibrary {
+  getLibraries(): Promise<PlexLibrary[]>;
+  getLibraryItems(libraryId: string, options?: LibraryQueryOptions): Promise<PlexMediaItem[]>;
+  getShowEpisodes(showKey: string): Promise<PlexMediaItem[]>;
+  getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
+  getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]>;
+  getItem(ratingKey: string): Promise<PlexMediaItem | null>;
+  getImageUrl(imagePath: string, width?: number, height?: number): string;
+}
+```
+
+### ChannelManager guarantees:
+- Will call `getLibraries()` once during initialization
+- Will cache library structure to minimize API calls
+- Will not call library methods without valid Plex connection
+
+### PlexLibrary guarantees:
+- Will handle pagination transparently (return all items)
+- Will return items sorted in natural order (by title or date)
+- Will emit `authExpired` event if token becomes invalid
+- All async methods complete in <5s under normal network conditions
+
+### Error Contract:
+| Error Scenario | PlexLibrary Response | ChannelManager Handling |
+|---------------|---------------------|------------------------|
+| Network timeout | Throws `NETWORK_TIMEOUT` | Retry with backoff, show loading |
+| Auth expired | Emits `authExpired`, throws `AUTH_EXPIRED` | Pause loading, await re-auth |
+| Server unavailable | Throws `SERVER_UNREACHABLE` | Show error, prompt reconnect |
+| Item not found | Returns `null` | Filter from channel content |
+| Empty library | Returns `[]` | Show "library empty" state |
+
+### Sequence Diagram:
+```
+ChannelManager              PlexLibrary
+      │                          │
+      │── getLibraries() ───────>│
+      │                          │
+      │<── PlexLibrary[] ────────│
+      │                          │
+      │ (user creates channel    │
+      │  with playlist source)   │
+      │                          │
+      │── getPlaylistItems() ───>│
+      │      (playlistKey)       │
+      │                          │
+      │<── PlexMediaItem[] ──────│
+      │                          │
+      │ (for each item, get      │
+      │  thumbnail URL)          │
+      │                          │
+      │── getImageUrl() ────────>│
+      │      (thumb, 200, 300)   │
+      │                          │
+      │<── "http://...?token=..." │
+```
+
+### Data Flow Example:
+```typescript
+// ChannelManager resolving channel content
+async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> {
+  const channel = this.getChannel(channelId);
+  
+  let items: PlexMediaItem[];
+  
+  switch (channel.sourceType) {
+    case 'library':
+      items = await this.plexLibrary.getLibraryItems(channel.sourceId);
+      break;
+    case 'playlist':
+      items = await this.plexLibrary.getPlaylistItems(channel.sourceId);
+      break;
+    case 'collection':
+      items = await this.plexLibrary.getCollectionItems(channel.sourceId);
+      break;
+    case 'show':
+      items = await this.plexLibrary.getShowEpisodes(channel.sourceId);
+      break;
+  }
+  
+  return {
+    channelId: channel.id,
+    orderedItems: items,
+    resolvedAt: Date.now()
+  };
+}
+```
+
+---
+
 ## Contract: EPG ↔ ChannelScheduler
 
 ### Contract ID: `epg-to-scheduler`
