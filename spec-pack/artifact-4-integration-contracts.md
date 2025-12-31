@@ -11,13 +11,15 @@ This document defines the communication contracts between modules in the Retune 
 ### Direction: Discovery → Auth (Discovery calls Auth)
 
 ### Interaction Pattern:
+
 - [x] Direct method call
 - [ ] Event-based
 - [ ] Callback registration
 
 ### Contract Definition:
 
-**Discovery expects Auth to provide:**
+**Discovery expects Auth to provide**:
+
 ```typescript
 interface ExpectedFromAuth {
   isAuthenticated(): boolean;
@@ -27,15 +29,18 @@ interface ExpectedFromAuth {
 ```
 
 ### Discovery guarantees:
+
 - Will not make API calls if `isAuthenticated()` returns false
 - Will include all headers from `getAuthHeaders()` in requests
 
 ### Error Contract:
+
 - If auth headers are invalid (401 response), Discovery emits `SERVER_UNAUTHORIZED` error
 - Auth module should listen and potentially trigger re-authentication
 
 ### Sequence Diagram:
-```
+
+```text
 PlexServerDiscovery              PlexAuth
         │                            │
         │── isAuthenticated() ──────>│
@@ -58,13 +63,15 @@ PlexServerDiscovery              PlexAuth
 ### Direction: Scheduler → Manager (Scheduler reads from Manager)
 
 ### Interaction Pattern:
+
 - [x] Direct method call
 - [x] Event-based (for content updates)
 - [ ] Callback registration
 
 ### Contract Definition:
 
-**Scheduler expects Manager to provide:**
+**Scheduler expects Manager to provide**:
+
 ```typescript
 interface ExpectedFromChannelManager {
   getChannel(channelId: string): ChannelConfig | null;
@@ -72,7 +79,8 @@ interface ExpectedFromChannelManager {
 }
 ```
 
-**Manager emits events Scheduler listens to:**
+**Manager emits events Scheduler listens to**:
+
 ```typescript
 interface ChannelManagerEvents {
   contentResolved: ResolvedChannelContent;
@@ -81,15 +89,18 @@ interface ChannelManagerEvents {
 ```
 
 ### Scheduler guarantees:
+
 - Will reload schedule when `contentResolved` event received
 - Will calculate current program within 50ms
 
 ### Error Contract:
+
 - If content resolution fails, Manager emits error, Scheduler enters error state
 - Scheduler will attempt to use cached content if available
 
 ### Sequence Diagram:
-```
+
+```text
 ChannelScheduler           ChannelManager
        │                         │
        │─── loadChannel() ──────>│
@@ -116,13 +127,15 @@ ChannelScheduler           ChannelManager
 ### Direction: Orchestrator mediates (both called by Orchestrator)
 
 ### Interaction Pattern:
+
 - [x] Direct method call
 - [ ] Event-based
 - [ ] Callback registration
 
 ### Contract Definition:
 
-**Orchestrator flow:**
+**Orchestrator flow**:
+
 ```typescript
 // When scheduler emits programStart:
 const program: ScheduledProgram = event.program;
@@ -147,11 +160,13 @@ await videoPlayer.play();
 ```
 
 ### Error Contract:
+
 - If stream resolution fails, Orchestrator requests transcoded fallback
 - If transcode fails, skip to next program
 
 ### Sequence Diagram:
-```
+
+```text
 Orchestrator        PlexStreamResolver        VideoPlayer
      │                     │                       │
      │── resolveStream() ─>│                       │
@@ -174,13 +189,15 @@ Orchestrator        PlexStreamResolver        VideoPlayer
 ### Direction: ChannelManager → PlexLibrary (Manager reads from Library)
 
 ### Interaction Pattern:
+
 - [x] Direct method call
 - [ ] Event-based
 - [ ] Callback registration
 
 ### Contract Definition:
 
-**ChannelManager expects PlexLibrary to provide:**
+**ChannelManager expects PlexLibrary to provide**:
+
 ```typescript
 interface ExpectedFromPlexLibrary {
   getLibraries(): Promise<PlexLibrary[]>;
@@ -194,17 +211,20 @@ interface ExpectedFromPlexLibrary {
 ```
 
 ### ChannelManager guarantees:
+
 - Will call `getLibraries()` once during initialization
 - Will cache library structure to minimize API calls
 - Will not call library methods without valid Plex connection
 
 ### PlexLibrary guarantees:
+
 - Will handle pagination transparently (return all items)
 - Will return items sorted in natural order (by title or date)
 - Will emit `authExpired` event if token becomes invalid
 - All async methods complete in <5s under normal network conditions
 
 ### Error Contract:
+
 | Error Scenario | PlexLibrary Response | ChannelManager Handling |
 |---------------|---------------------|------------------------|
 | Network timeout | Throws `NETWORK_TIMEOUT` | Retry with backoff, show loading |
@@ -214,7 +234,8 @@ interface ExpectedFromPlexLibrary {
 | Empty library | Returns `[]` | Show "library empty" state |
 
 ### Sequence Diagram:
-```
+
+```text
 ChannelManager              PlexLibrary
       │                          │
       │── getLibraries() ───────>│
@@ -239,6 +260,7 @@ ChannelManager              PlexLibrary
 ```
 
 ### Data Flow Example:
+
 ```typescript
 // ChannelManager resolving channel content
 async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> {
@@ -278,13 +300,15 @@ async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> 
 ### Direction: EPG → Scheduler (EPG queries Scheduler)
 
 ### Interaction Pattern:
+
 - [x] Direct method call
 - [x] Event-based (for updates)
 - [ ] Callback registration
 
 ### Contract Definition:
 
-**EPG expects Scheduler to provide:**
+**EPG expects Scheduler to provide**:
+
 ```typescript
 interface ExpectedFromScheduler {
   getScheduleWindow(startTime: number, endTime: number): ScheduleWindow;
@@ -292,7 +316,8 @@ interface ExpectedFromScheduler {
 }
 ```
 
-**Scheduler emits events EPG listens to:**
+**Scheduler emits events EPG listens to**:
+
 ```typescript
 interface SchedulerEvents {
   programStart: ScheduledProgram;
@@ -302,6 +327,7 @@ interface SchedulerEvents {
 ```
 
 ### EPG guarantees:
+
 - Will call `getScheduleWindow()` when:
   - EPG becomes visible
   - User scrolls time axis
@@ -309,12 +335,14 @@ interface SchedulerEvents {
 - Will update current indicator on `scheduleSync`
 
 ### Scheduler guarantees:
+
 - `getScheduleWindow()` returns in <50ms
 - Programs in window are correctly ordered by time
 - Includes partial programs at boundaries
 
 ### Sequence Diagram:
-```
+
+```text
 EPGComponent           ChannelScheduler
      │                       │
      │── getScheduleWindow()─>│
@@ -340,13 +368,15 @@ EPGComponent           ChannelScheduler
 ### Direction: Navigation → UI Components
 
 ### Interaction Pattern:
+
 - [ ] Direct method call
 - [x] Event-based
 - [x] Callback registration
 
 ### Contract Definition:
 
-**UI Components register with Navigation:**
+**UI Components register with Navigation**:
+
 ```typescript
 // On component mount:
 navigationManager.registerFocusable({
@@ -367,7 +397,8 @@ navigationManager.registerFocusable({
 navigationManager.unregisterFocusable('epg-cell-1');
 ```
 
-**Navigation emits events:**
+**Navigation emits events**:
+
 ```typescript
 interface NavigationEvents {
   keyPress: KeyEvent;
@@ -377,10 +408,12 @@ interface NavigationEvents {
 ```
 
 ### UI Component guarantees:
+
 - Will unregister all focusables on unmount
 - Will update neighbors when dynamic content changes
 
 ### Navigation guarantees:
+
 - Will call `onFocus` when focus enters element
 - Will call `onBlur` when focus leaves element
 - Will call `onSelect` when OK pressed while focused
@@ -394,13 +427,15 @@ interface NavigationEvents {
 ### Direction: AppLifecycle → All Modules (broadcast)
 
 ### Interaction Pattern:
+
 - [ ] Direct method call
 - [x] Event-based
 - [x] Callback registration
 
 ### Contract Definition:
 
-**Modules can register lifecycle callbacks:**
+**Modules can register lifecycle callbacks**:
+
 ```typescript
 appLifecycle.onPause(() => {
   // Called when app goes to background
@@ -420,7 +455,8 @@ appLifecycle.onTerminate(async () => {
 });
 ```
 
-**Lifecycle emits events:**
+**Lifecycle emits events**:
+
 ```typescript
 interface LifecycleEvents {
   phaseChange: { from: AppPhase; to: AppPhase };
@@ -431,12 +467,14 @@ interface LifecycleEvents {
 ```
 
 ### Lifecycle guarantees:
+
 - Will call `onPause` before app backgrounds
 - Will call `onResume` when app returns
 - Will call `onTerminate` before exit (with time limit)
 - Will save state to localStorage before any transition
 
 ### Module guarantees:
+
 - Callbacks complete quickly (<100ms for pause/resume)
 - State is restoreable after restart
 
@@ -449,12 +487,14 @@ interface LifecycleEvents {
 ### Direction: Scheduler → Orchestrator → VideoPlayer
 
 ### Interaction Pattern:
+
 - [x] Event-based (Scheduler emits)
 - [x] Direct call (Orchestrator to Player)
 
 ### Contract Definition:
 
-**Event flow:**
+**Event flow**:
+
 ```typescript
 // In Orchestrator setup:
 scheduler.on('programStart', async (program: ScheduledProgram) => {
@@ -490,12 +530,14 @@ videoPlayer.on('error', (error: PlaybackError) => {
 ```
 
 ### Timing Contract:
+
 - Scheduler emits `programStart` at T-0 of new program
 - VideoPlayer should start streaming within 3 seconds
 - If taking longer, show loading indicator
 
 ### Sequence Diagram:
-```
+
+```text
 Scheduler        Orchestrator        VideoPlayer        PlexResolver
     │                 │                   │                  │
     │── programEnd ──>│                   │                  │
@@ -535,7 +577,7 @@ Scheduler        Orchestrator        VideoPlayer        PlexResolver
 
 ## Event Bus Summary
 
-```
+```text
                         ┌─────────────────┐
                         │  AppOrchestrator │
                         │   (Event Hub)    │

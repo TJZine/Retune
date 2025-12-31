@@ -7,18 +7,21 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 1: Build Verification
 
 ### 1.1 TypeScript Compilation
+
 - [ ] `npx tsc --noEmit` succeeds with zero errors
 - [ ] No implicit `any` types in codebase
 - [ ] All type exports are accessible from module index files
 - [ ] Strict mode enabled in tsconfig.json
 
 ### 1.2 Bundle Creation
+
 - [ ] `npm run build` completes successfully
 - [ ] Output bundle size < 500KB (uncompressed JS)
 - [ ] No circular dependency warnings
 - [ ] Source maps generated for debugging
 
 ### 1.3 webOS Package
+
 - [ ] `appinfo.json` contains correct metadata
 - [ ] IPK package created successfully
 - [ ] Package installs on webOS Simulator
@@ -29,6 +32,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 2: Module Unit Tests
 
 ### 2.1 Event Emitter
+
 - [ ] `on()` registers handlers correctly
 - [ ] `off()` removes handlers correctly
 - [ ] `emit()` invokes all registered handlers
@@ -37,6 +41,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] TypeScript enforces event/payload types
 
 ### 2.2 Plex Authentication
+
 - [ ] PIN request returns valid 4-character code
 - [ ] PIN polling detects claimed PIN
 - [ ] Token validation returns true for valid token
@@ -47,6 +52,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] `authChange` event emits on login/logout
 
 ### 2.3 Plex Server Discovery
+
 - [ ] Fetches server list for authenticated user
 - [ ] Tests connections and measures latency
 - [ ] Selects fastest connection as preferred
@@ -54,6 +60,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Persists selected server across sessions
 
 ### 2.4 Plex Library Access
+
 - [ ] Enumerates all library sections
 - [ ] Retrieves movies from movie library
 - [ ] Retrieves TV shows with seasons/episodes
@@ -61,12 +68,14 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Image URLs include auth token
 
 ### 2.5 Plex Stream Resolver
+
 - [ ] Resolves direct play URL when possible
 - [ ] Falls back to transcoding when needed
 - [ ] Includes correct audio/subtitle track selection
 - [ ] Session ID generated for playback tracking
 
 ### 2.6 Channel Manager
+
 - [ ] Creates channel with valid configuration
 - [ ] Updates existing channel
 - [ ] Deletes channel
@@ -78,6 +87,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Applies sort order correctly
 
 ### 2.7 Channel Scheduler
+
 - [ ] Loads channel and builds index
 - [ ] `getProgramAtTime()` returns correct program for:
   - [ ] Time within first item
@@ -92,6 +102,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] `programEnd` event emits at correct time
 
 ### 2.8 Video Player
+
 - [ ] Creates video element in container
 - [ ] Loads HLS stream natively (no HLS.js)
 - [ ] Loads direct play stream
@@ -106,6 +117,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] `stateChange` events emit on all transitions
 
 ### 2.9 Navigation
+
 - [ ] All webOS key codes mapped correctly
 - [ ] Key repeat detected
 - [ ] Long press detected after 500ms
@@ -118,6 +130,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] `keyPress` events emit for all keys
 
 ### 2.10 EPG UI
+
 - [ ] Grid renders with virtualization
 - [ ] DOM element count < 200 during scroll
 - [ ] Current time indicator positioned correctly
@@ -129,6 +142,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Performance: renders in <100ms
 
 ### 2.11 App Lifecycle
+
 - [ ] Initializes with correct phase sequence
 - [ ] Saves state before backgrounding
 - [ ] Restores state on resume
@@ -142,6 +156,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 3: Integration Tests
 
 ### 3.1 Authentication Flow
+
 - [ ] App launches to auth screen when not authenticated
 - [ ] PIN code displays correctly
 - [ ] After claiming PIN, server selection appears
@@ -149,6 +164,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] App launches directly to home when authenticated
 
 ### 3.2 Channel Creation Flow
+
 - [ ] Can create channel from library source
 - [ ] Can create channel from collection source
 - [ ] Can create channel from TV show source
@@ -156,6 +172,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Channel appears in channel list after creation
 
 ### 3.3 Playback Flow
+
 - [ ] Selecting channel starts playback
 - [ ] Correct program plays based on current time
 - [ ] Playback starts at correct offset within program
@@ -165,6 +182,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Selecting from EPG switches to that channel
 
 ### 3.4 EPG Integration
+
 - [ ] EPG shows all configured channels
 - [ ] Programs display with correct times
 - [ ] Current program highlighted
@@ -172,6 +190,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Selecting program switches channel and starts
 
 ### 3.5 Error Recovery
+
 - [ ] Network loss shows error screen
 - [ ] Retry option works when network returns
 - [ ] Server unreachable shows appropriate message
@@ -181,54 +200,61 @@ This checklist validates that the Retune implementation is complete, correct, an
 ### 3.6 Failure Scenario Tests
 
 #### Network Failure Scenarios
+
 - [ ] **Mid-playback network loss**: Video pauses, shows buffering, then error after timeout
 - [ ] **Network loss during channel switch**: Show error with retry option
 - [ ] **Network loss during EPG scroll**: Cached data continues to display, stale indicator shown
 - [ ] **Network restored after loss**: Auto-retry begins, resume playback at correct position
 
 #### Authentication Failure Scenarios  
+
 - [ ] **Token expires during playback**: Playback pauses, auth prompt shown after current program
 - [ ] **Token expires during app background**: Check and refresh on resume
 - [ ] **Token invalidated by user (revoked)**: Redirect to auth, clear stored credentials
 - [ ] **Rate limited by Plex.tv**: Backoff and retry with exponential delay
 
 #### Content Failure Scenarios
+
 - [ ] **Plex item deleted during playback**: Skip to next, log warning
 - [ ] **Plex library deleted**: Mark channels as stale, notify user to reconfigure
 - [ ] **Stream URL becomes invalid mid-playback**: Attempt re-resolve, fallback to skip
 - [ ] **Subtitle file missing**: Continue playback without subtitles
 
 #### Server Failure Scenarios
+
 - [ ] **Server goes offline during playback**: Retry 3x, then error with server select option
 - [ ] **All connections to server fail**: Offer to switch servers if multiple available
 - [ ] **Server SSL certificate error**: Show security warning with option to proceed
 
 #### State Corruption Scenarios
+
 - [ ] **localStorage corrupted**: Detect, clear, show first-run setup
 - [ ] **Channel config invalid JSON**: Skip invalid channels, load rest
 - [ ] **Schedule has impossible times**: Regenerate schedule from anchor
 
-
-
 ## Phase 4: Performance Tests
 
 ### 4.1 UI Responsiveness
+
 - [ ] Frame rate ≥ 60fps during normal operation
 - [ ] EPG scroll maintains 60fps
 - [ ] Focus transitions complete in <150ms
 - [ ] Screen transitions complete in <200ms
 
 ### 4.2 Channel Switch Time
+
 - [ ] Initial stream load < 3 seconds
 - [ ] Channel switch < 3 seconds
 - [ ] EPG to channel switch < 3 seconds
 
 ### 4.3 Schedule Performance
+
 - [ ] `getProgramAtTime()` executes in <5ms
 - [ ] `getScheduleWindow(24h)` executes in <50ms
 - [ ] Schedule calculation for 10,000 items < 50ms
 
 ### 4.4 Memory Usage
+
 - [ ] Idle memory < 100MB
 - [ ] Playback memory < 200MB
 - [ ] Peak memory < 300MB
@@ -239,6 +265,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 5: webOS Platform Tests
 
 ### 5.1 Remote Control
+
 - [ ] OK button works
 - [ ] Back button works
 - [ ] D-pad navigation works
@@ -250,6 +277,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Color buttons work (if assigned)
 
 ### 5.2 TV-Specific Behavior
+
 - [ ] App doesn't suspend during long playback
 - [ ] Background/foreground transitions work
 - [ ] Network disconnection handled gracefully
@@ -257,6 +285,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Magic Remote pointer mode works (if enabled)
 
 ### 5.3 Display
+
 - [ ] Safe zone margins respected (5%)
 - [ ] Text readable from 10 feet
 - [ ] Focus ring visible from 10 feet
@@ -264,6 +293,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] No overscan issues
 
 ### 5.4 Compatibility
+
 - [ ] Works on webOS 4.0 (Chromium 68)
 - [ ] Works on webOS 5.0+ (if applicable)
 - [ ] No ES6+ features unsupported by Chromium 68
@@ -273,18 +303,21 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 6: Stress Tests
 
 ### 6.1 Long-Running Operation
+
 - [ ] 4-hour continuous playback
 - [ ] 24-hour continuous playback
 - [ ] Memory stable after 24 hours
 - [ ] No audio/video desync
 
 ### 6.2 Rapid Actions
+
 - [ ] 50 rapid channel changes
 - [ ] 100 rapid EPG open/close cycles
 - [ ] 200 rapid focus moves
 - [ ] App remains responsive
 
 ### 6.3 Edge Cases
+
 - [ ] Channel with 1 item (very short loop)
 - [ ] Channel with 10,000 items
 - [ ] Very short content (< 1 minute)
@@ -297,18 +330,21 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 7: User Experience Tests
 
 ### 7.1 First-Run Experience
+
 - [ ] Clear instructions for Plex PIN entry
 - [ ] Helpful error messages
 - [ ] Logical navigation flow
 - [ ] Can complete setup without documentation
 
 ### 7.2 Daily Use
+
 - [ ] App remembers last channel
 - [ ] Channel switching feels instant
 - [ ] EPG is intuitive to navigate
 - [ ] Program info is useful and readable
 
 ### 7.3 Error States
+
 - [ ] Clear error messages for all error types
 - [ ] Recovery options available
 - [ ] User never stuck with no options
@@ -318,6 +354,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Phase 8: Accessibility Testing
 
 ### 8.1 Focus Management
+
 - [ ] All interactive elements are focusable via D-pad
 - [ ] Focus order follows logical reading order
 - [ ] Focus indicator is clearly visible (4px+ outline/border)
@@ -325,6 +362,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Modal dialogs trap focus correctly and restore on close
 
 ### 8.2 Remote Control Navigation
+
 - [ ] All functions reachable via remote only (no pointer required)
 - [ ] Back button works consistently across all screens
 - [ ] OK button activates the focused element
@@ -332,6 +370,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Color buttons (Red/Green/Yellow/Blue) have consistent meaning
 
 ### 8.3 Visual Accessibility
+
 - [ ] Text contrast ratio ≥4.5:1 (AA standard)
 - [ ] Important information not conveyed by color alone
 - [ ] UI elements have minimum touch target of 44×44 logical pixels
@@ -339,6 +378,7 @@ This checklist validates that the Retune implementation is complete, correct, an
 - [ ] Animations can be reduced for users who prefer reduced motion
 
 ### 8.4 Audio/Video Accessibility
+
 - [ ] Subtitle support enabled and configurable
 - [ ] Audio track selection available
 - [ ] Volume controls accessible
@@ -347,12 +387,14 @@ This checklist validates that the Retune implementation is complete, correct, an
 ## Sign-Off
 
 ### Development Complete
+
 - [ ] All Phase 1-7 tests pass
 - [ ] Code reviewed
 - [ ] No critical or high-severity bugs open
 - [ ] Documentation complete
 
 ### Ready for Deployment
+
 | Reviewer | Date | Signature |
 |----------|------|-----------|
 | Developer | | |

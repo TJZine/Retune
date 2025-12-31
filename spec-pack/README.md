@@ -13,6 +13,7 @@ This spec pack contains everything needed to implement **Retune**, a webOS appli
 ## What is Retune?
 
 Retune creates a traditional TV experience from your Plex library:
+
 - Browse an EPG (Electronic Program Guide) showing scheduled content
 - Tune to virtual channels that play content at specific times
 - Content plays at the "correct" position based on wall-clock time
@@ -48,7 +49,7 @@ Retune creates a traditional TV experience from your Plex library:
 
 ## Module Summary
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                      APP ORCHESTRATOR                           │
 │              (coordinates all modules)                          │
@@ -92,26 +93,31 @@ Retune creates a traditional TV experience from your Plex library:
 ## Implementation Order
 
 ### Phase 1: Core Infrastructure (Days 1-3)
+
 1. `event-emitter` - Typed pub/sub utility
 2. `plex-auth` - Plex OAuth authentication
 3. `app-lifecycle` - State persistence
 4. `navigation` - Remote control handling
 
 ### Phase 2: Plex Integration (Days 4-7)
-5. `plex-server-discovery` - Find Plex servers
-6. `plex-library` - Browse media libraries
-7. `plex-stream-resolver` - Resolve playback URLs
+
+1. `plex-server-discovery` - Find Plex servers
+2. `plex-library` - Browse media libraries
+3. `plex-stream-resolver` - Resolve playback URLs
 
 ### Phase 3: Core Playback MVP (Days 8-12)
-8. `video-player` - Media playback
-9. `channel-manager` - Channel configuration
-10. `channel-scheduler` - Schedule generation
+
+1. `video-player` - Media playback
+2. `channel-manager` - Channel configuration
+3. `channel-scheduler` - Schedule generation
 
 ### Phase 4: Full UI (Days 13-16)
-11. `epg-ui` - Program guide grid
+
+1. `epg-ui` - Program guide grid
 
 ### Phase 5: Integration (Days 17-19)
-12. `app-orchestrator` - Wire everything together
+
+1. `app-orchestrator` - Wire everything together
 
 ---
 
@@ -223,22 +229,26 @@ graph TB
 ## Architecture Decisions
 
 ### Why Deterministic Scheduling?
+
 Multiple devices must show the same "channel" at the same time. Given the same content, seed, and anchor time, all calculations produce identical results.
 
 ### Why Virtualized Rendering?
+
 EPG could have 50 channels × 48 half-hours = 2400 cells. Rendering all would kill performance. We render only visible cells (~200 max).
 
 ### Why No Third-Party HLS Library?
+
 HLS.js and similar cause memory bloat on webOS. The built-in HLS support is more stable for long-running playback.
 
 ### Why Module Pattern?
+
 Clear boundaries enable parallel AI-assisted development. Each module has explicit interfaces and can be tested independently.
 
 ---
 
 ## File Locations
 
-```
+```text
 spec-pack/
 ├── README.md                              # This file
 ├── artifact-1-dependency-graph.json       # Module dependencies
@@ -261,6 +271,7 @@ spec-pack/
 ## Validation
 
 After implementation, run through `artifact-8-verification-checklist.md`:
+
 - Phase 1: Build verification (TypeScript, bundle, package)
 - Phase 2: Module unit tests
 - Phase 3: Integration tests
@@ -275,22 +286,26 @@ After implementation, run through `artifact-8-verification-checklist.md`:
 
 ### Key Formulas
 
-**Schedule Position:**
+**Schedule Position**:
+
 ```typescript
 position = (currentTime - anchorTime) % totalLoopDuration
 ```
 
-**Program Lookup (O(log n)):**
+**Program Lookup (O(log n))**:
+
 ```typescript
 itemIndex = binarySearch(itemStartOffsets, position)
 ```
 
-**Deterministic Shuffle Seed:**
+**Deterministic Shuffle Seed**:
+
 ```typescript
 seed = hash(channelId + anchorTime)
 ```
 
 ### Key Storage Keys
+
 | Key | Purpose |
 |-----|---------|
 | `retune_plex_auth` | Plex credentials |
@@ -299,6 +314,7 @@ seed = hash(channelId + anchorTime)
 | `retune_app_state` | App state (last channel, etc.) |
 
 ### Key Events
+
 | Event | Emitter | Purpose |
 |-------|---------|---------|
 | `programStart` | Scheduler | New program begins |

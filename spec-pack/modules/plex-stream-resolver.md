@@ -1,6 +1,7 @@
 # Module: Plex Stream Resolver
 
 ## Metadata
+
 - **ID**: `plex-stream-resolver`
 - **Path**: `src/modules/plex/stream/`
 - **Primary File**: `PlexStreamResolver.ts`
@@ -74,7 +75,8 @@ export type {
    - webOS supports: MP4/MKV with H.264/H.265 and AAC/AC3
 
 2. **Transcode URL Generation**
-   ```
+
+   ```text
    /video/:/transcode/universal/start.m3u8
    ?path=/library/metadata/{key}
    &mediaIndex=0
@@ -135,7 +137,8 @@ buildPlaybackUrl(partKey: string, serverUri: string): string {
 }
 ```
 
-**Error Recovery for Mixed Content:**
+**Error Recovery for Mixed Content**:
+
 | Scenario | Detection | Recovery |
 |----------|-----------|----------|
 | HTTP blocked | Playback fails with network error | Switch to HTTPS/relay connection |
@@ -162,6 +165,7 @@ interface StreamResolverState {
 **Purpose**: Determine the best way to play content and return playback URL.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | request | StreamRequest | Yes | Stream request parameters |
@@ -169,6 +173,7 @@ interface StreamResolverState {
 **Returns**: `StreamDecision` with playback URL and stream info
 
 **Implementation Notes**:
+
 ```typescript
 async resolveStream(request: StreamRequest): Promise<StreamDecision> {
   // Get item metadata
@@ -234,6 +239,7 @@ async resolveStream(request: StreamRequest): Promise<StreamDecision> {
 **Purpose**: Check if content can be played directly without transcoding.
 
 **Implementation Notes**:
+
 ```typescript
 canDirectPlay(item: PlexMediaItem): boolean {
   if (!item.media || item.media.length === 0) return false;
@@ -274,6 +280,7 @@ canDirectPlay(item: PlexMediaItem): boolean {
 **Purpose**: Report playback progress to Plex server.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | sessionId | string | Yes | Session identifier |
@@ -282,6 +289,7 @@ canDirectPlay(item: PlexMediaItem): boolean {
 | state | 'playing' \| 'paused' \| 'stopped' | Yes | Playback state |
 
 **Implementation Notes**:
+
 ```typescript
 async updateProgress(
   sessionId: string,
@@ -320,6 +328,7 @@ async updateProgress(
 **Purpose**: Generate HLS transcode URL for Plex server.
 
 **Implementation Notes**:
+
 ```typescript
 getTranscodeUrl(itemKey: string, options: HlsOptions = {}): string {
   const params = new URLSearchParams({
@@ -426,6 +435,7 @@ describe('PlexStreamResolver', () => {
 ## Mock Requirements
 
 ### Required Mocks
+
 ```typescript
 // Mock fetch for Plex API calls
 const mockFetch = jest.fn();
@@ -450,6 +460,7 @@ const mockPlexLibrary: IPlexLibrary = {
 ```
 
 ### Mock Data Fixtures
+
 ```typescript
 // Compatible content (direct play)
 const mockCompatibleItem = {
@@ -488,6 +499,7 @@ const mockTranscodeDecision = {
 ```
 
 ### Helper Functions
+
 ```typescript
 function createItem(overrides: Partial<typeof mockCompatibleItem.media[0]>) {
   return {
@@ -499,7 +511,7 @@ function createItem(overrides: Partial<typeof mockCompatibleItem.media[0]>) {
 
 ## File Structure
 
-```
+```text
 src/modules/plex/stream/
 ├── index.ts                  # Public exports
 ├── PlexStreamResolver.ts     # Main class
@@ -525,6 +537,7 @@ src/modules/plex/stream/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Direct play detection works for all supported formats
 2. [ ] Transcode URLs are properly formatted
 3. [ ] HLS streams play correctly on webOS

@@ -1,6 +1,7 @@
 # Module: Application Lifecycle & State Management
 
 ## Metadata
+
 - **ID**: `app-lifecycle`
 - **Path**: `src/modules/lifecycle/`
 - **Primary File**: `AppLifecycle.ts`
@@ -91,9 +92,10 @@ export type {
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **webOS Visibility API Integration**
+
    ```typescript
    // Listen for visibility changes
    document.addEventListener('webOSRelaunch', (event) => {
@@ -111,6 +113,7 @@ export type {
    ```
 
 2. **State Persistence with Versioning**
+
    ```typescript
    interface PersistentState {
      version: number;  // For migrations
@@ -123,7 +126,8 @@ export type {
    ```
 
 3. **Phase State Machine**
-   ```
+
+   ```text
    initializing → authenticating → loading_data → ready
                                                     ↓
                error ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←
@@ -135,6 +139,7 @@ export type {
    ```
 
    **State Machine Diagram (Mermaid):**
+
    ```mermaid
    stateDiagram-v2
        [*] --> initializing
@@ -234,8 +239,9 @@ export type {
      return currentState as PersistentState;
    }
    ```
-   
+
    **Migration Test Cases:**
+
    ```typescript
    describe('StateManager migrations', () => {
      it('should migrate v1 state to current version', () => {
@@ -265,18 +271,18 @@ export type {
    - Listen to `online`/`offline` events
    - Periodic connectivity test to Plex server
 
-5. **Memory Monitoring**
+6. **Memory Monitoring**
    - Check `performance.memory` if available
    - Trigger cleanup when above threshold (80%)
 
-### MUST NOT:
+### MUST NOT
 
 1. Block on localStorage operations (use async wrappers)
 2. Lose state on visibility changes
 3. Allow phase transitions to invalid states
 4. Swallow errors without logging/reporting
 
-### State Management:
+### State Management
 
 ```typescript
 interface LifecycleInternalState {
@@ -295,10 +301,10 @@ interface LifecycleInternalState {
 - **Persistence**: `PersistentState` to localStorage
 - **Storage Key**: `retune_app_state`
 
-### Error Handling:
+### Error Handling
 
 | Error Type | User Message | Actions |
-|------------|--------------|---------|
+| ---------- | ------------ | ------- |
 | AUTH_EXPIRED | "Please sign in again" | [Sign In, Exit] |
 | NETWORK_UNAVAILABLE | "No internet connection" | [Retry, Exit] |
 | PLEX_UNREACHABLE | "Cannot connect to Plex server" | [Retry, Different Server, Exit] |
@@ -313,6 +319,7 @@ interface LifecycleInternalState {
 **Purpose**: Start the application lifecycle and restore state.
 
 **Side Effects**:
+
 - Sets up visibility event listeners
 - Sets up network event listeners
 - Restores state from localStorage
@@ -320,6 +327,7 @@ interface LifecycleInternalState {
 - Emits `phaseChange` events
 
 **Implementation Notes**:
+
 ```typescript
 async initialize(): Promise<void> {
   this.setPhase('initializing');
@@ -349,10 +357,12 @@ async initialize(): Promise<void> {
 **Purpose**: Persist current application state to localStorage.
 
 **Side Effects**:
-- Writes `PersistentState` to localStorage
+
+- writes `PersistentState` to localStorage
 - Updates `lastUpdated` timestamp
 
 **Implementation Notes**:
+
 ```typescript
 async saveState(): Promise<void> {
   const state: PersistentState = {
@@ -389,11 +399,13 @@ async saveState(): Promise<void> {
 **Purpose**: Register callback for app backgrounding.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| callback | () => void \| Promise<void> | Yes | Function to call on pause |
+| ---- | ---- | -------- | ----------- |
+| callback | `() => void \| Promise<void>` | Yes | Function to call on pause |
 
 **Usage**:
+
 ```typescript
 appLifecycle.onPause(() => {
   videoPlayer.pause();
@@ -408,19 +420,22 @@ appLifecycle.onPause(() => {
 **Purpose**: Report an error for display and recovery.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+| ---- | ---- | -------- | ----------- |
 | error | AppError | Yes | Error to report |
 
 **Side Effects**:
+
 - Stores error in state
 - Sets phase to 'error' if not already
 - Emits `error` event
 
 ## Internal Architecture
 
-### Class Diagram:
-```
+### Class Diagram
+
+```mermaid
 ┌─────────────────────────────────┐
 │        AppLifecycle             │
 ├─────────────────────────────────┤
@@ -476,7 +491,7 @@ appLifecycle.onPause(() => {
 ## Events Emitted
 
 | Event Name | Payload Type | When Emitted |
-|------------|--------------|--------------|
+| ---------- | ------------ | ------------ |
 | `phaseChange` | `{ from, to }` | Phase transition |
 | `visibilityChange` | `{ isVisible }` | App background/foreground |
 | `networkChange` | `{ isAvailable }` | Connectivity changes |
@@ -487,7 +502,7 @@ appLifecycle.onPause(() => {
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('AppLifecycle', () => {
@@ -567,7 +582,7 @@ describe('AppLifecycle', () => {
 
 ## File Structure
 
-```
+```text
 src/modules/lifecycle/
 ├── index.ts              # Public exports
 ├── AppLifecycle.ts       # Main class
@@ -599,6 +614,7 @@ src/modules/lifecycle/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] State persists correctly across app restarts
 2. [ ] Visibility changes trigger appropriate callbacks
 3. [ ] Network status is monitored and events emitted

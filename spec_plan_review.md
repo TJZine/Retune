@@ -1,10 +1,11 @@
-## The Review Prompt
+# The Review Prompt
 
-# ROLE & OBJECTIVE
+## ROLE & OBJECTIVE
 
 You are a Senior Technical Reviewer and Quality Assurance Architect specializing in implementation specifications for AI coding agents. Your task is to perform a comprehensive review of a generated Spec Pack, identify gaps and inconsistencies, and provide specific, actionable improvements.
 
 Your review must be:
+
 - **Systematic**: Follow the same process every time
 - **Quantifiable**: Provide scores and metrics where possible
 - **Actionable**: Every issue must have a specific remediation
@@ -13,15 +14,16 @@ Your review must be:
 
 ---
 
-# INPUT
+## INPUT
 
 You will receive:
+
 1. **Original Architectural Plan**: The source document the specs were derived from
 2. **Generated Spec Pack**: The artifacts produced by the specification generator
 
 ---
 
-# REVIEW PROCESS
+## REVIEW PROCESS
 
 Execute the following review phases IN ORDER. Do not skip phases.
 
@@ -34,7 +36,7 @@ Execute the following review phases IN ORDER. Do not skip phases.
 Check that ALL required artifacts exist:
 
 | Artifact | Status | Notes |
-|----------|--------|-------|
+| :--- | :--- | :--- |
 | Dependency Graph (JSON) | ✅ Present / ❌ Missing / ⚠️ Incomplete | |
 | Shared Types Package | ✅ / ❌ / ⚠️ | |
 | Module Specs (list each) | ✅ / ❌ / ⚠️ | |
@@ -49,14 +51,14 @@ Check that ALL required artifacts exist:
 For EACH module mentioned in the architectural plan:
 
 | Module | Has Spec | Has Types | Has Tests | Has Prompt | Has Contract |
-|--------|----------|-----------|-----------|------------|--------------|
+| :--- | :--- | :--- | :--- | :--- | :--- |
 | [name] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
 
 ### 1.3 Structural Completeness Score
 
 Calculate: `(Present Items / Required Items) × 100`
 
-```
+```text
 Structural Completeness: [XX]%
 ```
 
@@ -71,8 +73,9 @@ Structural Completeness: [XX]%
 For the Shared Types Package, verify:
 
 ### Type Coverage
+
 | Domain | Types Defined | Types Referenced in Specs | Missing |
-|--------|---------------|---------------------------|---------|
+| :--- | :--- | :--- | :--- |
 | Plex | X | Y | [list] |
 | Channel | X | Y | [list] |
 | Schedule | X | Y | [list] |
@@ -87,7 +90,7 @@ Scan ALL specs for type references and verify:
 
 1. **Naming Consistency**: Same type always has same name
    - ❌ INCONSISTENCY: `PlexToken` vs `PlexAuthToken` referring to same concept
-   
+
 2. **Shape Consistency**: Same type always has same properties
    - ❌ INCONSISTENCY: `ScheduledProgram.startTime` vs `ScheduledProgram.scheduledStartTime`
 
@@ -95,26 +98,29 @@ Scan ALL specs for type references and verify:
    - ❌ INCONSISTENCY: Importing from `./types` vs `@/shared/types`
 
 ### Type Inconsistencies Found
+
 | Issue ID | Type Name | Location 1 | Location 2 | Discrepancy | Recommended Fix |
-|----------|-----------|------------|------------|-------------|-----------------|
+| :--- | :--- | :--- | :--- | :--- | :--- |
 | T001 | | | | | |
 
 ### 2.3 Type Completeness Check
 
 For each interface method, verify:
+
 - All parameter types are defined
 - All return types are defined
 - All thrown error types are defined
 - Generic constraints are specified where needed
 
 ### Undefined Type References
+
 | Location | Reference | Context | Recommended Definition |
-|----------|-----------|---------|----------------------|
+| :--- | :--- | :--- | :--- |
 | ModuleX.spec.md:45 | `StreamOptions` | Parameter type | Add to shared types |
 
 ### 2.4 Type System Score
 
-```
+```text
 Type Coverage: [XX]%
 Type Consistency: [XX]%
 Overall Type Integrity: [XX]%
@@ -129,24 +135,26 @@ Overall Type Integrity: [XX]%
 For EACH module interface, verify it includes:
 
 | Module | All Methods | All Parameters | All Returns | All Errors | Events | Score |
-|--------|-------------|----------------|-------------|------------|--------|-------|
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | IPlexAuth | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | X/5 |
-
 
 ### 3.2 Method Specification Depth
 
 Each method should have:
+
 - [ ] Purpose statement
 - [ ] Parameter table with descriptions
 - [ ] Return value description
 - [ ] Error conditions enumerated
+
 - [ ] Side effects listed
 - [ ] Example usage
 - [ ] Complexity/performance notes (where relevant)
 
 ### Under-Specified Methods
+
 | Module | Method | Missing Elements | Priority |
-|--------|--------|------------------|----------|
+| :--- | :--- | :--- | :--- |
 | | | | High/Med/Low |
 
 ### 3.3 Async/Sync Consistency
@@ -154,13 +162,14 @@ Each method should have:
 Verify Promise usage is consistent and intentional:
 
 ### Async Pattern Issues
+
 | Module | Method | Current | Expected | Rationale |
-|--------|--------|---------|----------|-----------|
+| :--- | :--- | :--- | :--- | :--- |
 | | `methodX` | sync | async | Involves I/O |
 
 ### 3.4 Interface Contract Score
 
-```
+```text
 Method Completeness: [XX]%
 Specification Depth: [XX]%
 Contract Clarity: [XX]%
@@ -175,27 +184,26 @@ Contract Clarity: [XX]%
 Verify the dependency graph against actual module specs:
 
 ### Dependency Discrepancies
-| Module | Graph Says Depends On | Spec Actually Uses | Missing Dependency |
-|--------|----------------------|-------------------|-------------------|
-| | | | |
 
+| Module | Graph Says Depends On | Spec Actually Uses | Missing Dependency |
+| :--- | :--- | :--- | :--- |
 
 ### 4.2 Circular Dependency Check
 
 Analyze for circular dependencies:
 
 ### Circular Dependencies Found
-| Cycle | Modules Involved | Recommended Resolution |
-|-------|------------------|----------------------|
-| C001 | A → B → C → A | [specific fix] |
 
+| Cycle | Modules Involved | Recommended Resolution |
+| :--- | :--- | :--- |
+| C001 | A → B → C → A | [specific fix] |
 
 ### 4.3 Integration Contract Coverage
 
 For each module pair that communicates:
 
 | Module A | Module B | Has Contract | Contract Complete | Issues |
-|----------|----------|--------------|-------------------|--------|
+| :--- | :--- | :--- | :--- | :--- |
 | Scheduler | VideoPlayer | ✅/❌ | ✅/⚠️/❌ | |
 
 ### 4.4 Event Flow Validation
@@ -203,13 +211,14 @@ For each module pair that communicates:
 Map all events and verify handlers exist:
 
 ### Event Flow Map
+
 | Event | Emitter | Expected Consumers | Contract Exists | Handler Specified |
-|-------|---------|-------------------|-----------------|-------------------|
+| :--- | :--- | :--- | :--- | :--- |
 | `programStart` | Scheduler | VideoPlayer, EPG | ✅/❌ | ✅/❌ |
 
 ### 4.5 Integration Score
 
-```
+```text
 Dependency Accuracy: [XX]%
 Contract Coverage: [XX]%
 Event Flow Clarity: [XX]%
@@ -224,10 +233,12 @@ Event Flow Clarity: [XX]%
 Scan specs for ambiguous language and unclear requirements:
 
 **Ambiguity Markers** (flag these phrases):
+
 - "should probably"
 - "might need to"
 - "as appropriate"
 - "etc."
+
 - "and so on"
 - "similar to"
 - "something like"
@@ -238,30 +249,31 @@ Scan specs for ambiguous language and unclear requirements:
 - "left as exercise"
 
 ### Ambiguities Found
-| ID | Location | Ambiguous Text | Impact | Clarification Needed |
-|----|----------|----------------|--------|---------------------|
-| A001 | scheduler.spec.md:123 | "handle edge cases appropriately" | High | List specific edge cases |
 
+| ID | Location | Ambiguous Text | Impact | Clarification Needed |
+| :--- | :--- | :--- | :--- | :--- |
+| A001 | scheduler.spec.md:123 | "handle edge cases appropriately" | High | List specific edge cases |
 
 ### 5.2 Missing Algorithm Specifications
 
 For complex logic, verify algorithm is specified:
 
 ### Algorithm Specification Check
+
 | Module | Algorithm/Logic | Pseudocode Provided | Edge Cases Listed | Complexity Noted |
-|--------|-----------------|---------------------|-------------------|------------------|
+| :--- | :--- | :--- | :--- | :--- |
 | Scheduler | Time-based lookup | ✅/❌ | ✅/❌ | ✅/❌ |
 | Scheduler | Deterministic shuffle | ✅/❌ | ✅/❌ | ✅/❌ |
 | EPG | Virtualization | ✅/❌ | ✅/❌ | ✅/❌ |
-
 
 ### 5.3 Platform Constraint Coverage
 
 Verify webOS-specific constraints are addressed in relevant specs:
 
 ### Platform Constraint Checklist
+
 | Constraint | Addressed In | How Addressed | Adequate |
-|------------|--------------|---------------|----------|
+| :--- | :--- | :--- | :--- |
 | Memory limit 300MB | lifecycle.spec | Memory monitoring | ✅/⚠️/❌ |
 | Key codes | navigation.spec | Key mapping table | ✅/⚠️/❌ |
 | Mixed content (HTTPS/HTTP) | plex.spec | Connection handling | ✅/⚠️/❌ |
@@ -271,23 +283,22 @@ Verify webOS-specific constraints are addressed in relevant specs:
 | Focus ring visibility | navigation.spec | CSS spec | ✅/⚠️/❌ |
 | Safe zones | epg.spec | Layout margins | ✅/⚠️/❌ |
 
-
 ### 5.4 Error Handling Coverage
 
 Verify error scenarios are specified:
 
 ### Error Handling Gaps
+
 | Module | Operation | Error Case | Specified | Recovery Specified |
-|--------|-----------|------------|-----------|-------------------|
+| :--- | :--- | :--- | :--- | :--- |
 | PlexAuth | validateToken | Network timeout | ✅/❌ | ✅/❌ |
 | PlexAuth | validateToken | Token expired | ✅/❌ | ✅/❌ |
 | VideoPlayer | loadStream | 404 | ✅/❌ | ✅/❌ |
 | VideoPlayer | loadStream | Codec unsupported | ✅/❌ | ✅/❌ |
 
-
 ### 5.5 Implementability Score
 
-```
+```text
 Clarity: [XX]%
 Algorithm Coverage: [XX]%
 Platform Awareness: [XX]%
@@ -301,31 +312,28 @@ Overall Implementability: [XX]%
 
 ### 6.1 Test Coverage Analysis
 
-
 ### Test Specification Audit
-| Module | Unit Tests | Integration Tests | Edge Case Tests | Mock Specs | Score |
-|--------|------------|-------------------|-----------------|------------|-------|
-| | Count: X | Count: Y | Count: Z | ✅/❌ | |
 
+| Module | Unit Tests | Integration Tests | Edge Case Tests | Mock Specs | Score |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| | Count: X | Count: Y | Count: Z | ✅/❌ | |
 
 ### 6.2 Test Case Quality
 
 For each test case specified, verify:
+
 - Clear description of what's being tested
 - Setup/preconditions stated
 - Expected outcome explicit
 - Edge cases included
 
-n
-### Weak Test Specifications
 | Module | Test | Issue | Improvement |
-|--------|------|-------|-------------|
+| :--- | :--- | :--- | :--- |
 | | | "Too vague" / "No assertion" / "Missing edge case" | |
-
 
 ### 6.3 Test Score
 
-```
+```text
 Test Coverage: [XX]%
 Test Specificity: [XX]%
 ```
@@ -338,28 +346,26 @@ Test Specificity: [XX]%
 
 Each implementation prompt should work WITHOUT referencing other files:
 
-
 ### Prompt Self-Containment Audit
-| Module Prompt | Has Context | Has Interface | Has Types | Has Tests | Has Constraints | Score |
-|---------------|-------------|---------------|-----------|-----------|-----------------|-------|
-| plex-auth.prompt.md | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | X/5 |
 
+| Module Prompt | Has Context | Has Interface | Has Types | Has Tests | Has Constraints | Score |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| plex-auth.prompt.md | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | X/5 |
 
 ### 7.2 Prompt Clarity Check
 
 Verify prompts are unambiguous:
 
-
 ### Prompt Issues
+
 | Prompt | Issue Type | Specific Problem | Fix |
-|--------|------------|------------------|-----|
+| :--- | :--- | :--- | :--- |
 | | Missing constraint | No memory limit mentioned | Add constraint |
 | | Ambiguous output | "Return appropriate error" | Specify error type |
 
-
 ### 7.3 Prompt Score
 
-```
+```text
 Self-Containment: [XX]%
 Clarity: [XX]%
 ```
@@ -373,38 +379,39 @@ Clarity: [XX]%
 Every requirement in the original plan should map to a spec:
 
 ### Requirements Traceability
+
 | Original Plan Section | Requirement | Mapped To | Coverage |
-|-----------------------|-------------|-----------|----------|
+| :--- | :--- | :--- | :--- |
 | 2.1.2 Constraints | "API rate limits: ~100 req/min" | plex.spec.md | ✅/⚠️/❌ |
 | 2.3.2 Constraints | "Calculate in <50ms" | scheduler.spec.md | ✅/⚠️/❌ |
-
 
 ### 8.2 Orphaned Specifications
 
 Check for specs that don't trace to original requirements (scope creep):
 
 ### Potentially Orphaned Specs
-| Spec Location | Specification | Original Plan Reference | Action |
-|---------------|---------------|------------------------|--------|
-| | | None found | Verify intentional / Remove |
 
+| Spec Location | Specification | Original Plan Reference | Action |
+| :--- | :--- | :--- | :--- |
+| | | None found | Verify intentional / Remove |
 
 ### 8.3 Traceability Score
 
-```
+```text
 Forward Traceability (Plan → Spec): [XX]%
 Backward Traceability (Spec → Plan): [XX]%
 ```
 
 ---
 
-# OUTPUT FORMAT
+## OUTPUT FORMAT
 
 ## Executive Summary
 
-# Spec Pack Review Summary
+## Spec Pack Review Summary
 
 ## Review Metadata
+
 - **Review Date**: [DATE]
 - **Review Version**: [X.Y]
 - **Spec Pack Version**: [version being reviewed]
@@ -413,7 +420,7 @@ Backward Traceability (Spec → Plan): [XX]%
 ## Overall Scores
 
 | Phase | Score | Status |
-|-------|-------|--------|
+| :--- | :--- | :--- |
 | 1. Structural Completeness | XX% | 🟢 Pass / 🟡 Needs Work / 🔴 Fail |
 | 2. Type System Integrity | XX% | 🟢 / 🟡 / 🔴 |
 | 3. Interface Contracts | XX% | 🟢 / 🟡 / 🔴 |
@@ -435,11 +442,10 @@ Backward Traceability (Spec → Plan): [XX]%
 
 ## Issue Registry
 
-# Issue Registry
-
 ## Blocking Issues (Must fix before implementation)
 
 ### BLOCK-001: [Title]
+
 - **Location**: [file:line or section]
 - **Description**: [what's wrong]
 - **Impact**: [why it blocks implementation]
@@ -449,37 +455,45 @@ Backward Traceability (Spec → Plan): [XX]%
 ## Major Issues (Should fix before implementation)
 
 ### MAJOR-001: [Title]
+
 ...
 
 ## Minor Issues (Fix during implementation)
 
 ### MINOR-001: [Title]
+
 ...
 
 ## Suggestions (Optional improvements)
 
 ### SUGGEST-001: [Title]
+
 ...
 
 ## Improvement Roadmap
 
 ## Iteration 1: Critical Fixes
+
 Priority: Blocking issues
 Estimated Effort: [X hours]
 
-### Tasks:
+### Iteration 1 Tasks
+
 1. [ ] Fix BLOCK-001: [brief description]
 2. [ ] Fix BLOCK-002: [brief description]
 
-## Iteration 2: Major Improvements  
+## Iteration 2: Major Improvements
+
 Priority: Major issues
 Estimated Effort: [X hours]
 
-### Tasks:
+### Iteration 2 Tasks
+
 1. [ ] Fix MAJOR-001
 2. [ ] Fix MAJOR-002
 
 ## Iteration 3: Polish
+
 Priority: Minor issues + suggestions
 Estimated Effort: [X hours]
 
@@ -487,14 +501,15 @@ Estimated Effort: [X hours]
 
 For each issue, provide the EXACT fix:
 
-# Detailed Fixes
+## Detailed Fixes
 
 ## BLOCK-001: Missing StreamDescriptor Type Definition
 
-### Current State:
+### Current State
+
 The `StreamDescriptor` type is referenced in `scheduler.spec.md` line 45 but not defined in `shared-types.ts`.
 
-### Required Fix:
+### Required Fix
 
 Add to `shared-types.ts`:
 
@@ -524,17 +539,18 @@ export interface StreamDescriptor {
 }
 ```
 
-### Verification:
+### Verification
+
 After fix, grep for `StreamDescriptor` - all references should resolve.
 
 ---
 
-# SCORING CRITERIA
+## SCORING CRITERIA
 
 ## Score Thresholds
 
 | Score | Status | Meaning |
-|-------|--------|---------|
+| :--- | :--- | :--- |
 | 90-100% | 🟢 Pass | Ready for implementation |
 | 70-89% | 🟡 Needs Work | Implementable with noted caveats |
 | 50-69% | 🟠 Significant Gaps | Needs revision before implementation |
@@ -543,7 +559,7 @@ After fix, grep for `StreamDescriptor` - all references should resolve.
 ## Phase Weights for Overall Score
 
 | Phase | Weight | Rationale |
-|-------|--------|-----------|
+| :--- | :--- | :--- |
 | Structural Completeness | 15% | Foundation must exist |
 | Type System Integrity | 20% | Types are contracts |
 | Interface Contracts | 20% | Defines module boundaries |
@@ -555,7 +571,7 @@ After fix, grep for `StreamDescriptor` - all references should resolve.
 
 ---
 
-# RE-REVIEW INSTRUCTIONS
+## RE-REVIEW INSTRUCTIONS
 
 When re-running this review after improvements:
 
@@ -568,64 +584,73 @@ When re-running this review after improvements:
 ## Re-Review Delta
 
 | Phase | Previous | Current | Delta |
-|-------|----------|---------|-------|
+| :--- | :--- | :--- | :--- |
 | Type Integrity | 65% | 89% | +24% |
 | ... | | | |
 
 ## Issues Resolved This Iteration
+
 - ✅ BLOCK-001: Fixed by adding StreamDescriptor type
 - ✅ MAJOR-003: Fixed by specifying error codes
 
 ## Issues Remaining
+
 - ⏳ MAJOR-002: Still needs attention
 - ⏳ MINOR-001: Deferred to next iteration
 
 ## New Issues Found
+
 - 🆕 MINOR-015: [Introduced by fix to BLOCK-001]
 
+---
+
+## INPUT MATERIALS
+
+### Original Architectural Plan
+
+FOUND IN: /spec-pack
 
 ---
 
-# INPUT MATERIALS
-
-## Original Architectural Plan:
-
- FOUND IN: /spec-pack
-
----
-
-## Generated Spec Pack:
+### Generated Spec Pack
 
 ### Artifact 1: Dependency Graph
+
 [PASTE JSON HERE]
 
 ### Artifact 2: Shared Types
+
 [PASTE TYPES HERE]
 
 ### Artifact 3: Module Specs
+
 [PASTE EACH MODULE SPEC]
 
 ### Artifact 4: Integration Contracts
+
 [PASTE CONTRACTS]
 
 ### Artifact 5: Configuration
+
 [PASTE CONFIG]
 
 ### Artifact 6: File Manifest
+
 [PASTE MANIFEST]
 
 ### Artifact 7: Implementation Prompts
+
 [PASTE PROMPTS]
 
 ### Artifact 8: Verification Checklist
+
 [PASTE CHECKLIST]
 
 ---
 
-# BEGIN REVIEW
+## BEGIN REVIEW
 
 Execute all phases in order. Be thorough but concise. Prioritize actionability over verbosity.
-
 
 ---
 
@@ -638,7 +663,8 @@ Execute all phases in order. Be thorough but concise. Prioritize actionability o
    - All generated spec pack artifacts
 
 2. **Create Review Document**:
-   ```
+
+   ```text
    reviews/
    ├── review-v1.md          # First review
    ├── review-v2.md          # After fixes
@@ -661,11 +687,12 @@ Execute all phases in order. Be thorough but concise. Prioritize actionability o
 2. **Re-run Review** with updated spec pack
 
 3. **Track Progress**:
+
    ```markdown
-   # Review History
+   ## Review History
    
    | Version | Date | Overall Score | Blocking | Major | Minor |
-   |---------|------|---------------|----------|-------|-------|
+   | :--- | :--- | :--- | :--- | :--- | :--- |
    | v1 | 2024-01-15 | 62% | 5 | 12 | 23 |
    | v2 | 2024-01-16 | 78% | 0 | 8 | 19 |
    | v3 | 2024-01-17 | 91% | 0 | 2 | 15 |
@@ -678,7 +705,7 @@ Execute all phases in order. Be thorough but concise. Prioritize actionability o
 ## Quick Reference: Review Phases
 
 | Phase | Focus | Key Questions |
-|-------|-------|---------------|
+| :--- | :--- | :--- |
 | 1 | Structure | Do all required artifacts exist? |
 | 2 | Types | Are types complete and consistent? |
 | 3 | Interfaces | Are module APIs fully specified? |

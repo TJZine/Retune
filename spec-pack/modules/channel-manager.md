@@ -1,6 +1,7 @@
 # Module: Channel Manager
 
 ## Metadata
+
 - **ID**: `channel-manager`
 - **Path**: `src/modules/scheduler/channel-manager/`
 - **Primary File**: `ChannelManager.ts`
@@ -85,7 +86,7 @@ export type {
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **Channel Configuration Persistence**
    - Store to localStorage with key `retune_channels`
@@ -115,14 +116,14 @@ export type {
    - Refresh if stale (> 1 hour) or forced
    - Include cache status in resolved content
 
-### MUST NOT:
+### MUST NOT
 
 1. Store full content items (only references + minimal cached data)
 2. Block UI during content resolution (use async)
 3. Allow duplicate channel numbers
 4. Create channels with empty content sources
 
-### State Management:
+### State Management
 
 ```typescript
 interface ChannelManagerState {
@@ -143,7 +144,7 @@ All content resolution and persistence operations must handle errors gracefully 
 #### Error Types and Recovery Matrix
 
 | Error Scenario | Error Code | Recoverable | User Message | Recovery Strategy |
-|----------------|------------|-------------|--------------|-------------------|
+| -------------- | ---------- | ----------- | ------------ | ----------------- |
 | Channel not found | `CHANNEL_NOT_FOUND` | No | "Channel not found" | Return null, no action |
 | Plex server offline | `NETWORK_ERROR` | Yes | "Cannot connect to Plex server" | Use cached content if available, queue retry |
 | Library deleted in Plex | `CONTENT_UNAVAILABLE` | Partial | "Some content is no longer available" | Filter out missing items, log warning, continue with remaining |
@@ -359,6 +360,7 @@ private pruneContentCaches(): void {
 ## Content Source Types
 
 ### Library Source
+
 ```typescript
 interface LibraryContentSource {
   type: 'library';
@@ -371,6 +373,7 @@ interface LibraryContentSource {
 ```
 
 ### Collection Source
+
 ```typescript
 interface CollectionContentSource {
   type: 'collection';
@@ -382,6 +385,7 @@ interface CollectionContentSource {
 ```
 
 ### Show Source
+
 ```typescript
 interface ShowContentSource {
   type: 'show';
@@ -394,6 +398,7 @@ interface ShowContentSource {
 ```
 
 ### Mixed Source
+
 ```typescript
 interface MixedContentSource {
   type: 'mixed';
@@ -413,13 +418,15 @@ interface MixedContentSource {
 **Purpose**: Create a new channel with default values for missing fields.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| config | Partial<ChannelConfig> | Yes | Channel configuration (partial) |
+| ---- | ---- | -------- | ----------- |
+| config | `Partial<ChannelConfig>` | Yes | Channel configuration (partial) |
 
 **Returns**: Complete `ChannelConfig` with generated ID and defaults
 
 **Side Effects**:
+
 - Generates UUID for id
 - Assigns next available channel number if not provided
 - Sets timestamps (createdAt, updatedAt)
@@ -427,6 +434,7 @@ interface MixedContentSource {
 - Emits `channelCreated` event
 
 **Implementation Notes**:
+
 ```typescript
 async createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig> {
   const channel: ChannelConfig = {
@@ -477,13 +485,15 @@ async createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig> {
 **Purpose**: Fetch and assemble content items for a channel.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+| ---- | ---- | -------- | ----------- |
 | channelId | string | Yes | Channel to resolve content for |
 
 **Returns**: `ResolvedChannelContent` with resolved items
 
 **Implementation Notes**:
+
 ```typescript
 async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> {
   const channel = this.getChannel(channelId);
@@ -551,6 +561,7 @@ async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> 
 ## Content Resolution Helpers
 
 ### `resolveLibrarySource(source: LibraryContentSource)`
+
 ```typescript
 async resolveLibrarySource(source: LibraryContentSource): Promise<ResolvedContentItem[]> {
   const items = await this.plexLibrary.getLibraryItems(source.libraryId, {
@@ -562,6 +573,7 @@ async resolveLibrarySource(source: LibraryContentSource): Promise<ResolvedConten
 ```
 
 ### `resolveShowSource(source: ShowContentSource)`
+
 ```typescript
 async resolveShowSource(source: ShowContentSource): Promise<ResolvedContentItem[]> {
   const episodes = await this.plexLibrary.getShowEpisodes(source.showKey);
@@ -576,6 +588,7 @@ async resolveShowSource(source: ShowContentSource): Promise<ResolvedContentItem[
 ```
 
 ### `applyFilters(items, filters)`
+
 ```typescript
 applyFilters(items: ResolvedContentItem[], filters: ContentFilter[]): ResolvedContentItem[] {
   return items.filter(item => 
@@ -602,7 +615,7 @@ matchesFilter(item: ResolvedContentItem, filter: ContentFilter): boolean {
 ## Events Emitted
 
 | Event Name | Payload Type | When Emitted |
-|------------|--------------|--------------|
+| ---------- | ------------ | ------------ |
 | `channelCreated` | `ChannelConfig` | New channel created |
 | `channelUpdated` | `ChannelConfig` | Channel modified |
 | `channelDeleted` | `string` | Channel removed (ID) |
@@ -612,12 +625,12 @@ matchesFilter(item: ResolvedContentItem, filter: ContentFilter): boolean {
 ## Events Consumed
 
 | Event Name | Source Module | Handler Behavior |
-|------------|---------------|------------------|
+| ---------- | ------------- | ---------------- |
 | (none) | - | - |
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('ChannelManager', () => {
@@ -703,7 +716,7 @@ describe('ChannelManager', () => {
 
 ## File Structure
 
-```
+```text
 src/modules/scheduler/channel-manager/
 ├── index.ts              # Public exports
 ├── ChannelManager.ts     # Main class
@@ -733,6 +746,7 @@ src/modules/scheduler/channel-manager/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Can create channels from all source types
 2. [ ] Content filters work correctly
 3. [ ] Content sorting works correctly

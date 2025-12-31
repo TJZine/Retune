@@ -1,6 +1,7 @@
 # Module: Channel Scheduler
 
 ## Metadata
+
 - **ID**: `channel-scheduler`
 - **Path**: `src/modules/scheduler/scheduler/`
 - **Primary File**: `ChannelScheduler.ts`
@@ -85,7 +86,7 @@ export type {
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **Deterministic Scheduling Algorithm**
    - Formula: `position = (currentTime - anchorTime) % totalLoopDuration`
@@ -113,14 +114,14 @@ export type {
    - Emit `programStart` when next program begins
    - Handle clock drift gracefully
 
-### MUST NOT:
+### MUST NOT
 
 1. Store the entire schedule in memory (calculate on-demand)
 2. Allocate new arrays on every query (reuse where possible)
 3. Use non-deterministic random (Math.random() is forbidden)
 4. Block the main thread during calculations
 
-### State Management:
+### State Management
 
 ```typescript
 interface SchedulerInternalState {
@@ -135,10 +136,10 @@ interface SchedulerInternalState {
 - **Persistence**: None (recalculated from ChannelManager)
 - **Initialization**: Call `loadChannel()` with `ScheduleConfig`
 
-### Error Handling:
+### Error Handling
 
 | Scenario | Handling |
-|----------|----------|
+| -------- | -------- |
 | Empty content list | Throw Error('Cannot schedule empty channel') |
 | Invalid anchor time | Use current time as fallback |
 | Timer drift > 5s | Force resync and emit event |
@@ -150,6 +151,7 @@ interface SchedulerInternalState {
 **Purpose**: Calculate which program is playing at any given time.
 
 **Algorithm (Pseudocode)**:
+
 ```typescript
 function getProgramAtTime(queryTime: number): ScheduledProgram {
   const { totalLoopDurationMs, itemStartOffsets, orderedItems } = this.index;
@@ -252,16 +254,19 @@ shuffle<T>(items: T[], seed: number): T[] {
 **Purpose**: Initialize scheduler with channel content and build index.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| config | ScheduleConfig | Yes | Channel schedule configuration |
+| ---- | ---- | -------- | ----------- |
+| config | `ScheduleConfig` | Yes | Channel schedule configuration |
 
 **Side Effects**:
+
 - Builds `ScheduleIndex`
 - Starts sync timer
 - Emits initial `programStart` event
 
 **Implementation Notes**:
+
 ```typescript
 1. Validate config (non-empty content)
 2. Apply playback mode (sequential/shuffle)
@@ -278,14 +283,16 @@ shuffle<T>(items: T[], seed: number): T[] {
 **Purpose**: Get all programs within a time range (for EPG display).
 
 **Parameters**:
+
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+| ---- | ---- | -------- | ----------- |
 | startTime | number | Yes | Window start (Unix ms) |
 | endTime | number | Yes | Window end (Unix ms) |
 
 **Returns**: `ScheduleWindow` with array of programs
 
 **Implementation Notes**:
+
 ```typescript
 1. Get program at startTime
 2. Add to results array
@@ -302,11 +309,13 @@ shuffle<T>(items: T[], seed: number): T[] {
 **Purpose**: Align scheduler state with wall-clock time.
 
 **Side Effects**:
+
 - Updates currentProgram and nextProgram
 - Emits `scheduleSync` event
 - May emit `programStart`/`programEnd` if program changed
 
 **Implementation Notes**:
+
 ```typescript
 1. Get program at Date.now()
 2. Compare with stored currentProgram
@@ -325,6 +334,7 @@ shuffle<T>(items: T[], seed: number): T[] {
 > JavaScript timers (setInterval) are not precise and can drift, especially when the browser tab is inactive or system is under load.
 
 **Drift Detection and Correction:**
+
 ```typescript
 interface SyncTimerState {
   expectedNextTick: number;
@@ -410,15 +420,17 @@ private _hardResync(): void {
 }
 ```
 
-### Private Methods:
+### Private Methods
+
 - `_buildIndex(config)`: Create ScheduleIndex from config
 - `_binarySearchForItem(position)`: O(log n) item lookup
 - `_startSyncTimer()`: Begin 1-second interval
 - `_stopSyncTimer()`: Clear interval
 - `_applyPlaybackMode(items, mode, seed)`: Apply shuffle/order
 
-### Class Diagram:
-```
+### Class Diagram
+
+```text
 ┌─────────────────────────────────┐
 │      ChannelScheduler           │
 ├─────────────────────────────────┤
@@ -461,7 +473,7 @@ private _hardResync(): void {
 ## Events Emitted
 
 | Event Name | Payload Type | When Emitted |
-|------------|--------------|--------------|
+| ---------- | ------------ | ------------ |
 | `programStart` | `ScheduledProgram` | New program begins playing |
 | `programEnd` | `ScheduledProgram` | Current program finishes |
 | `scheduleSync` | `SchedulerState` | After each sync tick |
@@ -469,12 +481,12 @@ private _hardResync(): void {
 ## Events Consumed
 
 | Event Name | Source Module | Handler Behavior |
-|------------|---------------|------------------|
+| ---------- | ------------- | ---------------- |
 | `contentResolved` | `channel-manager` | Reload schedule with new content |
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('ChannelScheduler', () => {
@@ -545,7 +557,7 @@ describe('ChannelScheduler', () => {
 });
 ```
 
-### Performance Tests:
+### Performance Tests
 
 ```typescript
 describe('Performance', () => {
@@ -561,15 +573,16 @@ describe('Performance', () => {
 });
 ```
 
-### Mock Requirements:
+### Mock Requirements
 
 When testing this module, mock:
+
 - `Date.now()` for deterministic time
 - `setInterval`/`clearInterval` for timer control
 
 ## File Structure
 
-```
+```text
 src/modules/scheduler/scheduler/
 ├── index.ts                  # Public exports
 ├── ChannelScheduler.ts       # Main class implementation
@@ -602,6 +615,7 @@ src/modules/scheduler/scheduler/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Same seed + content always produces identical schedule
 2. [ ] getProgramAtTime returns correct program with O(log n) complexity
 3. [ ] Schedule loops infinitely without gaps

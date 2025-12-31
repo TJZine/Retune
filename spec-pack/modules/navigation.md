@@ -1,6 +1,7 @@
 # Module: Navigation & Remote Control
 
 ## Metadata
+
 - **ID**: `navigation`
 - **Path**: `src/modules/navigation/`
 - **Primary File**: `NavigationManager.ts`
@@ -102,7 +103,7 @@ export type {
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **Key Event Handling**
    - Capture all keydown events on document
@@ -130,26 +131,27 @@ export type {
    - Block all input during transitions
    - Prevent accidental double-navigation
 
-### MUST NOT:
+### MUST NOT
 
 1. Allow focus on unregistered elements
 2. Navigate while input is blocked
 3. Lose focus during screen transitions
 4. Allow navigation outside modal when open
 
-### Root Screen Back Behavior:
+### Root Screen Back Behavior
 
 When the user presses Back on a root screen (no history to go back to):
 
-| Screen | Back Button Behavior |
-|--------|---------------------|
-| `player` | Show exit confirmation modal |
-| `auth` | Show exit confirmation modal |
-| `server-select` | Navigate back to `auth` |
-| `settings` | Navigate to `player` |
+| Screen           | Back Button Behavior                  |
+| ---------------- | ------------------------------------- |
+| `player`         | Show exit confirmation modal          |
+| `auth`           | Show exit confirmation modal          |
+| `server-select`  | Navigate back to `auth`               |
+| `settings`       | Navigate to `player`                  |
 | `channel-editor` | Navigate to `player` with save prompt |
 
-**Exit Confirmation Modal:**
+#### Exit Confirmation Modal
+
 ```typescript
 // When back pressed on root player screen
 if (this.state.screenStack.length === 0 && screen === 'player') {
@@ -165,7 +167,7 @@ if (this.state.screenStack.length === 0 && screen === 'player') {
 }
 ```
 
-### State Management:
+### State Management
 
 ```typescript
 interface NavigationInternalState {
@@ -186,7 +188,7 @@ interface NavigationInternalState {
 - **Persistence**: Focus memory could persist to localStorage
 - **Initialization**: Start on 'splash' screen
 
-### Key Code Mapping:
+### Key Code Mapping
 
 ```typescript
 const KEY_MAP: Map<number, RemoteButton> = new Map([
@@ -234,8 +236,8 @@ interface ChannelNumberInput {
   digits: string;              // Accumulated digits (e.g., "12" after pressing 1 then 2)
   timeoutMs: number;           // Time to wait for next digit (default: 2000ms)
   maxDigits: number;           // Maximum digits to collect (default: 3)
-  timer: number | null;        // Active timeout handle
-}
+  timer: number | null     // Active timeout handle
+};
 
 private channelInput: ChannelNumberInput = {
   digits: '',
@@ -245,7 +247,8 @@ private channelInput: ChannelNumberInput = {
 };
 ```
 
-**Input Algorithm:**
+#### Input Algorithm
+
 ```typescript
 private handleNumberKey(digit: string): void {
   // Clear existing timeout
@@ -287,15 +290,17 @@ private commitChannelNumber(): void {
 }
 ```
 
-**Timeout Behavior:**
+#### Timeout Behavior
+
 | Scenario | Behavior |
-|----------|----------|
+| -------- | -------- |
 | User presses '5' | Show "5" overlay, wait 2s, then switch to channel 5 |
 | User presses '1', then '2' within 2s | Show "1" → "12", wait 2s, switch to channel 12 |
 | User presses '1', '0', '5' | Show "1" → "10" → "105", switch immediately (3 digits) |
 | User presses '0' | Show "0", wait 2s, switch to channel 0 (or show error) |
 
-**Channel Input Overlay:**
+#### Channel Input Overlay
+
 ```typescript
 // UI component listens for channelInputUpdate events
 navigation.on('channelInputUpdate', ({ digits, isComplete }) => {
@@ -313,20 +318,23 @@ navigation.on('channelInputUpdate', ({ digits, isComplete }) => {
 
 **Purpose**: Navigate to a screen, pushing current to history.
 
-**Parameters**:
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| screen | Screen | Yes | Target screen |
-| params | Record<string, unknown> | No | Parameters to pass |
+#### Parameters
 
-**Side Effects**:
+| Name   | Type                    | Required | Description         |
+| ------ | ----------------------- | -------- | ------------------- |
+| screen | Screen                  | Yes      | Target screen       |
+| params | Record<string, unknown> | No       | Parameters to pass  |
+
+#### Side Effects
+
 - Pushes current screen to stack
 - Saves focus state for current screen
 - Updates current screen
 - Restores or sets initial focus
 - Emits `screenChange` event
 
-**Implementation Notes**:
+#### Implementation Notes
+
 ```typescript
 goTo(screen: Screen, params?: Record<string, unknown>): void {
   const from = this.state.currentScreen;
@@ -359,14 +367,16 @@ goTo(screen: Screen, params?: Record<string, unknown>): void {
 
 **Purpose**: Move focus in specified direction using spatial navigation.
 
-**Parameters**:
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| direction | 'up' \| 'down' \| 'left' \| 'right' | Yes | Direction to move |
+#### Parameters
+
+| Name      | Type                                | Required | Description       |
+| --------- | ----------------------------------- | -------- | ----------------- |
+| direction | 'up' \| 'down' \| 'left' \| 'right' | Yes      | Direction to move |
 
 **Returns**: `true` if focus moved, `false` if at boundary
 
-**Implementation Notes**:
+#### Implementation Notes
+
 ```typescript
 moveFocus(direction: 'up' | 'down' | 'left' | 'right'): boolean {
   const current = this.state.focusedElementId;
@@ -409,17 +419,20 @@ moveFocus(direction: 'up' | 'down' | 'left' | 'right'): boolean {
 
 **Purpose**: Register an element as focusable.
 
-**Parameters**:
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| element | FocusableElement | Yes | Element to register |
+#### Parameters
 
-**Side Effects**:
+| Name    | Type             | Required | Description         |
+| ------- | ---------------- | -------- | ------------------- |
+| element | FocusableElement | Yes      | Element to register |
+
+#### Side Effects
+
 - Adds element to focusable map
 - Sets tabindex="-1" on DOM element
 - Adds focusable class
 
-**Implementation Notes**:
+#### Implementation Notes
+
 ```typescript
 registerFocusable(element: FocusableElement): void {
   this.state.focusableElements.set(element.id, element);
@@ -438,7 +451,8 @@ registerFocusable(element: FocusableElement): void {
 
 ## Internal Architecture
 
-### Private Methods:
+### Private Methods
+
 - `_handleKeyDown(event)`: Process raw keyboard events
 - `_handleKeyUp(event)`: Track key releases for long-press
 - `_routeKeyEvent(keyEvent)`: Route to appropriate handler
@@ -630,8 +644,9 @@ private navigateGrid(
 }
 ```
 
-### Class Diagram:
-```
+### Class Diagram
+
+```text
 ┌─────────────────────────────────┐
 │      NavigationManager          │
 ├─────────────────────────────────┤
@@ -694,14 +709,14 @@ private navigateGrid(
 
 ## Events Emitted
 
-| Event Name | Payload Type | When Emitted |
-|------------|--------------|--------------|
-| `keyPress` | `KeyEvent` | Any mapped key pressed |
-| `screenChange` | `{ from, to }` | Screen navigation occurs |
-| `focusChange` | `{ from, to }` | Focus moves to new element |
-| `modalOpen` | `{ modalId }` | Modal opens |
-| `modalClose` | `{ modalId }` | Modal closes |
-| `pointerModeChange` | `{ active }` | Magic Remote mode changes |
+| Event Name           | Payload Type     | When Emitted                 |
+| -------------------- | ---------------- | ---------------------------- |
+| `keyPress`           | `KeyEvent`       | Any mapped key pressed       |
+| `screenChange`       | `{ from, to }`   | Screen navigation occurs     |
+| `focusChange`        | `{ from, to }`   | Focus moves to new element   |
+| `modalOpen`          | `{ modalId }`    | Modal opens                  |
+| `modalClose`         | `{ modalId }`    | Modal closes                 |
+| `pointerModeChange`  | `{ active }`     | Magic Remote mode changes    |
 
 ## Events Consumed
 
@@ -709,7 +724,7 @@ None (foundational module)
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('NavigationManager', () => {
@@ -826,7 +841,7 @@ describe('NavigationManager', () => {
 
 ## File Structure
 
-```
+```text
 src/modules/navigation/
 ├── index.ts              # Public exports
 ├── NavigationManager.ts  # Main class
@@ -860,6 +875,7 @@ src/modules/navigation/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] All remote buttons are correctly mapped
 2. [ ] Long-press detection works at 500ms threshold
 3. [ ] Focus moves correctly with D-pad

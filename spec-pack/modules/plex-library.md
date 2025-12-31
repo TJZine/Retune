@@ -1,6 +1,7 @@
 # Module: Plex Library Access
 
 ## Metadata
+
 - **ID**: `plex-library`
 - **Path**: `src/modules/plex/library/`
 - **Primary File**: `PlexLibrary.ts`
@@ -91,7 +92,8 @@ export type {
 ### MUST Implement:
 
 1. **Library Section Enumeration**
-   ```
+
+   ```text
    GET /library/sections
    Returns all library sections with type, id, title
    ```
@@ -102,7 +104,8 @@ export type {
    - Fetch all pages transparently for caller
 
 3. **TV Show Hierarchy Navigation**
-   ```
+
+   ```text
    Shows: GET /library/sections/{id}/all?type=2
    Seasons: GET /library/metadata/{showKey}/children
    Episodes: GET /library/metadata/{seasonKey}/children
@@ -131,7 +134,8 @@ export type {
 | Parse error | `PARSE_ERROR` | Log error with response body, return empty | "Unable to load content." |
 | Rate limited (429) | `RATE_LIMITED` | Backoff per `Retry-After` header | "Too many requests. Please wait." |
 
-**Error Recovery Implementation:**
+**Error Recovery Implementation**:
+
 ```typescript
 private async fetchWithRetry<T>(
   url: string,
@@ -217,6 +221,7 @@ interface PlexLibraryState {
 **Purpose**: Get all items from a library section with optional filtering.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | libraryId | string | Yes | Library section ID |
@@ -225,6 +230,7 @@ interface PlexLibraryState {
 **Returns**: Array of `PlexMediaItem`
 
 **Implementation Notes**:
+
 ```typescript
 async getLibraryItems(
   libraryId: string, 
@@ -265,6 +271,7 @@ async getLibraryItems(
 **Purpose**: Get all episodes for a TV show across all seasons.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | showKey | string | Yes | Show ratingKey |
@@ -272,6 +279,7 @@ async getLibraryItems(
 **Returns**: All episodes in aired order
 
 **Implementation Notes**:
+
 ```typescript
 async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
   // Get all seasons
@@ -302,6 +310,7 @@ async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
 **Purpose**: Generate authenticated URL for Plex images.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | imagePath | string | Yes | Image path from Plex metadata |
@@ -311,6 +320,7 @@ async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
 **Returns**: Full URL with authentication token
 
 **Implementation Notes**:
+
 ```typescript
 getImageUrl(imagePath: string, width?: number, height?: number): string {
   if (!imagePath) return '';
@@ -335,6 +345,7 @@ getImageUrl(imagePath: string, width?: number, height?: number): string {
 ## Response Parsing
 
 ### Parse Media Item
+
 ```typescript
 private parseMediaItem(data: any): PlexMediaItem {
   return {
@@ -454,6 +465,7 @@ describe('PlexLibrary', () => {
 ## Mock Requirements
 
 ### Required Mocks
+
 ```typescript
 // Mock fetch for Plex API calls
 const mockFetch = jest.fn();
@@ -472,6 +484,7 @@ const mockPlexDiscovery: IPlexServerDiscovery = {
 ```
 
 ### Mock Data Fixtures
+
 ```typescript
 const mockLibrarySectionsResponse = {
   MediaContainer: {
@@ -506,7 +519,7 @@ const mockShowSeasonsResponse = {
 
 ## File Structure
 
-```
+```text
 src/modules/plex/library/
 ├── index.ts              # Public exports
 ├── PlexLibrary.ts        # Main class
@@ -536,6 +549,7 @@ src/modules/plex/library/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Can enumerate all library sections
 2. [ ] Can fetch all items from any library with pagination
 3. [ ] Can navigate TV show → seasons → episodes

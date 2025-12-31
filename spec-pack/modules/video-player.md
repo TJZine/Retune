@@ -1,6 +1,7 @@
 # Module: Video Player Abstraction
 
 ## Metadata
+
 - **ID**: `video-player`
 - **Path**: `src/modules/player/`
 - **Primary File**: `VideoPlayer.ts`
@@ -170,16 +171,19 @@ interface VideoPlayerInternalState {
 **Purpose**: Create video element and set up event listeners.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | config | VideoPlayerConfig | Yes | Player configuration |
 
 **Side Effects**:
+
 - Creates and appends video element to DOM
 - Sets up all event listeners
 - Starts keep-alive interval
 
 **Implementation Notes**:
+
 ```typescript
 async initialize(config: VideoPlayerConfig): Promise<void> {
   this.config = config;
@@ -220,6 +224,7 @@ async initialize(config: VideoPlayerConfig): Promise<void> {
 **Purpose**: Load a media stream for playback.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | descriptor | StreamDescriptor | Yes | Stream to load |
@@ -227,12 +232,14 @@ async initialize(config: VideoPlayerConfig): Promise<void> {
 **Returns**: Promise that resolves when media is ready to play
 
 **Side Effects**:
+
 - Unloads any existing stream
 - Sets video source
 - Loads subtitle tracks
 - Updates state to 'loading'
 
 **Implementation Notes**:
+
 ```typescript
 async loadStream(descriptor: StreamDescriptor): Promise<void> {
   this.unloadStream();
@@ -274,6 +281,7 @@ async loadStream(descriptor: StreamDescriptor): Promise<void> {
 **Purpose**: Seek to an absolute position.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | positionMs | number | Yes | Target position in milliseconds |
@@ -281,10 +289,12 @@ async loadStream(descriptor: StreamDescriptor): Promise<void> {
 **Returns**: Promise that resolves when seek completes
 
 **Side Effects**:
+
 - Updates status to 'seeking'
 - Triggers video 'seeking' event
 
 **Implementation Notes**:
+
 ```typescript
 async seekTo(positionMs: number): Promise<void> {
   const positionSec = Math.max(0, positionMs / 1000);
@@ -310,15 +320,18 @@ async seekTo(positionMs: number): Promise<void> {
 **Purpose**: Enable or disable a subtitle track.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | trackId | string \| null | Yes | Track ID to enable, null to disable |
 
 **Side Effects**:
+
 - Shows/hides text tracks
 - Updates state
 
 **Implementation Notes**:
+
 ```typescript
 async setSubtitleTrack(trackId: string | null): Promise<void> {
   const tracks = this.videoElement.textTracks;
@@ -344,16 +357,19 @@ async setSubtitleTrack(trackId: string | null): Promise<void> {
 **Purpose**: Switch active audio track.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | trackId | string | Yes | Audio track ID to activate |
 
 **Side Effects**:
+
 - Switches audio track
 - Updates state
 - May briefly interrupt audio
 
 **Error Handling**:
+
 | Error Scenario | Handling | User Impact |
 |---------------|----------|-------------|
 | Track not found | Throw `TRACK_NOT_FOUND`, keep current track | Show "Track unavailable" notification |
@@ -362,6 +378,7 @@ async setSubtitleTrack(trackId: string | null): Promise<void> {
 | Codec not supported | Throw `CODEC_UNSUPPORTED` | Show "Audio format not supported" |
 
 **Implementation Notes**:
+
 ```typescript
 async setAudioTrack(trackId: string): Promise<void> {
   const availableTracks = this.getAvailableAudio();
@@ -432,6 +449,7 @@ private async _restoreAudioTrack(trackId: string): Promise<void> {
 ## Internal Architecture
 
 ### Private Methods:
+
 - `_setupEventListeners()`: Bind all video element events
 - `_updateStatus(status)`: Update state and emit stateChange
 - `_handleCanPlay()`: Transition from loading to ready
@@ -445,7 +463,8 @@ private async _restoreAudioTrack(trackId: string): Promise<void> {
 - `_scheduleRetry()`: Exponential backoff retry
 
 ### Class Diagram:
-```
+
+```mermaid
 ┌─────────────────────────────────┐
 │         VideoPlayer             │
 ├─────────────────────────────────┤
@@ -617,6 +636,7 @@ describe('VideoPlayer', () => {
 ### Mock Requirements:
 
 When testing this module, mock:
+
 - `HTMLVideoElement` prototype methods
 - `document.getElementById`
 - `document.createElement`
@@ -624,7 +644,7 @@ When testing this module, mock:
 
 ## File Structure
 
-```
+```text
 src/modules/player/
 ├── index.ts              # Public exports
 ├── VideoPlayer.ts        # Main class implementation
@@ -639,7 +659,7 @@ src/modules/player/
 
 ## State Machine
 
-```
+```mermaid
                     loadStream()
         ┌──────────────────────────────────┐
         │                                  ▼
@@ -702,6 +722,7 @@ src/modules/player/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] HLS streams play without third-party libraries
 2. [ ] Direct play streams work with correct MIME types
 3. [ ] Subtitle tracks can be enabled/disabled

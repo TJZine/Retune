@@ -9,16 +9,16 @@ These prompts are self-contained instructions for AI coding agents to implement 
 
 ## Prompt 1: Event Emitter Utility (Priority 1)
 
-```
+````markdown
 You are implementing a TypeScript utility module for Retune, a webOS application.
 
-## Task
+### P1: Task
 Implement a typed EventEmitter class that provides pub/sub functionality with TypeScript generics for type-safe events.
 
-## Files to Create
+### P1: Files to Create
 - src/utils/EventEmitter.ts
 
-## Requirements
+### P1: Requirements
 
 1. Create a generic `EventEmitter<EventMap>` class where:
    - EventMap is a type with event names as keys and payload types as values
@@ -38,7 +38,7 @@ Implement a typed EventEmitter class that provides pub/sub functionality with Ty
    - Handler errors should be logged but NOT propagate
    - Other handlers in the same event MUST still execute
    - Consider emitting an 'error' event when handlers fail
-   
+
    ```typescript
    emit<K extends keyof T>(event: K, payload: T[K]): void {
      const handlers = this.handlers.get(event as string);
@@ -55,12 +55,13 @@ Implement a typed EventEmitter class that provides pub/sub functionality with Ty
    }
    ```
 
-3. Type safety:
+1. Type safety:
    - Event names must be keys of EventMap
    - Handler parameter must match the event's payload type
    - `emit()` payload must match the event's payload type
 
-## Example Usage
+### P1: Example Usage
+
 ```typescript
 interface MyEvents {
   userLogin: { userId: string; timestamp: number };
@@ -78,35 +79,39 @@ emitter.emit('userLogin', { userId: '123', timestamp: Date.now() });
 emitter.emit('tick'); // void payload
 ```
 
-## Constraints
+### P1: Constraints
+
 - No external dependencies
 - Must work in Chromium 68 (webOS 4.0)
 - Keep implementation under 100 lines
 
-## Deliverable
-A single TypeScript file with:
+### P1: Deliverable
+
+- A single TypeScript file with:
 - EventEmitter class with full type annotations
 - JSDoc comments on all public methods
 - Export statement for the class
-```
+
+````
 
 ---
 
 ## Prompt 2: Plex Authentication Module (Priority 1)
 
-```
+````markdown
 You are implementing the Plex Authentication module for Retune, a webOS TV application.
 
-## Task
+### P2: Task
 Implement PIN-based OAuth authentication with plex.tv, including token storage and validation.
 
-## Files to Create
+### P2: Files to Create
 - src/modules/plex/auth/index.ts (exports)
 - src/modules/plex/auth/PlexAuth.ts (main class)
 - src/modules/plex/auth/interfaces.ts (IPlexAuth)
 - src/modules/plex/auth/constants.ts
 
-## Type Definitions (use these exactly)
+### P2: Type Definitions (use these exactly)
+
 ```typescript
 interface PlexAuthConfig {
   clientIdentifier: string;
@@ -143,7 +148,8 @@ interface PlexAuthData {
 }
 ```
 
-## Interface to Implement
+### P2: Interface to Implement
+
 ```typescript
 interface IPlexAuth {
   requestPin(): Promise<PlexPinRequest>;
@@ -160,12 +166,14 @@ interface IPlexAuth {
 }
 ```
 
-## API Endpoints
-- PIN Request: POST https://plex.tv/api/v2/pins
-- PIN Check: GET https://plex.tv/api/v2/pins/{id}
-- User Profile: GET https://plex.tv/api/v2/user
+### P2: API Endpoints
 
-## Required Headers for All Requests
+- PIN Request: [https://plex.tv/api/v2/pins](https://plex.tv/api/v2/pins)
+- PIN Check: [https://plex.tv/api/v2/pins/{id}](https://plex.tv/api/v2/pins/{id})
+- User Profile: [https://plex.tv/api/v2/user](https://plex.tv/api/v2/user)
+
+### P2: Required Headers for All Requests
+
 - Accept: application/json
 - X-Plex-Client-Identifier: {clientIdentifier}
 - X-Plex-Product: {product}
@@ -173,49 +181,55 @@ interface IPlexAuth {
 - X-Plex-Platform: {platform}
 - X-Plex-Device: {device}
 
-## Storage
+### P2: Storage
+
 - Use localStorage with key 'retune_plex_auth'
 - Include version number in stored data for migrations
 
-## Implementation Notes
+### P2: Implementation Notes
+
 1. requestPin() should POST to /pins with { strong: true }
 2. checkPinStatus() polls every 1 second for 5 minutes max
 3. When authToken is populated, fetch user profile and store
 4. getAuthHeaders() includes X-Plex-Token when authenticated
 5. Emit 'authChange' event when credentials change
 
-## Error Handling
+### P2: Error Handling
+
 - Wrap fetch in try/catch
 - On 401/403, return false from validateToken
 - On network error, throw with code 'NETWORK_ERROR'
 
-## Deliverable
+### P2: Deliverable
+
 Complete implementation of all files with:
 - Full IPlexAuth implementation
 - localStorage persistence
 - Event emission via EventEmitter
 - JSDoc comments
 - No TypeScript errors
-```
+
+````
 
 ---
 
 ## Prompt 3: Channel Scheduler Module (Priority 5)
 
-```
+````markdown
 You are implementing the Channel Scheduler module for Retune, a webOS TV application that creates virtual TV channels.
 
-## Task
+### P3: Task
 Implement deterministic schedule generation for virtual TV channels. Given a channel's content and the current time, calculate exactly which content should be playing and at what offset.
 
-## Files to Create
+### P3: Files to Create
 - src/modules/scheduler/scheduler/index.ts
 - src/modules/scheduler/scheduler/ChannelScheduler.ts
 - src/modules/scheduler/scheduler/ScheduleCalculator.ts  
 - src/modules/scheduler/scheduler/ShuffleGenerator.ts
 - src/modules/scheduler/scheduler/interfaces.ts
 
-## Type Definitions (use exactly)
+### P3: Type Definitions (use exactly)
+
 ```typescript
 interface ScheduleConfig {
   channelId: string;
@@ -265,7 +279,8 @@ interface ScheduleIndex {
 }
 ```
 
-## Core Algorithm (CRITICAL)
+### P3: Core Algorithm (CRITICAL)
+
 The heart of this module is getProgramAtTime(). Here's the algorithm:
 
 ```typescript
@@ -290,7 +305,8 @@ function getProgramAtTime(queryTime: number): ScheduledProgram {
 }
 ```
 
-## Deterministic Shuffle (Mulberry32 PRNG)
+### P3: Deterministic Shuffle (Mulberry32 PRNG)
+
 ```typescript
 function mulberry32(seed: number): () => number {
   return function() {
@@ -303,7 +319,8 @@ function mulberry32(seed: number): () => number {
 ```
 Use Fisher-Yates shuffle with this PRNG. Same seed MUST produce identical order.
 
-## Interface to Implement
+### P3: Interface to Implement
+
 ```typescript
 interface IChannelScheduler {
   loadChannel(config: ScheduleConfig): void;
@@ -324,14 +341,17 @@ interface IChannelScheduler {
 }
 ```
 
-## Requirements
+### P3: Requirements
+
 1. O(log n) lookup via binary search
 2. Schedule must loop infinitely without gaps
 3. Same config always produces same schedule
 4. Timer syncs every 1 second, emits events at program boundaries
 5. getScheduleWindow() must be fast (<50ms for 24 hours)
 
-## Deliverable
+### P3: Deliverable
+
+```typescript
 Complete implementation with:
 - ScheduleCalculator with pure functions
 - ShuffleGenerator with Mulberry32 PRNG
@@ -345,19 +365,20 @@ Complete implementation with:
 
 ## Prompt 4: Video Player Module (Priority 4)
 
-```
+````markdown
 You are implementing the Video Player module for Retune, a webOS TV application.
 
-## Task
+### P4: Task
 Create an abstraction over the HTML5 video element optimized for webOS, handling HLS streams, subtitle tracks, error recovery, and suspension prevention.
 
-## Files to Create
+### P4: Files to Create
 - src/modules/player/index.ts
 - src/modules/player/VideoPlayer.ts
 - src/modules/player/SubtitleManager.ts
 - src/modules/player/interfaces.ts
 
-## Type Definitions
+### P4: Type Definitions
+
 ```typescript
 interface VideoPlayerConfig {
   containerId: string;
@@ -397,7 +418,8 @@ interface PlaybackState {
 }
 ```
 
-## Interface to Implement
+### P4: Interface to Implement
+
 ```typescript
 interface IVideoPlayer {
   initialize(config: VideoPlayerConfig): Promise<void>;
@@ -427,7 +449,7 @@ interface IVideoPlayer {
 }
 ```
 
-## Critical Implementation Notes
+### P4: Critical Implementation Notes
 
 1. **HLS Handling**: webOS has native HLS support - DO NOT use HLS.js
    ```typescript
@@ -468,7 +490,8 @@ interface IVideoPlayer {
    object-fit: contain;
    ```
 
-## Event Mapping
+### P4: Event Mapping
+
 Map video element events to player events:
 - canplay → status: 'buffering' to 'paused'
 - playing → status: 'playing'
@@ -478,7 +501,8 @@ Map video element events to player events:
 - ended → emit 'ended', status: 'ended'
 - error → handle based on MediaError.code
 
-## Deliverable
+### P4: Deliverable
+
 Complete implementation with:
 - VideoPlayer class with all IVideoPlayer methods
 - SubtitleManager for track handling
@@ -492,13 +516,13 @@ Complete implementation with:
 
 ## Prompt 5: Navigation Module (Priority 2)
 
-```
+````markdown
 You are implementing the Navigation & Remote Control module for Retune, a webOS TV application.
 
-## Task
+### P5: Task
 Handle LG remote control input, manage focus across the application, and coordinate screen transitions.
 
-## Files to Create
+### P5: Files to Create
 - src/modules/navigation/index.ts
 - src/modules/navigation/NavigationManager.ts
 - src/modules/navigation/FocusManager.ts
@@ -506,7 +530,7 @@ Handle LG remote control input, manage focus across the application, and coordin
 - src/modules/navigation/interfaces.ts
 - src/modules/navigation/constants.ts
 
-## Type Definitions
+### P5: Type Definitions
 ```typescript
 type RemoteButton = 
   | 'ok' | 'back' | 'up' | 'down' | 'left' | 'right'
@@ -542,7 +566,8 @@ interface FocusableElement {
 }
 ```
 
-## webOS Key Codes (CRITICAL)
+### P5: webOS Key Codes (CRITICAL)
+
 ```typescript
 const KEY_MAP: Map<number, RemoteButton> = new Map([
   [13, 'ok'],
@@ -568,7 +593,8 @@ const KEY_MAP: Map<number, RemoteButton> = new Map([
 ]);
 ```
 
-## Interface to Implement
+### P5: Interface to Implement
+
 ```typescript
 interface INavigationManager {
   initialize(config: NavigationConfig): void;
@@ -598,7 +624,7 @@ interface INavigationManager {
 }
 ```
 
-## Implementation Requirements
+### P5: Implementation Requirements
 
 1. **Key Event Handling**
    - Listen to 'keydown' on document
@@ -622,7 +648,8 @@ interface INavigationManager {
    - Back button closes modal first
    - Restore previous focus on close
 
-## Focus Ring CSS
+### P5: Focus Ring CSS
+
 ```css
 .focusable:focus, .focusable.focused {
   outline: none;
@@ -631,7 +658,8 @@ interface INavigationManager {
 }
 ```
 
-## Deliverable
+### P5: Deliverable
+
 Complete implementation with:
 - RemoteHandler processing key events
 - FocusManager tracking and moving focus
@@ -645,13 +673,13 @@ Complete implementation with:
 
 ## Prompt 6: EPG UI Module (Priority 6)
 
-```
+````markdown
 You are implementing the EPG (Electronic Program Guide) UI module for Retune, a webOS TV application.
 
-## Task
+### P6: Task
 Create a virtualized program grid displaying channels (vertical) and time (horizontal) that performs well on limited TV hardware.
 
-## Files to Create
+### P6: Files to Create
 - src/modules/ui/epg/index.ts
 - src/modules/ui/epg/EPGComponent.ts
 - src/modules/ui/epg/EPGVirtualizer.ts
@@ -659,11 +687,12 @@ Create a virtualized program grid displaying channels (vertical) and time (horiz
 - src/modules/ui/epg/interfaces.ts
 - src/modules/ui/epg/styles.css
 
-## Dependencies (you will receive these)
+### P6: Dependencies (you will receive these)
 - IChannelScheduler.getScheduleWindow(startTime, endTime)
 - INavigationManager focus handling
 
-## Type Definitions
+### P6: Type Definitions
+
 ```typescript
 interface EPGConfig {
   containerId: string;
@@ -691,7 +720,8 @@ interface EPGProgramCell {
 }
 ```
 
-## Interface to Implement
+### P6: Interface to Implement
+
 ```typescript
 interface IEPGComponent {
   initialize(config: EPGConfig): void;
@@ -718,7 +748,8 @@ interface IEPGComponent {
 }
 ```
 
-## Virtualization Strategy (CRITICAL)
+### P6: Virtualization Strategy (CRITICAL)
+
 Only render visible cells + buffer. Max ~200 DOM elements.
 
 ```typescript
@@ -738,7 +769,8 @@ calculateVisibleCells(scrollPosition) {
 }
 ```
 
-## Grid Layout
+### P6: Grid Layout
+
 ```
 ┌───────────────────────────────────────────────────┐
 │ [Time Header: 12:00 | 12:30 | 1:00 | 1:30 | 2:00] │
@@ -753,7 +785,8 @@ calculateVisibleCells(scrollPosition) {
 └───────────────────────────────────────────────────┘
 ```
 
-## Cell Positioning
+### P6: Cell Positioning
+
 ```typescript
 function positionCell(program: ScheduledProgram, gridStartTime: number): EPGProgramCell {
   const minutesFromStart = (program.scheduledStartTime - gridStartTime) / 60000;
@@ -767,7 +800,8 @@ function positionCell(program: ScheduledProgram, gridStartTime: number): EPGProg
 }
 ```
 
-## Navigation Logic
+### P6: Navigation Logic
+
 ```typescript
 handleNavigation(direction) {
   switch (direction) {
@@ -787,7 +821,8 @@ handleNavigation(direction) {
 }
 ```
 
-## CSS (TV-optimized)
+### P6: CSS (TV-optimized)
+
 ```css
 .epg-container {
   position: absolute;
@@ -820,12 +855,14 @@ handleNavigation(direction) {
 }
 ```
 
-## Performance Requirements
+### P6: Performance Requirements
+
 - Render 5 channels × 3 hours in <100ms
 - Maintain 60fps during scroll
 - Max 200 DOM elements
 
-## Deliverable
+### P6: Deliverable
+
 Complete implementation with:
 - EPGComponent orchestrating grid
 - EPGVirtualizer managing DOM recycling
@@ -834,25 +871,28 @@ Complete implementation with:
 - Current time indicator
 - Event emission
 - All CSS styles
-```
+
+````
 
 ---
 
 ## Prompt 7: Plex Server Discovery Module (Priority 2)
 
-```
+````markdown
 You are implementing the Plex Server Discovery module for Retune, a webOS TV application.
 
-## Task
+### P7: Task
 Implement server discovery, connection testing, and selection management for Plex Media Servers.
 
-## Files to Create
+### P7: Files to Create
+
 - src/modules/plex/discovery/index.ts
 - src/modules/plex/discovery/PlexServerDiscovery.ts
 - src/modules/plex/discovery/interfaces.ts
 - src/modules/plex/discovery/ConnectionTester.ts
 
-## Type Definitions (use exactly)
+### P7: Type Definitions (use exactly)
+
 ```typescript
 interface PlexServer {
   id: string;                   // Machine identifier
@@ -876,7 +916,8 @@ interface PlexConnection {
 }
 ```
 
-## Interface to Implement
+### P7: Interface to Implement
+
 ```typescript
 interface IPlexServerDiscovery {
   getAvailableServers(): Promise<PlexServer[]>;
@@ -889,10 +930,11 @@ interface IPlexServerDiscovery {
 }
 ```
 
-## API Endpoint
-- GET https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1
+### P7: API Endpoint
 
-## Implementation Requirements
+- GET [https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1](https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1)
+
+### P7: Implementation Requirements
 
 1. **Connection Testing Strategy**
    ```typescript
@@ -954,12 +996,14 @@ interface IPlexServerDiscovery {
    - Persist selected server ID to localStorage
    - Key: 'retune_selected_server'
 
-## Error Handling
+### P7: Error Handling
+
 - Network timeout: 5 seconds per connection test
 - All connections fail: Return null, let caller handle
 - Server list empty: Return empty array
 
-## Deliverable
+### P7: Deliverable
+
 Complete implementation with:
 - PlexServerDiscovery class
 - ConnectionTester helper
@@ -972,19 +1016,21 @@ Complete implementation with:
 
 ## Prompt 8: Plex Library Access Module (Priority 3)
 
-```
+````markdown
 You are implementing the Plex Library Access module for Retune, a webOS TV application.
 
-## Task
+### P8: Task
 Implement library enumeration, content retrieval, TV show hierarchy navigation, and image URL handling with authentication.
 
-## Files to Create
+### P8: Files to Create
+
 - src/modules/plex/library/index.ts
 - src/modules/plex/library/PlexLibrary.ts
 - src/modules/plex/library/interfaces.ts
 - src/modules/plex/library/ContentParser.ts
 
-## Type Definitions (use exactly)
+### P8: Type Definitions (use exactly)
+
 ```typescript
 interface PlexLibrary {
   id: string;
@@ -1030,9 +1076,14 @@ interface LibraryQueryOptions {
   limit?: number;
   includeCollections?: boolean;
 }
+
+interface SearchOptions {
+  limit?: number;
+  sectionType?: 'movie' | 'show' | 'artist' | 'photo';
+}
 ```
 
-## Interface to Implement
+### P8: Interface to Implement
 ```typescript
 interface IPlexLibrary {
   getLibraries(): Promise<PlexLibrary[]>;
@@ -1051,7 +1102,8 @@ interface IPlexLibrary {
 }
 ```
 
-## API Endpoints
+### P8: API Endpoints
+
 - Libraries: GET /library/sections
 - Library Items: GET /library/sections/{id}/all
 - Item Details: GET /library/metadata/{ratingKey}
@@ -1060,7 +1112,7 @@ interface IPlexLibrary {
 - Collections: GET /library/sections/{id}/collections
 - Search: GET /hubs/search?query={query}
 
-## Implementation Requirements
+### P8: Implementation Requirements
 
 1. **Pagination Handling**
    ```typescript
@@ -1119,14 +1171,16 @@ interface IPlexLibrary {
    - Parse dates from Unix timestamps
    - Convert durations to milliseconds
 
-## Error Handling
+### P8: Error Handling
+
 | Error | Code | Recovery |
 |-------|------|----------|
 | Library not found | 404 | Return empty / throw |
 | Rate limited | 429 | Wait and retry |
 | Server offline | Network error | Notify user |
 
-## Deliverable
+### P8: Deliverable
+
 Complete implementation with:
 - PlexLibrary class with all methods
 - ContentParser for response transformation
@@ -1139,20 +1193,22 @@ Complete implementation with:
 
 ## Prompt 9: Channel Manager Module (Priority 4)
 
-```
+````markdown
 You are implementing the Channel Manager module for Retune, a webOS TV application.
 
-## Task
+### P9: Task
 Implement channel CRUD operations, content resolution from Plex sources, and localStorage persistence.
 
-## Files to Create
+### P9: Files to Create
+
 - src/modules/scheduler/channel-manager/index.ts
 - src/modules/scheduler/channel-manager/ChannelManager.ts
 - src/modules/scheduler/channel-manager/ContentResolver.ts
 - src/modules/scheduler/channel-manager/interfaces.ts
 - src/modules/scheduler/channel-manager/StorageManager.ts
 
-## Type Definitions (use exactly)
+### P9: Type Definitions (use exactly)
+
 ```typescript
 interface ChannelConfig {
   id: string;                   // UUID
@@ -1195,7 +1251,8 @@ interface ResolvedChannelContent {
 }
 ```
 
-## Interface to Implement
+### P9: Interface to Implement
+
 ```typescript
 interface IChannelManager {
   // CRUD
@@ -1232,7 +1289,7 @@ interface IChannelManager {
 }
 ```
 
-## Implementation Requirements
+### P9: Implementation Requirements
 
 1. **Content Resolution by Source Type**
    ```typescript
@@ -1325,7 +1382,8 @@ interface IChannelManager {
    }
    ```
 
-## Error Handling Matrix
+### P9: Error Handling Matrix
+
 | Scenario | Error Code | Recovery Strategy |
 |----------|------------|-------------------|
 | Channel not found | CHANNEL_NOT_FOUND | Return null |
@@ -1335,7 +1393,8 @@ interface IChannelManager {
 | Storage quota exceeded | STORAGE_FULL | Prune old caches, retry |
 | Invalid import JSON | IMPORT_INVALID | Return with errors array |
 
-## Deliverable
+### P9: Deliverable
+
 Complete implementation with:
 - ChannelManager class
 - ContentResolver for all source types
@@ -1350,20 +1409,21 @@ Complete implementation with:
 
 ## Prompt 10: Application Lifecycle Module (Priority 1)
 
-```
+````markdown
 You are implementing the Application Lifecycle module for Retune, a webOS TV application.
 
-## Task
+### P10: Task
 Manage webOS app lifecycle events, state persistence, network monitoring, memory management, and error recovery strategies.
 
-## Files to Create
+### P10: Files to Create
 - src/modules/lifecycle/index.ts
 - src/modules/lifecycle/AppLifecycle.ts  
 - src/modules/lifecycle/ErrorRecovery.ts
 - src/modules/lifecycle/StateManager.ts
 - src/modules/lifecycle/interfaces.ts
 
-## Type Definitions (use exactly)
+### P10: Type Definitions (use exactly)
+
 ```typescript
 type AppPhase = 
   | 'initializing' 
@@ -1404,7 +1464,7 @@ interface PersistentState {
 }
 ```
 
-## Interface to Implement
+### P10: Interface to Implement
 ```typescript
 interface IAppLifecycle {
   // Lifecycle
@@ -1446,7 +1506,7 @@ interface IAppLifecycle {
 }
 ```
 
-## webOS Lifecycle Events
+### P10: webOS Lifecycle Events
 ```typescript
 // webOS provides these events:
 document.addEventListener('webOSLaunch', (event) => {
@@ -1475,7 +1535,7 @@ if (window.webOS) {
 }
 ```
 
-## Implementation Requirements
+### P10: Implementation Requirements
 
 1. **State Persistence**
    ```typescript
@@ -1577,7 +1637,8 @@ if (window.webOS) {
    }
    ```
 
-## Deliverable
+### P10: Deliverable
+
 Complete implementation with:
 - AppLifecycle class managing phases
 - StateManager for persistence
@@ -1593,18 +1654,19 @@ Complete implementation with:
 
 ## Prompt 11: Application Orchestrator Module (Priority 7)
 
-```
+````markdown
 You are implementing the Application Orchestrator module for Retune, a webOS TV application.
 
-## Task
+### P11: Task
 Coordinate all modules, handle initialization sequence, set up inter-module event bindings, and manage the main application flow.
 
-## Files to Create
+### P11: Files to Create
+
 - src/Orchestrator.ts
 - src/App.ts
 - src/index.ts (entry point)
 
-## Type Definitions
+### P11: Type Definitions
 ```typescript
 interface ModuleStatus {
   name: string;
@@ -1621,7 +1683,7 @@ interface OrchestratorConfig {
 }
 ```
 
-## Interface to Implement
+### P11: Interface to Implement
 ```typescript
 interface IAppOrchestrator {
   initialize(config: OrchestratorConfig): Promise<void>;
@@ -1631,7 +1693,7 @@ interface IAppOrchestrator {
 }
 ```
 
-## Initialization Sequence (CRITICAL ORDER)
+### P11: Initialization Sequence (CRITICAL ORDER)
 ```typescript
 async initialize(config: OrchestratorConfig): Promise<void> {
   try {
@@ -1695,7 +1757,7 @@ async initialize(config: OrchestratorConfig): Promise<void> {
 }
 ```
 
-## Event Binding Setup (CRITICAL)
+### P11: Event Binding Setup (CRITICAL)
 ```typescript
 setupEventBindings(): void {
   // Scheduler → Player
@@ -1784,7 +1846,7 @@ setupEventBindings(): void {
 }
 ```
 
-## Stream Resolution Helper
+### P11: Stream Resolution Helper
 ```typescript
 async resolveStreamForProgram(program: ScheduledProgram): Promise<StreamDescriptor> {
   const request: StreamRequest = {
@@ -1812,7 +1874,7 @@ async resolveStreamForProgram(program: ScheduledProgram): Promise<StreamDescript
 }
 ```
 
-## Deliverable
+### P11: Deliverable
 Complete implementation with:
 - Orchestrator class with full initialization sequence
 - Event binding for all module interactions
@@ -1852,15 +1914,15 @@ Complete implementation with:
 
 ---
 
-## Prompt 8: Plex Server Discovery Module (Priority 2)
+## Prompt 8 (V2): Plex Server Discovery Module (Priority 2)
 
-```
+````markdown
 You are implementing the Plex Server Discovery module for Retune, a webOS TV application.
 
-## Task
+### P8-V2: Task
 Discover and manage Plex Media Servers accessible to the authenticated user, testing connections to find the fastest route.
 
-## Files to Create
+### P8-V2: Files to Create
 - src/modules/plex/discovery/index.ts
 - src/modules/plex/discovery/PlexServerDiscovery.ts
 - src/modules/plex/discovery/interfaces.ts
@@ -1868,7 +1930,7 @@ Discover and manage Plex Media Servers accessible to the authenticated user, tes
 - src/modules/plex/discovery/constants.ts
 - src/modules/plex/discovery/__tests__/PlexServerDiscovery.test.ts
 
-## Type Definitions
+### P8-V2: Type Definitions
 
 ```typescript
 interface PlexServer {
@@ -1908,26 +1970,27 @@ interface IPlexServerDiscovery {
 }
 ```
 
-## API Endpoints
-- Server Discovery: GET https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1
+### P8-V2: API Endpoints
+- Server Discovery: GET <https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1>
 - Connection Test: GET {connection.uri}/identity
 
-## Implementation Requirements
+### P8-V2: Implementation Requirements
 
-1. **discoverServers()**: Fetch servers from plex.tv, filter for 'server' capability
+1. **discoverServers()**:
+ Fetch servers from plex.tv, filter for 'server' capability
 2. **testConnection()**: Test with 5-second timeout, return latency in ms or null
 3. **findFastestConnection()**: Priority order: local > remote > relay
 4. **selectServer()**: Persist selection to localStorage key 'retune_selected_server'
 5. Restore selection on initialization
 
-## Error Handling
+### P8-V2: Error Handling
 | Error | Recovery |
 |-------|----------|
 | Network timeout | Return null latency, try next connection |
 | 401 Unauthorized | Emit 'connectionChange' with null, trigger re-auth |
 | All connections fail | Return null from findFastestConnection |
 
-## Test Specifications
+### P8-V2: Test Specifications
 ```typescript
 describe('PlexServerDiscovery', () => {
   describe('discoverServers', () => {
@@ -1964,33 +2027,34 @@ describe('PlexServerDiscovery', () => {
 });
 ```
 
-## Mock Requirements
+### P8-V2: Mock Requirements
 - Mock `fetch` for API calls
 - Mock `localStorage` for persistence
 - Mock `AbortController` for timeouts
 
-## Deliverable
+### P8-V2: Deliverable
 Complete implementation with full test coverage and JSDoc comments.
-```
+
+````
 
 ---
 
-## Prompt 9: Plex Library Module (Priority 3)
+## Prompt 9 (V2): Plex Library Module (Priority 3)
 
-```
+````markdown
 You are implementing the Plex Library module for Retune, a webOS TV application.
 
-## Task
+### P9-V2: Task
 Browse media libraries on a Plex server, fetch content metadata, and provide search functionality.
 
-## Files to Create
+### P9-V2: Files to Create
 - src/modules/plex/library/index.ts
 - src/modules/plex/library/PlexLibrary.ts
 - src/modules/plex/library/interfaces.ts
 - src/modules/plex/library/types.ts
 - src/modules/plex/library/__tests__/PlexLibrary.test.ts
 
-## Type Definitions
+### P9-V2: Type Definitions
 
 ```typescript
 interface PlexLibrary {
@@ -2060,7 +2124,7 @@ interface SearchOptions {
 }
 ```
 
-## API Endpoints
+### P9-V2: API Endpoints
 - Libraries: GET /library/sections
 - Library Items: GET /library/sections/{key}/all
 - Collections: GET /library/sections/{key}/collections
@@ -2068,14 +2132,15 @@ interface SearchOptions {
 - Search: GET /hubs/search?query={query}
 - Image: GET /photo/:/transcode?url={path}&width={w}&height={h}
 
-## Implementation Requirements
+### P9-V2: Implementation Requirements
 
-1. **getLibraries()**: Fetch and cache library list
+1. **getLibraries()**:
+ Fetch and cache library list
 2. **getLibraryItems()**: Support pagination via offset/limit
 3. **getImageUrl()**: Always append X-Plex-Token to image URLs
 4. **search()**: Debounce 300ms, emit searchComplete event
 
-## Error Handling
+### P9-V2: Error Handling
 | Error | Recovery |
 |-------|----------|
 | 401 Unauthorized | Return empty, emit auth error |
@@ -2083,7 +2148,7 @@ interface SearchOptions {
 | Network error | Throw with PlexApiError |
 | Library deleted | Return empty, emit libraryRefreshed |
 
-## Test Specifications
+### P9-V2: Test Specifications
 ```typescript
 describe('PlexLibrary', () => {
   describe('getLibraries', () => {
@@ -2118,28 +2183,29 @@ describe('PlexLibrary', () => {
 });
 ```
 
-## Deliverable
+### P9-V2: Deliverable
 Complete implementation with event emitters, error handling, and tests.
-```
+
+````
 
 ---
 
-## Prompt 10: Plex Stream Resolver Module (Priority 3)
+## Prompt 10 (V2): Plex Stream Resolver Module (Priority 3)
 
-```
+````markdown
 You are implementing the Plex Stream Resolver module for Retune, a webOS TV application.
 
-## Task
+### P10-V2: Task
 Resolve playable stream URLs for media items, preferring direct play over transcoding.
 
-## Files to Create
+### P10-V2: Files to Create
 - src/modules/plex/stream/index.ts
 - src/modules/plex/stream/PlexStreamResolver.ts
 - src/modules/plex/stream/interfaces.ts
 - src/modules/plex/stream/types.ts
 - src/modules/plex/stream/__tests__/PlexStreamResolver.test.ts
 
-## Type Definitions
+### P10-V2: Type Definitions
 
 ```typescript
 interface StreamRequest {
@@ -2190,15 +2256,15 @@ interface IPlexStreamResolver {
 }
 ```
 
-## API Endpoints
+### P10-V2: API Endpoints
 - Stream Decision: GET /video/:/transcode/universal/decision
 - Direct Play: GET /library/parts/{partId}/file
 - HLS Master: GET /video/:/transcode/universal/start.m3u8
 - Timeline: POST /:/timeline
 
-## Implementation Requirements
+### P10-V2: Implementation Requirements
 
-1. **resolveStream()**: 
+1. **resolveStream()**:
    - First try direct play capability check
    - webOS 4.0+ supports H.264, HEVC, AAC, AC3
    - Fall back to HLS transcoding if needed
@@ -2218,14 +2284,14 @@ function canDirectPlay(media: PlexMedia): boolean {
 
 3. **reportPlaybackProgress()**: Call every 10 seconds during playback
 
-## Error Handling
+### P10-V2: Error Handling
 | Error | Recovery |
 |-------|----------|
 | Direct play fails | Fall back to transcoding |
 | Transcode fails | Return error with STREAM_UNAVAILABLE |
 | Session expired | Create new session |
 
-## Test Specifications
+### P10-V2: Test Specifications
 ```typescript
 describe('PlexStreamResolver', () => {
   describe('resolveStream', () => {
@@ -2250,28 +2316,29 @@ describe('PlexStreamResolver', () => {
 });
 ```
 
-## Deliverable
+### P10-V2: Deliverable
 Complete implementation with codec detection and timeline reporting.
-```
+
+````
 
 ---
 
-## Prompt 11: Channel Manager Module (Priority 4)
+## Prompt 11 (V2): Channel Manager Module (Priority 4)
 
-```
+````markdown
 You are implementing the Channel Manager module for Retune, a webOS TV application.
 
-## Task
+### P11-V2: Task
 Manage virtual TV channels, including CRUD operations, content resolution, and channel switching.
 
-## Files to Create
+### P11-V2: Files to Create
 - src/modules/channels/manager/index.ts
 - src/modules/channels/manager/ChannelManager.ts
 - src/modules/channels/manager/interfaces.ts
 - src/modules/channels/manager/types.ts
 - src/modules/channels/manager/__tests__/ChannelManager.test.ts
 
-## Type Definitions
+### P11-V2: Type Definitions
 
 ```typescript
 interface ChannelConfig {
@@ -2350,21 +2417,23 @@ interface IChannelManager {
 }
 ```
 
-## Implementation Requirements
+### P11-V2: Implementation Requirements
 
-1. **createChannel()**: Generate UUID, assign next available number
+1. **createChannel()**:
+ Generate UUID, assign next available number
 2. **resolveChannelContent()**: Cache for 30 minutes, use PlexLibrary to fetch items
 3. **switchToChannel()**: Save current channel to localStorage, emit event
 4. **Persistence**: localStorage key 'retune_channels'
 
-## Error Handling
+### P11-V2: Error Handling
 | Error | Condition | Recovery |
 |-------|-----------|----------|
 | Library deleted | contentSource.libraryKey not found | Return empty items, mark channel as stale |
 | Max channels | > 100 channels | Reject with MAX_CHANNELS error |
 | Invalid number | 0 or > 999 | Reject with INVALID_CHANNEL_NUMBER |
 
-## Content Resolution Algorithm
+### P11-V2: Content Resolution Algorithm
+
 ```typescript
 async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> {
   const channel = this.getChannel(channelId);
@@ -2395,7 +2464,7 @@ async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> 
 }
 ```
 
-## Test Specifications
+### P11-V2: Test Specifications
 ```typescript
 describe('ChannelManager', () => {
   describe('CRUD operations', () => {
@@ -2430,21 +2499,22 @@ describe('ChannelManager', () => {
 });
 ```
 
-## Deliverable
+### P11-V2: Deliverable
 Complete implementation with content resolution for all source types.
-```
+
+````
 
 ---
 
 ## Prompt 12: App Lifecycle Module (Priority 1)
 
-```
+````markdown
 You are implementing the App Lifecycle module for Retune, a webOS TV application.
 
-## Task
+### P12: Task
 Manage application lifecycle events, state persistence, and integration with webOS platform.
 
-## Files to Create
+### P12: Files to Create
 - src/modules/lifecycle/index.ts
 - src/modules/lifecycle/AppLifecycle.ts
 - src/modules/lifecycle/interfaces.ts
@@ -2452,7 +2522,7 @@ Manage application lifecycle events, state persistence, and integration with web
 - src/modules/lifecycle/StateManager.ts
 - src/modules/lifecycle/__tests__/AppLifecycle.test.ts
 
-## Type Definitions
+### P12: Type Definitions
 
 ```typescript
 type AppState = 'launching' | 'active' | 'background' | 'suspended' | 'terminating';
@@ -2503,7 +2573,7 @@ interface LaunchParams {
 }
 ```
 
-## Implementation Requirements
+### P12: Implementation Requirements
 
 1. **Visibility Change Detection**:
 ```typescript
@@ -2537,14 +2607,15 @@ keepAlive() {
 
 3. **State Persistence**: localStorage key 'retune_app_state'
 
-## Error Handling
+### P12: Error Handling
+
 | Error | Recovery |
 |-------|----------|
 | State restore fails | Return null, start fresh |
 | Save fails (quota) | Clear old data, retry |
 | Visibility API missing | Use focus/blur events |
 
-## Test Specifications
+### P12: Test Specifications
 ```typescript
 describe('AppLifecycle', () => {
   describe('state transitions', () => {
@@ -2581,21 +2652,22 @@ describe('AppLifecycle', () => {
 });
 ```
 
-## Deliverable
+### P12: Deliverable
 Complete implementation with webOS integration and state management.
-```
+
+````
 
 ---
 
 ## Prompt 13: App Orchestrator Module (Priority 7)
 
-```
+````markdown
 You are implementing the App Orchestrator module for Retune, a webOS TV application.
 
-## Task
+### P13: Task
 Coordinate all modules, handle initialization sequence, and manage cross-module communication.
 
-## Files to Create
+### P13: Files to Create
 - src/core/Orchestrator.ts
 - src/core/interfaces.ts
 - src/App.ts
@@ -2603,7 +2675,7 @@ Coordinate all modules, handle initialization sequence, and manage cross-module 
 - src/__tests__/Orchestrator.test.ts
 - src/__tests__/integration/FullFlow.test.ts
 
-## Type Definitions
+### P13: Type Definitions
 
 ```typescript
 interface IOrchestratorConfig {
@@ -2611,6 +2683,9 @@ interface IOrchestratorConfig {
   debugMode?: boolean;
 }
 
+### P13: Interface to Implement
+
+```typescript
 interface IOrchestrator {
   initialize(config: IOrchestratorConfig): Promise<void>;
   destroy(): void;
@@ -2629,7 +2704,7 @@ interface IOrchestrator {
 }
 ```
 
-## Initialization Sequence
+### P13: Initialization Sequence
 
 ```typescript
 async initialize(config: IOrchestratorConfig): Promise<void> {
@@ -2696,7 +2771,7 @@ async initialize(config: IOrchestratorConfig): Promise<void> {
 }
 ```
 
-## Event Bindings
+### P13: Event Bindings
 
 ```typescript
 setupEventBindings() {
@@ -2768,7 +2843,7 @@ setupEventBindings() {
 }
 ```
 
-## Error Handling
+### P13: Error Handling
 
 ```typescript
 handleInitError(error: Error) {
@@ -2788,7 +2863,7 @@ handleInitError(error: Error) {
 }
 ```
 
-## Test Specifications
+### P13: Test Specifications
 
 ```typescript
 describe('Orchestrator', () => {
@@ -2842,13 +2917,13 @@ describe('Integration: Full Channel Switch Flow', () => {
 });
 ```
 
-## Mock Requirements
+### P13: Mock Requirements
 - All module interfaces should be mockable
 - Use dependency injection for testability
 
-## Deliverable
+### P13: Deliverable
 Complete Orchestrator with App.ts entry point, full event bindings, and integration tests.
-```
+
+````
 
 ---
-

@@ -1,6 +1,7 @@
 # Module: EPG (Electronic Program Guide) UI
 
 ## Metadata
+
 - **ID**: `epg-ui`
 - **Path**: `src/modules/ui/epg/`
 - **Primary File**: `EPGComponent.ts`
@@ -98,7 +99,7 @@ export type {
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **Virtualized Grid Rendering**
    - Only render visible cells plus buffer (max ~200 DOM elements)
@@ -131,14 +132,14 @@ export type {
    - Minimum text size: 24px
    - High contrast colors
 
-### MUST NOT:
+### MUST NOT
 
 1. Create more than ~200 DOM elements for grid cells
 2. Re-render entire grid on small state changes
 3. Use opacity animations (prefer transform for performance)
 4. Block main thread during scroll/render
 
-### State Management:
+### State Management
 
 ```typescript
 interface EPGInternalState {
@@ -158,17 +159,17 @@ interface EPGInternalState {
 - **Persistence**: None (UI state is ephemeral)
 - **Initialization**: Hidden, no focus
 
-### Error Handling:
+### Error Handling
 
 | Scenario | Handling |
-|----------|----------|
+| -------- | -------- |
 | Schedule not loaded | Show "Loading..." placeholder |
 | Empty channel | Show "No programs" message |
 | Focus on boundary | Return false from navigation |
 
 ## Layout Specification
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ [App Logo]                      PROGRAM GUIDE                   12:45 PM    │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -209,13 +210,15 @@ interface EPGInternalState {
 **Purpose**: Handle D-pad navigation within the grid.
 
 **Parameters**:
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| direction | 'up' \| 'down' \| 'left' \| 'right' | Yes | Navigation direction |
+
+| Name      | Type                                  | Required | Description          |
+| --------- | ------------------------------------- | -------- | -------------------- |
+| direction | `'up' \| 'down' \| 'left' \| 'right'` | Yes      | Navigation direction |
 
 **Returns**: `true` if navigation handled, `false` if at boundary
 
 **Implementation Notes**:
+
 ```typescript
 handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean {
   const { focusedCell, channels, scrollPosition } = this.state;
@@ -264,18 +267,21 @@ handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean {
 **Purpose**: Focus a specific program cell.
 
 **Parameters**:
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| channelIndex | number | Yes | Channel row index |
-| programIndex | number | Yes | Program index within channel |
+
+| Name         | Type   | Required | Description                  |
+| ------------ | ------ | -------- | ---------------------------- |
+| channelIndex | number | Yes      | Channel row index            |
+| programIndex | number | Yes      | Program index within channel |
 
 **Side Effects**:
+
 - Updates focused cell state
 - Scrolls grid if needed to show focused cell
 - Updates info panel
 - Emits `focusChange` event
 
 **Implementation Notes**:
+
 ```typescript
 focusProgram(channelIndex: number, programIndex: number): void {
   const schedule = this.getScheduleForChannel(channelIndex);
@@ -316,7 +322,7 @@ focusProgram(channelIndex: number, programIndex: number): void {
 
 ## Virtualization Strategy
 
-### Algorithm:
+### Algorithm
 
 ```typescript
 class EPGVirtualizer {
@@ -390,33 +396,34 @@ class EPGVirtualizer {
 
 ### Virtualization Edge Cases
 
-| Edge Case | Scenario | Handling Strategy |
-|-----------|----------|-------------------|
-| Very long program | Program spans 6+ hours, exceeding visible window width | Render only visible portion, use scroll region for clipping |
-| Many short programs | 30+ programs per hour (e.g., music videos) | Batch render in groups of 10, use requestAnimationFrame |
-| Single program channel | 24-hour movie channel with one item | Use min-width of 200px, don't shrink below readable size |
-| Rapid scrolling | User holds down arrow key | Throttle render calls to max 30/sec, skip intermediate positions |
-| Focus during scroll | Focus leaves visible area during scroll | Lock focus element in DOM until scroll completes, then recycle |
-| Program boundary | Program starts at 11:59 PM, ends across midnight | Clip program at day boundary OR render spanning (configurable) |
-| Zero-duration items | Plex item with 0ms duration | Filter out during schedule load, never display in grid |
-| Overlapping programs | Scheduler bug causes overlap | Render both, newest on top with z-index |
-| Empty channel row | Channel has no programs loaded yet | Show skeleton cells with loading animation |
-| Viewport resize | TV display mode change (zoom) | Recalculate visible cells on resize, debounce 250ms |
+| Edge Case              | Scenario                                                 | Handling Strategy                                                 |
+| ---------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| Very long program      | Program spans 6+ hours, exceeding visible window width   | Render only visible portion, use scroll region for clipping       |
+| Many short programs    | 30+ programs per hour (e.g., music videos)               | Batch render in groups of 10, use requestAnimationFrame           |
+| Single program channel | 24-hour movie channel with one item                      | Use min-width of 200px, don't shrink below readable size          |
+| Rapid scrolling        | User holds down arrow key                                | Throttle render calls to max 30/sec, skip intermediate positions  |
+| Focus during scroll    | Focus leaves visible area during scroll                  | Lock focus element in DOM until scroll completes, then recycle    |
+| Program boundary       | Program starts at 11:59 PM, ends across midnight         | Clip program at day boundary OR render spanning (configurable)    |
+| Zero-duration items    | Plex item with 0ms duration                              | Filter out during schedule load, never display in grid            |
+| Overlapping programs   | Scheduler bug causes overlap                             | Render both, newest on top with z-index                           |
+| Empty channel row      | Channel has no programs loaded yet                       | Show skeleton cells with loading animation                        |
+| Viewport resize        | TV display mode change (zoom)                            | Recalculate visible cells on resize, debounce 250ms               |
 
 ### Performance Budgets for Virtualization
 
-| Operation | Target | Max Allowed |
-|-----------|--------|-------------|
-| Initial grid render | 50ms | 100ms |
-| Single scroll update | 8ms | 16ms (60fps) |
-| Cell creation | 0.5ms | 1ms |
-| Cell recycle | 0.1ms | 0.5ms |
-| Focus update | 5ms | 10ms |
-| DOM element count | 150 | 200 |
+| Operation           | Target | Max Allowed |
+| ------------------- | ------ | ----------- |
+| Initial grid render | 50ms   | 100ms       |
+| Single scroll update| 8ms    | 16ms (60fps)|
+| Cell creation       | 0.5ms  | 1ms         |
+| Cell recycle        | 0.1ms  | 0.5ms       |
+| Focus update        | 5ms    | 10ms        |
+| DOM element count   | 150    | 200         |
 
 ## Internal Architecture
 
-### Private Methods:
+### Private Methods
+
 - `_renderGrid()`: Full grid render (initial/resize)
 - `_renderVisibleCells(range)`: Virtualized partial render
 - `_recycleElement(key, cell)`: Return element to pool
@@ -427,8 +434,9 @@ class EPGVirtualizer {
 - `_focusProgramAtTime(channel, time)`: Find program at time
 - `_startTimeUpdateInterval()`: Begin minute ticker
 
-### Class Diagram:
-```
+### Class Diagram
+
+```text
 ┌─────────────────────────────────┐
 │        EPGComponent             │
 ├─────────────────────────────────┤
@@ -477,22 +485,22 @@ class EPGVirtualizer {
 
 ## Events Emitted
 
-| Event Name | Payload Type | When Emitted |
-|------------|--------------|--------------|
-| `open` | `void` | EPG becomes visible |
-| `close` | `void` | EPG becomes hidden |
-| `focusChange` | `EPGFocusPosition` | Focus moves to new cell |
-| `channelSelected` | `{ channel, program }` | User presses OK on cell |
-| `programSelected` | `ScheduledProgram` | User selects a program |
-| `timeScroll` | `{ direction, newOffset }` | Time axis scrolls |
-| `channelScroll` | `{ direction, newOffset }` | Channel axis scrolls |
+| Event Name        | Payload Type               | When Emitted             |
+| ----------------- | -------------------------- | ------------------------ |
+| `open`            | `void`                     | EPG becomes visible      |
+| `close`           | `void`                     | EPG becomes hidden       |
+| `focusChange`     | `EPGFocusPosition`         | Focus moves to new cell  |
+| `channelSelected` | `{ channel, program }`     | User presses OK on cell  |
+| `programSelected` | `ScheduledProgram`         | User selects a program   |
+| `timeScroll`      | `{ direction, newOffset }` | Time axis scrolls        |
+| `channelScroll`   | `{ direction, newOffset }` | Channel axis scrolls     |
 
 ## Events Consumed
 
-| Event Name | Source Module | Handler Behavior |
-|------------|---------------|------------------|
-| `scheduleSync` | `channel-scheduler` | Refresh visible cells |
-| `channelUpdated` | `channel-manager` | Reload channel schedules |
+| Event Name       | Source Module       | Handler Behavior          |
+| ---------------- | ------------------- | ------------------------- |
+| `scheduleSync`   | `channel-scheduler` | Refresh visible cells     |
+| `channelUpdated` | `channel-manager`   | Reload channel schedules  |
 
 ## CSS Specification
 
@@ -671,7 +679,7 @@ class EPGVirtualizer {
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('EPGComponent', () => {
@@ -729,7 +737,7 @@ describe('EPGComponent', () => {
 });
 ```
 
-### Performance Tests:
+### Performance Tests
 
 ```typescript
 describe('Performance', () => {
@@ -745,7 +753,7 @@ describe('Performance', () => {
 
 ## File Structure
 
-```
+```text
 src/modules/ui/epg/
 ├── index.ts              # Public exports
 ├── EPGComponent.ts       # Main component
@@ -783,6 +791,7 @@ src/modules/ui/epg/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Grid displays 5 channels × 3 hours at 60fps
 2. [ ] D-pad navigation works correctly in all directions
 3. [ ] Virtualization keeps DOM under 200 elements

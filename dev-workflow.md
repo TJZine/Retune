@@ -25,11 +25,11 @@
 ### Required Software
 
 | Software | Purpose | Download |
-|----------|---------|----------|
-| Node.js 18+ | JavaScript runtime | https://nodejs.org |
-| webOS TV SDK | Emulator, CLI tools | https://webostv.developer.lge.com/develop/tools/sdk-introduction |
-| VirtualBox 6.x | Runs webOS emulator | https://www.virtualbox.org |
-| VS Code | Code editor | https://code.visualstudio.com |
+| ---------- | --------- | ---------- |
+| Node.js 18+ | JavaScript runtime | <https://nodejs.org> |
+| webOS TV SDK | Emulator, CLI tools | <https://webostv.developer.lge.com/develop/tools/sdk-introduction> |
+| VirtualBox 6.x | Runs webOS emulator | <https://www.virtualbox.org> |
+| VS Code | Code editor | <https://code.visualstudio.com> |
 
 ### webOS TV SDK Installation
 
@@ -40,6 +40,7 @@
    - Emulator
    - Resource Monitor
 4. **Verify installation**:
+
    ```bash
    ares --version
    # Should output: Version X.X.X
@@ -65,7 +66,7 @@ npm run dev
 
 ## Development Workflow Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         RECOMMENDED WORKFLOW                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -101,7 +102,7 @@ Opens at: `http://localhost:5173`
 ### Keyboard Controls (Simulating Remote)
 
 | Keyboard Key | Remote Equivalent |
-|--------------|-------------------|
+| ------------ | ----------------- |
 | Arrow Keys | D-pad (Up/Down/Left/Right) |
 | Enter | OK button |
 | Backspace | Back button |
@@ -113,6 +114,7 @@ Opens at: `http://localhost:5173`
 ### Browser DevTools Tips
 
 **Console Filtering:**
+
 ```javascript
 // Add these to filter logs by module
 console.log('[PlexAuth]', message);
@@ -121,11 +123,13 @@ console.log('[Player]', message);
 ```
 
 **Network Tab:**
+
 - Filter by `plex.tv` to see auth calls
 - Filter by your server IP to see media calls
 - Check for CORS errors (see troubleshooting)
 
 **Performance Tab:**
+
 - Record while navigating EPG
 - Check for long tasks (>50ms)
 - Monitor memory usage
@@ -159,7 +163,7 @@ if (typeof window !== 'undefined' && !window.webOS) {
 ### What to Test in Browser
 
 | Feature | Browser Testing | Notes |
-|---------|-----------------|-------|
+| ------- | ----------------- | ----- |
 | UI Layout | ✅ Full | Use Chrome device toolbar for 1920x1080 |
 | Navigation focus | ✅ Full | Arrow keys work |
 | Plex API calls | ✅ Full | May need CORS proxy for some endpoints |
@@ -174,7 +178,8 @@ If you get CORS errors when calling Plex:
 **Option 1: Browser Extension**
 Install "CORS Unblock" or similar extension (dev only!)
 
-**Option 2: Proxy in Vite Config**
+#### Option 2: Proxy in Vite Config
+
 ```typescript
 // vite.config.ts
 export default defineConfig({
@@ -199,11 +204,13 @@ The emulator runs the **actual webOS environment** in a VM.
 ### Starting the Emulator
 
 **GUI Method:**
+
 1. Open webOS TV Emulator from Start Menu
 2. Select webOS version (recommend 6.0 for latest features)
 3. Wait for boot (~30-60 seconds)
 
 **CLI Method:**
+
 ```bash
 # List available emulators
 ares-emulator --list
@@ -236,6 +243,7 @@ ares-inspect --device emulator --app com.retune.app --open
 ```
 
 This opens a Chrome window with DevTools - you get:
+
 - Console logs
 - Network requests
 - DOM inspection
@@ -246,7 +254,7 @@ This opens a Chrome window with DevTools - you get:
 The emulator shows an on-screen remote. You can also use keyboard:
 
 | Key | Remote Button |
-|-----|---------------|
+| --- | ------------- |
 | Enter | OK |
 | Backspace | Back |
 | Arrow keys | D-pad |
@@ -255,7 +263,7 @@ The emulator shows an on-screen remote. You can also use keyboard:
 ### What to Test in Emulator
 
 | Feature | Why Test Here |
-|---------|---------------|
+| ------- | ------------- |
 | D-pad navigation | Real webOS focus system |
 | Video playback | Native HLS support (no HLS.js) |
 | App background/resume | Visibility API works |
@@ -265,9 +273,11 @@ The emulator shows an on-screen remote. You can also use keyboard:
 ### Emulator Troubleshooting
 
 **Emulator won't start:**
-```
+
+```text
 Error: VT-x is not available
 ```
+
 → Enable virtualization in BIOS (Intel VT-x or AMD-V)
 
 **Emulator is very slow:**
@@ -275,9 +285,11 @@ Error: VT-x is not available
 → Enable 3D acceleration in VM settings
 
 **App won't install:**
-```
+
+```text
 Error: FAILED_IPKG_INSTALL
 ```
+
 → Check package name in `appinfo.json`
 → Ensure no duplicate installation: `ares-install --device emulator --remove com.retune.app`
 
@@ -297,7 +309,7 @@ Final testing on actual hardware.
    - Install and open the app
 
 2. **Create LG Developer Account** (if needed)
-   - https://webostv.developer.lge.com
+   - <https://webostv.developer.lge.com>
 
 3. **Enable Developer Mode**
    - Open Developer Mode app on TV
@@ -306,6 +318,7 @@ Final testing on actual hardware.
    - Note the passphrase shown
 
 4. **Register TV in SDK**
+
    ```bash
    # Add your TV
    ares-setup-device
@@ -318,6 +331,7 @@ Final testing on actual hardware.
    ```
 
 5. **Test Connection**
+
    ```bash
    ares-device-info --device my-tv
    ```
@@ -343,9 +357,11 @@ This works the same as emulator debugging - Chrome DevTools connected to the TV!
 ### Physical TV Troubleshooting
 
 **Can't connect to TV:**
-```
+
+```text
 Error: Connection refused
 ```
+
 → Ensure TV and PC are on same network
 → Check TV's IP address: Settings → Network → Wi-Fi Connection → Advanced
 → Restart Developer Mode app on TV
@@ -474,7 +490,7 @@ ares-package dist/
 ### Build Errors
 
 | Error | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | `Cannot find module 'X'` | Missing dependency | `npm install` |
 | `TypeScript errors` | Type mismatch | Fix type errors before build |
 | `Out of memory` | Large build | Increase Node memory: `NODE_OPTIONS=--max-old-space-size=4096 npm run build` |
@@ -482,7 +498,7 @@ ares-package dist/
 ### Runtime Errors
 
 | Error | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | `Uncaught TypeError` | Null reference | Add null checks, use optional chaining |
 | `CORS error` | Browser security | Use proxy or test in emulator |
 | `Video won't play` | Codec issue | Check if format is HLS (m3u8) |
@@ -491,7 +507,7 @@ ares-package dist/
 ### webOS-Specific Issues
 
 | Issue | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | App suspended after 15min | webOS power saving | Implement keep-alive (see video-player.md) |
 | Focus lost | Focus ring bug | Use explicit focus management |
 | Slow scrolling | Too many DOM elements | Implement virtualization |
@@ -500,7 +516,7 @@ ares-package dist/
 ### Video Playback Issues
 
 | Issue | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | No audio | Audio track selection | Check audio track index |
 | Buffering | Slow network | Check bitrate, consider transcoding |
 | Won't start | Wrong URL or auth | Check stream URL has token |
@@ -509,7 +525,7 @@ ares-package dist/
 ### Plex API Issues
 
 | Issue | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | 401 Unauthorized | Token expired | Re-authenticate |
 | 403 Forbidden | Wrong server/permissions | Check server access |
 | Empty response | Wrong endpoint | Verify API path |
@@ -522,14 +538,16 @@ ares-package dist/
 ### Memory Profiling
 
 In Chrome DevTools:
+
 1. Memory tab → Take heap snapshot
 2. Perform actions (switch channels, navigate EPG)
 3. Take another snapshot
 4. Compare for memory growth
 
 **webOS Memory Limits:**
+
 | TV Model | Approximate Limit |
-|----------|-------------------|
+| -------- | ----------------- |
 | 2019+ (webOS 4.5+) | ~300MB |
 | 2017-2018 (webOS 3.5-4.0) | ~200MB |
 | Older | ~150MB |
@@ -537,6 +555,7 @@ In Chrome DevTools:
 ### Render Performance
 
 In Chrome DevTools:
+
 1. Performance tab → Record
 2. Navigate through EPG
 3. Stop recording
@@ -546,8 +565,9 @@ In Chrome DevTools:
    - Excessive repaints
 
 **Target Metrics:**
+
 | Metric | Target | Max Allowed |
-|--------|--------|-------------|
+| ------ | ------ | ----------- |
 | Initial load | <2s | 5s |
 | Channel switch | <500ms | 1s |
 | EPG scroll | 60fps | 30fps |

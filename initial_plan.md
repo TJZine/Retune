@@ -1,4 +1,5 @@
 # LG webOS Plex Virtual Channels Application
+
 ## Software Architecture & Implementation Specifications
 
 ---
@@ -8,6 +9,7 @@
 Here are naming suggestions organized by theme:
 
 **Linear/Broadcast Theme:**
+
 - **PlexLive** - Simple, implies live TV experience
 - **StreamCast** - Casting streams like broadcast
 - **LinearPlex** - Direct description of function
@@ -15,6 +17,7 @@ Here are naming suggestions organized by theme:
 - **PlexAir** - Like "on air" broadcasting
 
 **Retro/Nostalgia Theme:**
+
 - **RetroPlex** - Nostalgic TV experience
 - **ChannelSurf** - Classic channel surfing
 - **TuneIn** - Like tuning into channels
@@ -22,12 +25,14 @@ Here are naming suggestions organized by theme:
 - **CableBox** - Nostalgic cable reference
 
 **Virtual/Simulated Theme:**
+
 - **VirtualPlex** - Virtual channels from Plex
 - **SimuChannel** - Simulated channels
 - **PseudoTV** - Following PseudoTV naming (established in space)
 - **QuasiPlex** - Nod to QuasiTV
 
 **Creative/Unique:**
+
 - **Continuum** - Continuous playback
 - **PlexFlow** - Content flowing continuously
 - **Meridian** - TV channels like time zones
@@ -38,6 +43,7 @@ Here are naming suggestions organized by theme:
 - **Cadence** - Rhythmic, scheduled playback
 
 **Short & Punchy:**
+
 - **Drift** - Content drifting by passively
 - **Loop** - Continuous looping channels
 - **Slate** - Like a TV slate/schedule
@@ -45,6 +51,7 @@ Here are naming suggestions organized by theme:
 - **Dial** - Channel dial
 
 **Personal Favorites:**
+
 - **PlexLive** - Clean, professional, descriptive
 - **ChannelFlow** - Evocative of the experience
 - **Continuum** - Unique, suggests unbroken playback
@@ -60,7 +67,7 @@ This specification defines a webOS application that transforms a user's Plex med
 
 ### 1.2 Core Concept
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         CONCEPTUAL MODEL                            │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -99,7 +106,7 @@ This specification defines a webOS application that transforms a user's Plex med
 
 ### 1.4 Target User Experience
 
-```
+```text
 User turns on TV → Opens app → Immediately sees content playing
                               ↓
               Channel 3: "Comedy Classics" - Seinfeld S04E11 (started 12 min ago)
@@ -540,7 +547,7 @@ interface IPlexAPI extends
 
 #### 2.1.5 State Machine: Authentication Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        PLEX AUTHENTICATION STATE MACHINE                    │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1168,7 +1175,7 @@ class ScheduleCalculator {
 
 #### 2.3.6 Scheduler State Machine
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      CHANNEL SCHEDULER STATE MACHINE                        │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1386,7 +1393,7 @@ interface IEPGInfoPanel {
 
 #### 2.4.5 EPG Layout Specification
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            EPG VISUAL LAYOUT                                │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -2261,7 +2268,7 @@ interface IVideoPlayer {
 
 ### 2.6.5 State Machine Definition
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        VIDEO PLAYER STATE MACHINE                          │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -2677,7 +2684,7 @@ interface IErrorRecovery {
 
 ### 2.7.5 State Machine Definition
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    APPLICATION LIFECYCLE STATE MACHINE                      │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -3252,7 +3259,7 @@ class AppOrchestrator implements IAppOrchestrator {
 
 ### 3.1 Directory Layout
 
-```
+```text
 plex-virtual-channels/
 ├── dist/                           # Built application (for packaging)
 │   ├── index.html
@@ -3477,7 +3484,7 @@ server {
 
 ### 4.1 Application Startup Sequence
 
-```
+```text
 ┌──────────┐  ┌───────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐  ┌────────┐
 │  webOS   │  │Orchestrator│ │Lifecycle│  │PlexAuth │  │ChannelMgr│  │Scheduler│
 └────┬─────┘  └─────┬─────┘  └────┬────┘  └────┬────┘  └────┬─────┘  └───┬────┘
@@ -3523,7 +3530,7 @@ server {
 
 ### 4.2 Channel Switch Sequence
 
-```
+```text
 ┌────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌────────┐
 │ Remote │  │Navigation│  │ChannelMgr│  │Scheduler │  │VideoPlayer│  │PlexAPI │
 └───┬────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  └───┬────┘
@@ -3565,7 +3572,7 @@ server {
 
 ### 4.3 EPG Interaction Sequence
 
-```
+```text
 ┌────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  ┌──────────┐
 │ Remote │  │Navigation│  │  EPG UI │  │ChannelMgr│  │Scheduler │
 └───┬────┘  └────┬─────┘  └────┬────┘  └────┬─────┘  └────┬─────┘
@@ -3615,7 +3622,7 @@ server {
 
 ## 5. Component Dependency Graph
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        APPLICATION ARCHITECTURE                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -3693,6 +3700,7 @@ LEGEND:
 ## 6. Key Implementation Priorities
 
 ### Phase 1: Core Playback (MVP)
+
 1. **Plex Auth** - OAuth flow, token management
 2. **Plex Library** - Fetch movies/shows
 3. **Basic Scheduler** - Simple sequential playback
@@ -3700,18 +3708,21 @@ LEGEND:
 5. **Minimal UI** - Channel banner, basic controls
 
 ### Phase 2: Full EPG Experience
+
 1. **Schedule Generator** - Deterministic multi-day schedules
 2. **EPG Grid UI** - Full program guide with navigation
 3. **Channel Management** - Create/edit/delete channels
 4. **Focus Management** - D-pad navigation throughout
 
 ### Phase 3: Polish & Robustness
+
 1. **Error Recovery** - All failure scenarios
 2. **Offline Tolerance** - Cached EPG, graceful degradation
 3. **Performance Optimization** - Memory, rendering
 4. **Settings & Preferences** - User customization
 
 ### Phase 4: Store Submission
+
 1. **Compliance Testing** - LG guidelines checklist
 2. **Soak Testing** - 24+ hour continuous operation
 3. **Asset Preparation** - Icons, screenshots, descriptions

@@ -1,6 +1,7 @@
 # Module: Plex Authentication
 
 ## Metadata
+
 - **ID**: `plex-auth`
 - **Path**: `src/modules/plex/auth/`
 - **Primary File**: `PlexAuth.ts`
@@ -144,15 +145,18 @@ interface PlexAuthState {
 
 **Returns**: `PlexPinRequest` containing the 4-character code for user display
 
-**Throws**: 
+**Throws**:
+
 - `PlexApiError` with code `NETWORK_ERROR` on connection failure
 - `PlexApiError` with code `RATE_LIMITED` if too many requests
 
 **Side Effects**:
+
 - Stores pending PIN in internal state
 - No persistence until PIN is claimed
 
 **Implementation Notes**:
+
 ```typescript
 // Algorithm:
 1. Build request headers from PlexAuthConfig
@@ -164,6 +168,7 @@ interface PlexAuthState {
 ```
 
 **Example Usage**:
+
 ```typescript
 const auth = new PlexAuth(config);
 const pin = await auth.requestPin();
@@ -177,6 +182,7 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 **Purpose**: Check if user has claimed the PIN at plex.tv/link.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | pinId | number | Yes | PIN ID from `requestPin()` |
@@ -184,13 +190,16 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 **Returns**: Updated `PlexPinRequest` with `authToken` if claimed
 
 **Throws**:
+
 - `PlexApiError` with code `RESOURCE_NOT_FOUND` if PIN doesn't exist
 - `PlexApiError` with code `NETWORK_ERROR` on connection failure
 
 **Side Effects**:
+
 - If token present, stores credentials via `storeCredentials()`
 
 **Implementation Notes**:
+
 ```typescript
 // Algorithm:
 1. GET https://plex.tv/api/v2/pins/{pinId}
@@ -209,6 +218,7 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 **Purpose**: Verify a token is still valid by calling Plex API.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | token | string | Yes | Plex auth token to validate |
@@ -218,6 +228,7 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 **Side Effects**: None
 
 **Implementation Notes**:
+
 ```typescript
 // Algorithm:
 1. GET https://plex.tv/api/v2/user with X-Plex-Token
@@ -239,6 +250,7 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 **Side Effects**: None
 
 **Example Return**:
+
 ```typescript
 {
   'X-Plex-Token': 'abc123...',
@@ -256,12 +268,14 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 ## Internal Architecture
 
 ### Private Methods:
+
 - `_fetchWithRetry(url, options, retries)`: HTTP fetch with exponential backoff
 - `_parseUserResponse(data)`: Transform Plex user API response to `PlexAuthToken`
 - `_generateClientId()`: Create/persist UUID for client identifier
 
 ### Class Diagram:
-```
+
+```text
 ┌─────────────────────────────────┐
 │          PlexAuth               │
 ├─────────────────────────────────┤
@@ -366,12 +380,13 @@ describe('PlexAuth', () => {
 ### Mock Requirements:
 
 When testing this module, mock:
+
 - `fetch` global function
 - `localStorage.getItem`, `localStorage.setItem`, `localStorage.removeItem`
 
 ## File Structure
 
-```
+```text
 src/modules/plex/auth/
 ├── index.ts              # Public exports
 ├── PlexAuth.ts           # Main class implementation
@@ -415,6 +430,7 @@ export const PLEX_AUTH_CONSTANTS = {
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] User can complete PIN-based OAuth flow on TV
 2. [ ] Credentials persist across app restarts
 3. [ ] Token validation correctly identifies expired tokens

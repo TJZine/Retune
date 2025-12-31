@@ -15,6 +15,7 @@ This document provides JSON response examples for Plex API endpoints used by Ret
 **Endpoint**: `POST https://plex.tv/api/v2/pins`
 
 **Request Headers**:
+
 ```http
 X-Plex-Client-Identifier: retune-unique-client-id
 X-Plex-Product: Retune
@@ -24,6 +25,7 @@ Accept: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "id": 1234567890,
@@ -48,6 +50,7 @@ Accept: application/json
 **Endpoint**: `GET https://plex.tv/api/v2/pins/{id}`
 
 **Response (Claimed)**:
+
 ```json
 {
   "id": 1234567890,
@@ -66,6 +69,7 @@ Accept: application/json
 **Endpoint**: `GET https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1`
 
 **Response**:
+
 ```json
 [
   {
@@ -129,6 +133,7 @@ Accept: application/json
 **Endpoint**: `GET /identity`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -148,6 +153,7 @@ Accept: application/json
 **Endpoint**: `GET /library/sections`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -201,6 +207,7 @@ Accept: application/json
 **Endpoint**: `GET /library/sections/{sectionId}/all`
 
 **Response** (paginated - first 100 items):
+
 ```json
 {
   "MediaContainer": {
@@ -316,6 +323,7 @@ Accept: application/json
 **Endpoint**: `GET /library/metadata/{showRatingKey}/children`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -356,6 +364,7 @@ Accept: application/json
 **Endpoint**: `GET /library/metadata/{seasonRatingKey}/children`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -414,6 +423,7 @@ Accept: application/json
 **Endpoint**: `GET /library/sections/{sectionId}/collections`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -441,6 +451,7 @@ Accept: application/json
 **Endpoint**: `GET /playlists`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -473,6 +484,7 @@ Accept: application/json
 **Endpoint**: `GET /hubs/search?query={term}`
 
 **Response**:
+
 ```json
 {
   "MediaContainer": {
@@ -521,6 +533,7 @@ Accept: application/json
 **Endpoint**: `GET /library/metadata/{ratingKey}`
 
 **Response** (includes Media/Part/Stream details):
+
 ```json
 {
   "MediaContainer": {
@@ -562,8 +575,9 @@ Accept: application/json
 
 **Direct Play**: `{serverUri}/library/parts/{partId}/file.{ext}?X-Plex-Token={token}`
 
-**HLS Transcode**: 
-```
+**HLS Transcode**:
+
+```url
 {serverUri}/video/:/transcode/universal/start.m3u8
   ?path=/library/metadata/{ratingKey}
   &mediaIndex=0
@@ -585,6 +599,7 @@ Accept: application/json
 **Endpoint**: `POST /:/timeline?{params}`
 
 **Query Parameters**:
+
 | Parameter | Value |
 |-----------|-------|
 | `ratingKey` | `12345` |
@@ -624,5 +639,6 @@ Large responses include pagination metadata:
 ```
 
 Use query parameters to paginate:
+
 - `X-Plex-Container-Start`: Starting offset (0-indexed)
 - `X-Plex-Container-Size`: Number of items per page (default: 100)

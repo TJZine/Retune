@@ -1,6 +1,7 @@
 # Module: Application Orchestrator
 
 ## Metadata
+
 - **ID**: `app-orchestrator`
 - **Path**: `src/`
 - **Primary File**: `Orchestrator.ts`
@@ -47,10 +48,11 @@ export type { IAppOrchestrator, ModuleStatus } from './types';
 
 ## Implementation Requirements
 
-### MUST Implement:
+### MUST Implement
 
 1. **Module Initialization Sequence**
-   ```
+
+   ```text
    Phase 1 (Parallel): EventEmitter, AppLifecycle, Navigation
    Phase 2 (After Phase 1): PlexAuth
    Phase 3 (After Auth): PlexServerDiscovery, PlexLibrary, PlexStreamResolver
@@ -75,7 +77,7 @@ export type { IAppOrchestrator, ModuleStatus } from './types';
    - Critical failures (auth, player) halt startup
    - Display error screen with recovery options
 
-### MUST NOT:
+### MUST NOT
 
 1. Hold direct references to DOM (delegate to UI modules)
 2. Contain business logic (delegate to appropriate module)
@@ -287,7 +289,7 @@ private async resolveStreamForProgram(program: ScheduledProgram): Promise<Stream
 
 ## Test Specification
 
-### Unit Tests Required:
+### Unit Tests Required
 
 ```typescript
 describe('AppOrchestrator', () => {
@@ -563,7 +565,7 @@ describe('AppOrchestrator', () => {
 });
 ```
 
-### Integration Test Scenarios:
+### Integration Test Scenarios
 
 ```typescript
 describe('AppOrchestrator Integration', () => {
@@ -618,7 +620,7 @@ describe('AppOrchestrator Integration', () => {
 
 ## File Structure
 
-```
+```text
 src/
 ├── index.ts              # Entry point
 ├── App.ts                # Main application shell
@@ -642,6 +644,7 @@ src/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] All modules initialize in correct order
 2. [ ] State restores correctly on app launch
 3. [ ] Event wiring connects all modules

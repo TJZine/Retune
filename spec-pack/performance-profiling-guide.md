@@ -74,6 +74,7 @@ window._getMemoryUsage = () => {
 ```
 
 On DevTools:
+
 1. Go to **Memory** tab
 2. Take heap snapshots before/after operations
 3. Compare to find leaks

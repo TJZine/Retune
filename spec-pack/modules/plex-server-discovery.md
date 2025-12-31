@@ -1,6 +1,7 @@
 # Module: Plex Server Discovery
 
 ## Metadata
+
 - **ID**: `plex-server-discovery`
 - **Path**: `src/modules/plex/discovery/`
 - **Primary File**: `PlexServerDiscovery.ts`
@@ -72,7 +73,8 @@ export type {
 ### MUST Implement:
 
 1. **Server Discovery via plex.tv**
-   ```
+
+   ```text
    GET https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1
    Headers: X-Plex-Token, Accept: application/json
    ```
@@ -90,11 +92,11 @@ export type {
 
 4. **Connection Priority**
    - Local (LAN) connections first
-   - Remote (WAN) connections second  
+   - Remote (WAN) connections second
    - Relay connections last (bandwidth limited)
 
-6. **Mixed Content Handling (HTTP/HTTPS)**
-   
+5. **Mixed Content Handling (HTTP/HTTPS)**
+
    > [!WARNING]
    > WebOS apps served over HTTPS may block HTTP requests due to browser security policies.
 
@@ -116,10 +118,8 @@ export type {
      allowLocalHttp: true,  // LAN connections may not have certs
      logWarnings: true
    };
-   ```
-   
-   **Connection Selection Algorithm:**
    ```typescript
+   interface MixedContentConfig {
    selectConnection(connections: PlexConnection[]): PlexConnection | null {
      // 1. Prefer HTTPS connections
      const httpsConns = connections.filter(c => c.uri.startsWith('https://'));
@@ -155,12 +155,13 @@ export type {
      return null;
    }
    ```
-   
-   **webOS-Specific Considerations:**
-   - webOS 3.x+ apps typically run in a secure context
-   - Local HTTP may be blocked; test during development
-   - Plex servers with valid certs (via plex.direct) should work over HTTPS
-   - For LAN-only servers without certs, user may need to configure app permissions
+
+**webOS-Specific Considerations**:
+
+- webOS 3.x+ apps typically run in a secure context
+- Local HTTP may be blocked; test during development
+- Plex servers with valid certs (via plex.direct) should work over HTTPS
+- For LAN-only servers without certs, user may need to configure app permissions
 
 ### MUST NOT:
 
@@ -188,6 +189,7 @@ interface DiscoveryState {
 **Returns**: Array of `PlexServer` with available connections
 
 **Implementation Notes**:
+
 ```typescript
 async discoverServers(): Promise<PlexServer[]> {
   const url = 'https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1';
@@ -227,6 +229,7 @@ private parseServer(data: any): PlexServer {
 **Purpose**: Test a single connection and measure latency.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | server | PlexServer | Yes | Server to test |
@@ -235,6 +238,7 @@ private parseServer(data: any): PlexServer {
 **Returns**: Latency in ms, or `null` if unreachable
 
 **Implementation Notes**:
+
 ```typescript
 async testConnection(
   server: PlexServer, 
@@ -273,6 +277,7 @@ async testConnection(
 **Purpose**: Test all connections and return the fastest working one.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | server | PlexServer | Yes | Server to test connections for |
@@ -280,6 +285,7 @@ async testConnection(
 **Returns**: Best connection, or `null` if all fail
 
 **Implementation Notes**:
+
 ```typescript
 async findFastestConnection(server: PlexServer): Promise<PlexConnection | null> {
   // Group by priority
@@ -325,6 +331,7 @@ async findFastestConnection(server: PlexServer): Promise<PlexConnection | null> 
 **Purpose**: Select a server and establish connection.
 
 **Parameters**:
+
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | serverId | string | Yes | Server machine identifier |
@@ -332,6 +339,7 @@ async findFastestConnection(server: PlexServer): Promise<PlexConnection | null> 
 **Returns**: `true` if connection established
 
 **Implementation Notes**:
+
 ```typescript
 async selectServer(serverId: string): Promise<boolean> {
   const server = this.state.servers.find(s => s.id === serverId);
@@ -432,6 +440,7 @@ describe('PlexServerDiscovery', () => {
 ## Mock Requirements
 
 ### Required Mocks
+
 ```typescript
 // Mock fetch for plex.tv API calls
 const mockFetch = jest.fn();
@@ -450,6 +459,7 @@ jest.spyOn(performance, 'now').mockReturnValue(0);
 ```
 
 ### Mock Data Fixtures
+
 ```typescript
 const mockServerListResponse = [
   {
@@ -473,6 +483,7 @@ const mockIdentityResponse = {
 ```
 
 ### Mock PlexAuth Dependency
+
 ```typescript
 const mockPlexAuth: IPlexAuth = {
   getAuthHeaders: () => ({
@@ -486,7 +497,7 @@ const mockPlexAuth: IPlexAuth = {
 
 ## File Structure
 
-```
+```text
 src/modules/plex/discovery/
 ├── index.ts                    # Public exports
 ├── PlexServerDiscovery.ts      # Main class
@@ -511,6 +522,7 @@ src/modules/plex/discovery/
 ## Acceptance Criteria
 
 This module is COMPLETE when:
+
 1. [ ] Can fetch server list from plex.tv
 2. [ ] Connection testing identifies working connections
 3. [ ] Local connections are preferred over remote/relay
