@@ -1,0 +1,142 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-12-31T08:56:00.000Z",
+  "specPackVersion": "1.0.0",
+  "currentPhase": 1,
+  "phases": {
+    "1": { "name": "Core Infrastructure", "status": "pending", "modules": ["event-emitter", "plex-auth", "app-lifecycle", "navigation"] },
+    "2": { "name": "Plex Integration", "status": "pending", "modules": ["plex-server-discovery", "plex-library", "plex-stream-resolver"] },
+    "3": { "name": "Core Playback (MVP)", "status": "pending", "modules": ["video-player", "channel-manager", "channel-scheduler"] },
+    "4": { "name": "Full EPG Experience", "status": "pending", "modules": ["epg-ui"] },
+    "5": { "name": "Integration & Polish", "status": "pending", "modules": ["app-orchestrator"] }
+  },
+  "modules": {
+    "event-emitter": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": [],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 1,
+      "estimatedLoC": 80
+    },
+    "plex-auth": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["event-emitter"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 1,
+      "estimatedLoC": 350
+    },
+    "app-lifecycle": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["event-emitter"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 1,
+      "estimatedLoC": 400
+    },
+    "navigation": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["event-emitter"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 2,
+      "estimatedLoC": 520
+    },
+    "plex-server-discovery": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-auth"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 2,
+      "estimatedLoC": 280
+    },
+    "plex-library": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-auth", "plex-server-discovery"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 3,
+      "estimatedLoC": 500
+    },
+    "plex-stream-resolver": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-auth", "plex-server-discovery"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 3,
+      "estimatedLoC": 320
+    },
+    "channel-manager": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-library"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 4,
+      "estimatedLoC": 600
+    },
+    "channel-scheduler": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["channel-manager"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 5,
+      "estimatedLoC": 550
+    },
+    "video-player": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-stream-resolver"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 4,
+      "estimatedLoC": 480
+    },
+    "epg-ui": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["navigation", "channel-scheduler", "channel-manager"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 6,
+      "estimatedLoC": 700
+    },
+    "app-orchestrator": {
+      "status": "pending",
+      "specVersion": "1.0.0",
+      "blockedBy": ["app-lifecycle", "navigation", "plex-auth", "plex-library", "channel-manager", "channel-scheduler", "video-player", "epg-ui"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "priority": 7,
+      "estimatedLoC": 350
+    }
+  },
+  "updateProtocol": {
+    "pending": "Initial state, waiting for implementation to begin",
+    "in-progress": "Coding Agent actively implementing",
+    "review": "Implementation complete, awaiting Code Review Agent",
+    "complete": "Passed review, verification successful",
+    "blocked": "Cannot proceed due to dependency or spec issue"
+  }
+}
