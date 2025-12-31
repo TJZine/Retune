@@ -200,6 +200,21 @@ interface IPlexAuth {
 - On 401/403, return false from validateToken
 - On network error, throw with code 'NETWORK_ERROR'
 
+### P2: User-Facing Error Messages (INLINED)
+
+Use these EXACT messages in error handling:
+
+```typescript
+const AUTH_ERROR_MESSAGES = {
+  AUTH_REQUIRED: 'Please sign in to your Plex account to continue.',
+  AUTH_EXPIRED: 'Your session has expired. Please sign in again.',
+  AUTH_INVALID: 'Unable to verify your Plex account. Please try signing in again.',
+  AUTH_FAILED: 'Sign in failed. Please check your internet connection and try again.',
+  PIN_EXPIRED: 'The PIN code has expired. Please request a new one.',
+  PIN_TIMEOUT: 'PIN entry timed out. Please try again.',
+} as const;
+```
+
 ### P2: Deliverable
 
 Complete implementation of all files with:
@@ -693,6 +708,35 @@ Create a virtualized program grid displaying channels (vertical) and time (horiz
 
 ### P6: Type Definitions
 
+### P6: EPG Constants (INLINED)
+
+Use these EXACT values for EPG configuration:
+
+```typescript
+const EPG_CONSTANTS = {
+  /** Visible channel rows at once */
+  VISIBLE_CHANNELS: 5,
+  /** Grid time slot granularity (minutes) */
+  TIME_SLOT_MINUTES: 30,
+  /** Visible hours at once */
+  VISIBLE_HOURS: 3,
+  /** Total hours in schedule */
+  TOTAL_HOURS: 24,
+  /** Pixels per minute (width scaling) */
+  PIXELS_PER_MINUTE: 4,
+  /** Pixels per channel row */
+  ROW_HEIGHT: 80,
+  /** Virtualization row buffer above/below visible */
+  ROW_BUFFER: 2,
+  /** Virtualization time buffer (minutes) */
+  TIME_BUFFER_MINUTES: 60,
+  /** Current time indicator update interval (ms) */
+  TIME_INDICATOR_UPDATE_MS: 60_000,
+  /** Maximum DOM elements for grid cells */
+  MAX_DOM_ELEMENTS: 200,
+} as const;
+```
+
 ```typescript
 interface EPGConfig {
   containerId: string;
@@ -701,6 +745,30 @@ interface EPGConfig {
   visibleHours: number; // 3
   pixelsPerMinute: number; // 4
   rowHeight: number; // 80
+}
+
+// Inlined from shared-types for prompt self-sufficiency
+interface ScheduledProgram {
+  item: ResolvedContentItem;
+  scheduledStartTime: number;  // Unix timestamp (ms)
+  scheduledEndTime: number;    // Unix timestamp (ms)
+  elapsedMs: number;           // How far into this program we are
+  remainingMs: number;         // Time left
+  isCurrent: boolean;
+  loopNumber: number;
+}
+
+interface ResolvedContentItem {
+  ratingKey: string;
+  title: string;
+  fullTitle: string;
+  type: 'movie' | 'episode';
+  durationMs: number;
+  thumb: string | null;
+  year?: number;
+  grandparentTitle?: string;  // Show name
+  seasonNumber?: number;
+  episodeNumber?: number;
 }
 
 interface EPGFocusPosition {
@@ -1952,6 +2020,30 @@ Complete implementation with:
 7. **Test mentally** - trace through common use cases
 8. **Target Chromium 68** - avoid modern JS features not available
 
+### Verification Commands (Run After Implementation)
+
+```bash
+# Type checking - MUST pass with zero errors
+npx tsc --noEmit
+
+# Linting (if configured)
+npm run lint --if-present
+
+# Unit tests for the module
+npm test -- --grep "<ModuleName>"
+
+# Full test suite
+npm test
+
+# Build verification
+npm run build
+```
+
+> [!IMPORTANT]
+> **Error Message Reference**: See `artifact-11-error-messages.ts` for exact user-facing error strings.
+> **Platform Constraints**: See `artifact-12-platform-constraints.md` for webOS-specific limitations.
+> **Shared Types**: Import types from `artifact-2-shared-types.ts` - inlined types here are for reference.
+
 ## Module Implementation Order
 
 1. EventEmitter (utility, no dependencies)
@@ -1966,6 +2058,239 @@ Complete implementation with:
 10. EPGComponent (needs Scheduler, Navigation)
 11. AppLifecycle (foundational)
 12. Orchestrator (integrates all)
+
+---
+
+## Common Pitfalls to Avoid
+
+> [!CAUTION]
+> These are the most frequent issues encountered during implementation.
+
+### 1. TypeScript Strict Mode Violations
+
+```typescript
+// ❌ WRONG: Implicit any
+function process(data) { return data.value; }
+
+// ✅ CORRECT: Explicit types
+function process(data: { value: string }): string { return data.value; }
+```
+
+### 2. Async/Await Missing Error Handling
+
+```typescript
+// ❌ WRONG: Unhandled rejection
+async function load() {
+  const data = await fetch('/api');
+}
+
+// ✅ CORRECT: Try/catch
+async function load() {
+  try {
+    const data = await fetch('/api');
+  } catch (error) {
+    console.error('Load failed:', error);
+    throw new AppError(AppErrorCode.NETWORK_ERROR, 'Failed to load');
+  }
+}
+```
+
+### 3. Event Listener Memory Leaks
+
+```typescript
+// ❌ WRONG: No cleanup
+initialize() {
+  window.addEventListener('resize', this.handleResize);
+}
+
+// ✅ CORRECT: With cleanup
+initialize() {
+  window.addEventListener('resize', this.handleResize);
+}
+destroy() {
+  window.removeEventListener('resize', this.handleResize);
+}
+```
+
+### 4. Chromium 68 Compatibility
+
+```typescript
+// ❌ WRONG: Optional chaining (ES2020)
+const name = user?.profile?.name;
+
+// ✅ CORRECT: Explicit checks
+const name = user && user.profile ? user.profile.name : undefined;
+```
+
+### 5. Video Element Race Conditions
+
+```typescript
+// ❌ WRONG: Assume ready
+video.src = url;
+video.play(); // May fail if not loaded
+
+// ✅ CORRECT: Wait for canplay
+video.src = url;
+await new Promise(resolve => {
+  video.addEventListener('canplay', resolve, { once: true });
+});
+video.play();
+```
+
+---
+
+## Module Versioning (Semver)
+
+Each module should declare its version in its main export file:
+
+```typescript
+// src/modules/example/index.ts
+export const MODULE_VERSION = '1.0.0';
+
+// Version bump rules:
+// - MAJOR: Breaking interface changes
+// - MINOR: New features, backward compatible
+// - PATCH: Bug fixes
+```
+
+---
+
+## Mock Factory Patterns
+
+Centralized mock creation for consistent testing:
+
+```typescript
+// __mocks__/factories.ts
+export function createMockChannel(overrides?: Partial<ChannelConfig>): ChannelConfig {
+  return {
+    id: 'mock-channel-1',
+    number: 1,
+    name: 'Test Channel',
+    contentSource: { type: 'library', libraryId: 'lib-1', libraryType: 'movie', includeWatched: true },
+    playbackMode: 'sequential',
+    startTimeAnchor: Date.now(),
+    skipIntros: false,
+    skipCredits: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    lastContentRefresh: Date.now(),
+    itemCount: 10,
+    totalDurationMs: 3600000,
+    ...overrides
+  };
+}
+
+export function createMockProgram(overrides?: Partial<ScheduledProgram>): ScheduledProgram {
+  return {
+    item: createMockMediaItem(),
+    scheduledStartTime: Date.now(),
+    scheduledEndTime: Date.now() + 3600000,
+    elapsedMs: 0,
+    remainingMs: 3600000,
+    isCurrent: true,
+    loopNumber: 0,
+    ...overrides
+  };
+}
+```
+
+---
+
+## CI/CD Workflow (Suggested)
+
+```yaml
+# .github/workflows/retune.yml
+name: Retune CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Type check
+        run: npx tsc --noEmit
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Unit tests
+        run: npm test -- --coverage
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: webos-app
+          path: dist/
+
+  test-integration:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm run test:integration
+```
+
+---
+
+## E2E Testing with webOS Simulator
+
+### Setup
+
+1. Install LG webOS TV Simulator from [webOS Developer Site](https://webostv.developer.lge.com/develop/tools/simulator-installation)
+2. Configure simulator path in `jest.config.js`
+3. Run with `npm run test:e2e`
+
+### Example E2E Test
+
+```typescript
+// e2e/channel-switching.e2e.ts
+describe('E2E: Channel Switching', () => {
+  beforeAll(async () => {
+    await simulator.launch();
+    await simulator.installApp('./dist/retune.ipk');
+    await simulator.launchApp('com.retune.app');
+  });
+
+  afterAll(async () => {
+    await simulator.closeApp();
+  });
+
+  it('should switch channels with remote', async () => {
+    // Send channel up key
+    await simulator.pressKey('channelUp');
+    
+    // Wait for channel banner
+    await simulator.waitForElement('.channel-banner');
+    
+    // Verify channel number changed
+    const channelNumber = await simulator.getText('.channel-number');
+    expect(parseInt(channelNumber)).toBeGreaterThan(1);
+  });
+});
+```
+
+> [!NOTE]
+> E2E tests require the webOS Simulator installed locally and are not run in CI by default.
 
 ---
 

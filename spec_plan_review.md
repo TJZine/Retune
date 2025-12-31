@@ -822,9 +822,46 @@ When this review finds issues, use the **hybrid approach**:
 
 1. **Plan Review Agent** runs this META prompt
 2. **On each pass**: Create `issue-registry-vN.md` with ALL issues found
-3. **Spec Gen Agent** receives registry and fixes ALL non-blocking issues
+3. **Planning Agent** addresses ALL issues directly (has context from review)
 4. **Plan Review Agent** runs again
 5. **Repeat until score ≥ 95% AND zero BLOCKING issues**
+
+### EXHAUSTIVE FIX REQUIREMENT (CRITICAL)
+
+> [!CAUTION]
+> **The Planning Agent MUST resolve ALL identified issues, not just blocking ones.**
+
+**Philosophy**: The coding/implementation agent should receive specs that are 100% deterministic with zero ambiguity. Every decision should be made during planning, not deferred to implementation.
+
+| Issue Type | Required Action | NOT Acceptable |
+| :--- | :--- | :--- |
+| BLOCKING | MUST fix before proceeding | ❌ "Escalate to human" |
+| MAJOR | MUST fix in the same pass | ❌ "Address during implementation" |
+| MINOR | MUST fix in the same pass | ❌ "Optional — can fix later" |
+| SUGGESTION | SHOULD implement unless explicitly rejected | ❌ "Nice to have" |
+
+**Rationale**:
+
+- Minor issues left unaddressed become ambiguity for the coding agent
+- Suggestions often prevent implementation drift and improve AI determinism
+- "Fix later" never happens — technical debt compounds across agents
+
+**Enforcement**:
+
+```text
+GATE: Do not proceed to implementation if ANY identified issue remains unresolved.
+
+Exception: Only if user EXPLICITLY approves deferral with documented rationale.
+```
+
+**Anti-Pattern Detection**:
+Flag and reject responses that contain:
+
+- "Address remaining issues during implementation"
+- "The coding agent can decide..."
+- "Left as implementation detail"
+- "Minor fixes can be done later"
+- "Suggestions are optional improvements"
 
 ### Issue Registry Format
 

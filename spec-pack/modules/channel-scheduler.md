@@ -612,6 +612,24 @@ src/modules/scheduler/scheduler/
 - [ ] Add JSDoc comments to all public methods
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Using `Math.random()` for shuffle | Non-deterministic | Use Mulberry32 PRNG with channelId+anchorTime seed |
+| Storing full schedule in memory | Seems simpler | Calculate on-demand with O(log n) binary search |
+| Linear search for current item | O(n) seems fine | O(n) with 10K items = noticeable lag. Use binary search |
+| Negative modulo issues | `% totalDuration` with negative elapsed | Use `((x % n) + n) % n` pattern for correct wrap |
+| Timer drift accumulation | Trust setInterval | Track expectedNextTick and detect/correct drift |
+| Not emitting events at boundaries | Forget event emission | Always emit `programEnd` then `programStart` at transitions |
+| Off-by-one in schedule index | Index confusion | itemStartOffsets[i] is START of item i, not end |
+| Empty content crash | No guard | Throw descriptive error: "Cannot schedule empty channel" |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

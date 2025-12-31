@@ -22,6 +22,7 @@ The central coordinator that initializes all modules, sets up inter-module commu
  */
 export interface IAppOrchestrator {
   // Lifecycle
+  initialize(config: OrchestratorConfig): Promise<void>;
   start(): Promise<void>;
   shutdown(): Promise<void>;
   
@@ -35,6 +36,45 @@ export interface IAppOrchestrator {
   openEPG(): void;
   closeEPG(): void;
   toggleEPG(): void;
+  
+  // Error Handling (CRITICAL)
+  /**
+   * Handle a global application error with user-facing recovery options.
+   * Displays error overlay with appropriate message and actions.
+   * 
+   * @param error - The AppError to handle
+   * @param context - Module or operation context where error originated
+   */
+  handleGlobalError(error: AppError, context: string): void;
+  
+  /**
+   * Register a module-specific error handler. Called before global handler.
+   * @param moduleId - Module identifier  
+   * @param handler - Handler function, returns true if error was handled
+   */
+  registerErrorHandler(
+    moduleId: string,
+    handler: (error: AppError) => boolean
+  ): void;
+}
+
+/**
+ * Module status tracking
+ */
+interface ModuleStatus {
+  id: string;
+  name: string;
+  status: 'pending' | 'initializing' | 'ready' | 'error' | 'disabled';
+  loadTimeMs?: number;
+  error?: AppError;
+  memoryUsageMB?: number;
+}
+
+interface OrchestratorConfig {
+  plexConfig: PlexAuthConfig;
+  playerConfig: VideoPlayerConfig;
+  navConfig: NavigationConfig;
+  epgConfig: EPGConfig;
 }
 ```
 

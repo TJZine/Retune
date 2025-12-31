@@ -49,7 +49,7 @@ export interface IDisposable {
  */
 export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
   private handlers: Map<keyof TEventMap, Set<(payload: unknown) => void>> = new Map();
-  
+
   /**
    * Register an event handler
    * @returns A disposable to remove the handler
@@ -62,12 +62,12 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
       this.handlers.set(event, new Set());
     }
     this.handlers.get(event)!.add(handler as (payload: unknown) => void);
-    
+
     return {
       dispose: () => this.off(event, handler)
     };
   }
-  
+
   /**
    * Unregister an event handler
    */
@@ -77,7 +77,7 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
   ): void {
     this.handlers.get(event)?.delete(handler as (payload: unknown) => void);
   }
-  
+
   /**
    * Emit an event to all registered handlers.
    * CRITICAL: Errors in handlers are caught and logged, NOT propagated.
@@ -86,7 +86,7 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
   emit<K extends keyof TEventMap>(event: K, payload: TEventMap[K]): void {
     const eventHandlers = this.handlers.get(event);
     if (!eventHandlers) return;
-    
+
     eventHandlers.forEach(handler => {
       try {
         handler(payload);
@@ -101,7 +101,7 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
       }
     });
   }
-  
+
   /**
    * Remove all handlers for a specific event or all events
    */
@@ -112,7 +112,7 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
       this.handlers.clear();
     }
   }
-  
+
   /**
    * Get the count of handlers for an event
    */
@@ -145,31 +145,31 @@ export enum AppErrorCode {
   AUTH_EXPIRED = 'AUTH_EXPIRED',
   AUTH_INVALID = 'AUTH_INVALID',
   AUTH_FAILED = 'AUTH_FAILED',
-  
+
   // Network Errors (2xx)  
   NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
   NETWORK_OFFLINE = 'NETWORK_OFFLINE',
   SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
   MIXED_CONTENT_BLOCKED = 'MIXED_CONTENT_BLOCKED',
-  
+
   // Playback Errors (3xx)
   PLAYBACK_DECODE_ERROR = 'PLAYBACK_DECODE_ERROR',
   PLAYBACK_FORMAT_UNSUPPORTED = 'PLAYBACK_FORMAT_UNSUPPORTED',
   PLAYBACK_DRM_ERROR = 'PLAYBACK_DRM_ERROR',
   PLAYBACK_SOURCE_NOT_FOUND = 'PLAYBACK_SOURCE_NOT_FOUND',
-  
+
   // Scheduler Errors (4xx)
   SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
   SCHEDULER_INVALID_TIME = 'SCHEDULER_INVALID_TIME',
-  
+
   // Storage Errors (5xx)
   STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
   STORAGE_CORRUPTED = 'STORAGE_CORRUPTED',
-  
+
   // UI Errors (6xx)
   UI_RENDER_ERROR = 'UI_RENDER_ERROR',
   UI_NAVIGATION_BLOCKED = 'UI_NAVIGATION_BLOCKED',
-  
+
   // Generic
   UNKNOWN = 'UNKNOWN',
 }
@@ -1058,6 +1058,8 @@ export interface ScheduledProgram {
   loopNumber: number;
   /** Stream info for playback (resolved on demand) */
   streamDescriptor: StreamDescriptor | null;
+  /** Whether this program is currently playing (computed: now >= start && now < end) */
+  isCurrent: boolean;
 }
 
 /**

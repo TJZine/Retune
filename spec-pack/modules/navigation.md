@@ -69,6 +69,10 @@ export interface INavigationManager {
     event: K,
     handler: (payload: NavigationEventMap[K]) => void
   ): void;
+  
+  // Long-press handling
+  handleLongPress(button: RemoteButton, callback: () => void): void;
+  cancelLongPress(): void;
 }
 
 /**

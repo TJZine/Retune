@@ -2,6 +2,49 @@
 
 This checklist validates that the Retune implementation is complete, correct, and ready for deployment.
 
+> [!TIP]
+> **CI/CD Workflow**: See `.github/workflows/ci.yml` for automated execution of this checklist. The workflow runs on every PR and blocks merge if any verification step fails.
+
+## CI/CD Workflow Reference
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      # Phase 1: Build
+      - name: TypeScript Check
+        run: npx tsc --noEmit
+      
+      - name: Build Bundle
+        run: npm run build
+      
+      # Phase 2: Unit Tests
+      - name: Unit Tests
+        run: npm test -- --coverage
+      
+      # Phase 3: Integration Tests
+      - name: Integration Tests
+        run: npm run test:integration
+      
+      # Phase 4: Performance Tests
+      - name: Performance Tests
+        run: npm run test:perf
+```
+
 ---
 
 ## Phase 1: Build Verification
@@ -403,6 +446,44 @@ This checklist validates that the Retune implementation is complete, correct, an
 | Developer | | |
 | QA | | |
 | Stakeholder | | |
+
+---
+
+## Semantic Versioning Guidelines
+
+Follow [SemVer 2.0.0](https://semver.org/) for all module releases:
+
+### Breaking Changes (MAJOR bump)
+
+| Module | Breaking Change Example |
+| :--- | :--- |
+| `plex-auth` | Change `PlexAuthData` structure, remove `getStoredCredentials()` |
+| `channel-scheduler` | Change `ScheduledProgram` interface, alter schedule algorithm |
+| `video-player` | Remove `loadStream()` parameters, change event payload structure |
+| `navigation` | Change `Screen` enum values, alter `FocusGroup` API |
+| `epg-ui` | Change grid coordinate system, alter focus navigation behavior |
+
+### Feature Additions (MINOR bump)
+
+- New optional method on any interface
+- New event type added
+- New optional parameter to config
+- Performance improvements with no API changes
+
+### Bug Fixes (PATCH bump)
+
+- Fix calculation errors in scheduler
+- Correct event emission timing
+- Fix memory leaks
+- Improve error messages
+
+### Module Dependencies
+
+When a dependency module bumps MAJOR, consuming modules should:
+
+1. Update their minimum dependency version
+2. Bump their own MAJOR if the breaking change propagates to their API
+3. Add migration notes in CHANGELOG
 
 ---
 

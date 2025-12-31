@@ -628,6 +628,7 @@ describe('VideoPlayer', () => {
       
       triggerError(3); // MEDIA_ERR_DECODE
       
+      // VERBATIM ASSERTION: Exact structure expected
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           code: 'DECODE_ERROR',
@@ -646,7 +647,7 @@ describe('VideoPlayer', () => {
         jest.advanceTimersByTime(Math.pow(2, i) * 1000);
       }
       
-      // Should emit error after max retries
+      // VERBATIM ASSERTION: Must include retryCount
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           code: 'NETWORK_ERROR',
@@ -654,6 +655,20 @@ describe('VideoPlayer', () => {
           retryCount: 3
         })
       );
+    });
+    
+    it('should map MediaError codes correctly', () => {
+      const errorCases = [
+        { mediaCode: 2, expected: 'NETWORK_ERROR' },
+        { mediaCode: 3, expected: 'DECODE_ERROR' },
+        { mediaCode: 4, expected: 'FORMAT_UNSUPPORTED' },
+      ];
+      
+      errorCases.forEach(({ mediaCode, expected }) => {
+        const result = player['_mapMediaError'](mediaCode);
+        // VERBATIM ASSERTION: Exact code mapping
+        expect(result.code).toBe(expected);
+      });
     });
   });
   
@@ -756,6 +771,24 @@ src/modules/player/
 - [ ] Write unit tests with mocked video element
 - [ ] Add JSDoc comments to all public methods
 - [ ] Verify against acceptance criteria
+
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Using HLS.js on webOS | Works elsewhere | webOS has native HLS - use `video.src` directly |
+| Multiple video elements | Seems logical for preloading | Single video element only - memory constraints |
+| Ignoring keep-alive | Works in dev | webOS suspends after ~5 min idle - touch DOM every 30s |
+| Volume > 1.0 | Boost audio | Clamp to [0.0, 1.0] - values >1 cause distortion |
+| Sync seekTo with await | Seems more reliable | Return Promise that resolves on 'seeked' event |
+| Not handling MEDIA_ERR_SRC_NOT_SUPPORTED | Rare error | Request transcode from Plex, don't just skip |
+| Retry forever on network | "Eventually works" | Max 3 retries with exponential backoff, then emit error |
+| currentTime in seconds | video.currentTime is seconds | Convert to/from ms consistently in all APIs |
+
+---
 
 ## Acceptance Criteria
 

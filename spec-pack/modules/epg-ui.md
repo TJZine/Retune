@@ -260,6 +260,19 @@ class EPGErrorBoundary {
 
 **Returns**: `true` if navigation handled, `false` if at boundary
 
+### Grid Edge Behavior (CRITICAL)
+
+| Direction | At Boundary | Behavior |
+| --------- | ----------- | -------- |
+| **Up** | First channel (index 0) | Return `false`, do NOT wrap to last channel |
+| **Down** | Last channel | Return `false`, do NOT wrap to first channel |
+| **Left** | First program in visible window | Scroll time axis backwards by 30 minutes, focus rightmost program |
+| **Left** | At start of schedule day (00:00) | Return `false`, do NOT wrap |
+| **Right** | Last program in visible window | Scroll time axis forwards by 30 minutes, focus leftmost program |
+| **Right** | At end of schedule day (24:00) | Return `false`, do NOT wrap |
+
+**Rationale**: Wrapping is disabled to avoid user confusion. Time axis scrolls to reveal more content.
+
 **Implementation Notes**:
 
 ```typescript

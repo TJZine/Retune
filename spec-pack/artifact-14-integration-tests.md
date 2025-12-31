@@ -162,6 +162,48 @@ describe('Integration: EPG Navigation', () => {
     // Focus should remain on first row
     expect(epg.getFocusedProgram()?.channelIndex).toBe(0);
   });
+  
+  it('should maintain focus during scroll', async () => {
+    await orchestrator.initializeWithPlayback();
+    navigation._simulateKeyPress('guide');
+    await waitFor(() => epg.isVisible());
+    
+    // Focus a program
+    epg.focusProgram(2, 1);
+    const focusedProgram = epg.getFocusedProgram()?.program;
+    
+    // Scroll grid (navigating down past visible channels)
+    for (let i = 0; i < 5; i++) {
+      navigation._simulateKeyPress('down');
+    }
+    
+    // Verify focus moved to new position (not lost)
+    expect(epg.getFocusedProgram()).not.toBeNull();
+    expect(epg.getFocusedProgram()?.channelIndex).toBe(7); // 2 + 5
+  });
+  
+  it('should handle focus when scrolled off-screen and back', async () => {
+    await orchestrator.initializeWithPlayback();
+    navigation._simulateKeyPress('guide');
+    await waitFor(() => epg.isVisible());
+    
+    // Focus a program near top
+    epg.focusProgram(1, 0);
+    const initialProgram = epg.getFocusedProgram()?.program;
+    
+    // Scroll down far enough that original row is recycled
+    for (let i = 0; i < 10; i++) {
+      navigation._simulateKeyPress('down');
+    }
+    
+    // Now scroll back up
+    for (let i = 0; i < 10; i++) {
+      navigation._simulateKeyPress('up');
+    }
+    
+    // Focus should return to original position
+    expect(epg.getFocusedProgram()?.channelIndex).toBe(1);
+  });
 });
 ```
 

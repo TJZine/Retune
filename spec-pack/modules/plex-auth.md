@@ -427,6 +427,23 @@ export const PLEX_AUTH_CONSTANTS = {
 - [ ] Add JSDoc comments to all public methods
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Using `Math.random()` for client ID | Seems simpler | Use UUIDv4 and persist to localStorage with key `retune_client_id` |
+| Storing token in memory only | Forget persistence requirement | Always call `storeCredentials()` to localStorage |
+| Hardcoding header values | Copy-paste from examples | Read from `PlexAuthConfig` passed to constructor |
+| Logging token in errors | Debug convenience | Never include `X-Plex-Token` in logs - use `token: [REDACTED]` |
+| Blocking UI during polling | Not using async properly | Use `setInterval` with async callback, show loading state |
+| No retry on network error | Simple happy-path coding | Implement exponential backoff (1s, 2s, 4s) up to 3 retries |
+| Ignoring PIN expiry | Forget 5-minute limit | Check `expiresAt` before each poll, show countdown to user |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:
