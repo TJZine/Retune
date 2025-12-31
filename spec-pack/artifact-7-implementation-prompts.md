@@ -673,16 +673,234 @@ interface INavigationManager {
 }
 ```
 
+### P5: Magic Remote Pointer Mode (INLINED from Platform Constraints)
+
+webOS Magic Remote supports both D-pad navigation and pointer mode. Handle both:
+
+```typescript
+interface PointerModeConfig {
+  enabled: boolean;           // Default: true
+  cursorHideDelayMs: number; // Default: 3000
+}
+
+class PointerModeHandler {
+  private isActive: boolean = false;
+  private hideTimer: number | null = null;
+  
+  initialize(config: PointerModeConfig): void {
+    if (!config.enabled) return;
+    
+    document.addEventListener('mousemove', this.handlePointerMove);
+    document.addEventListener('click', this.handlePointerClick);
+  }
+  
+  private handlePointerMove = (event: MouseEvent): void => {
+    if (!this.isActive) {
+      this.isActive = true;
+      this.emit('pointerModeChange', { active: true });
+      document.body.classList.add('pointer-mode');
+    }
+    
+    // Reset hide timer
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+    this.hideTimer = window.setTimeout(() => {
+      this.isActive = false;
+      this.emit('pointerModeChange', { active: false });
+      document.body.classList.remove('pointer-mode');
+    }, this.config.cursorHideDelayMs);
+  };
+  
+  private handlePointerClick = (event: MouseEvent): void => {
+    const target = event.target as HTMLElement;
+    const focusable = target.closest('.focusable');
+    
+    if (focusable) {
+      this.navigation.setFocus(focusable.id);
+      this.navigation.triggerSelect();
+    }
+  };
+}
+```
+
+**CSS for Pointer Mode**:
+```css
+/* Hide focus ring when using pointer */
+body.pointer-mode .focusable:focus {
+  box-shadow: none;
+  transform: none;
+}
+
+/* Show hover state instead */
+body.pointer-mode .focusable:hover {
+  background: var(--surface-elevated);
+  cursor: pointer;
+}
+```
+
+### P5: Spatial Navigation Algorithm
+
+When explicit `neighbors` not defined, use geometric algorithm:
+
+```typescript
+private findNearestNeighbor(
+  fromId: string, 
+  direction: 'up' | 'down' | 'left' | 'right'
+): string | null {
+  const fromElement = this.focusableElements.get(fromId);
+  if (!fromElement) return null;
+  
+  const fromRect = fromElement.element.getBoundingClientRect();
+  const candidates: Array<{ id: string; score: number }> = [];
+  
+  for (const [id, element] of this.focusableElements) {
+    if (id === fromId) continue;
+    if (!this.isVisible(element.element)) continue;
+    
+    const rect = element.element.getBoundingClientRect();
+    if (!this.isInDirection(fromRect, rect, direction)) continue;
+    
+    // Score: prefer overlap on perpendicular axis, then minimal distance
+    const overlap = this.calculateOverlap(fromRect, rect, direction);
+    const distance = this.calculateDistance(fromRect, rect, direction);
+    const score = (overlap * 1000) - distance;
+    
+    candidates.push({ id, score });
+  }
+  
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].id;
+}
+
+private isInDirection(from: DOMRect, to: DOMRect, dir: string): boolean {
+  const fromCenter = { x: from.left + from.width/2, y: from.top + from.height/2 };
+  const toCenter = { x: to.left + to.width/2, y: to.top + to.height/2 };
+  switch (dir) {
+    case 'up': return toCenter.y < fromCenter.y;
+    case 'down': return toCenter.y > fromCenter.y;
+    case 'left': return toCenter.x < fromCenter.x;
+    case 'right': return toCenter.x > fromCenter.x;
+    default: return false;
+  }
+}
+```
+
+### P5: Test Specifications with Exact Assertions
+
+```typescript
+describe('NavigationManager', () => {
+  describe('screen navigation', () => {
+    it('should push to stack on goTo', () => {
+      nav.goTo('settings');
+      expect(nav.getCurrentScreen()).toBe('settings');
+      expect(nav.getState().screenStack).toContain('home');
+    });
+    
+    it('should pop stack on goBack', () => {
+      nav.goTo('settings');
+      const returned = nav.goBack();
+      expect(returned).toBe(true);
+      expect(nav.getCurrentScreen()).toBe('home');
+    });
+    
+    it('should return false on goBack at root', () => {
+      // At initial screen with empty stack
+      expect(nav.goBack()).toBe(false);
+    });
+  });
+  
+  describe('focus management', () => {
+    it('should set focus on registered element', () => {
+      const el = document.createElement('button');
+      nav.registerFocusable({ id: 'btn1', element: el, neighbors: {} });
+      nav.setFocus('btn1');
+      expect(nav.getFocusedElement()?.id).toBe('btn1');
+      expect(el.classList.contains('focused')).toBe(true);
+    });
+    
+    it('should move focus using explicit neighbors', () => {
+      nav.registerFocusable({ id: 'btn1', element: el1, neighbors: { right: 'btn2' } });
+      nav.registerFocusable({ id: 'btn2', element: el2, neighbors: { left: 'btn1' } });
+      nav.setFocus('btn1');
+      
+      const moved = nav.moveFocus('right');
+      expect(moved).toBe(true);
+      expect(nav.getFocusedElement()?.id).toBe('btn2');
+    });
+    
+    it('should return false when no neighbor in direction', () => {
+      nav.registerFocusable({ id: 'btn1', element: el, neighbors: { right: 'btn2' } });
+      nav.setFocus('btn1');
+      
+      expect(nav.moveFocus('left')).toBe(false); // No explicit neighbor
+      expect(nav.getFocusedElement()?.id).toBe('btn1'); // Focus unchanged
+    });
+  });
+  
+  describe('key handling', () => {
+    it('should emit keyPress event on mapped key', () => {
+      const handler = jest.fn();
+      nav.on('keyPress', handler);
+      
+      // Simulate keydown for OK button (keyCode 13)
+      const event = new KeyboardEvent('keydown', { keyCode: 13 });
+      document.dispatchEvent(event);
+      
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ button: 'ok', isRepeat: false })
+      );
+    });
+    
+    it('should detect long press after 500ms', async () => {
+      const longPressHandler = jest.fn();
+      nav.handleLongPress('ok', longPressHandler);
+      nav.setFocus('btn1');
+      
+      // Simulate keydown
+      document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 13 }));
+      
+      // Wait 500ms
+      await new Promise(r => setTimeout(r, 550));
+      
+      expect(longPressHandler).toHaveBeenCalled();
+    });
+  });
+  
+  describe('pointer mode', () => {
+    it('should activate on mouse movement', () => {
+      const handler = jest.fn();
+      nav.on('pointerModeChange', handler);
+      
+      document.dispatchEvent(new MouseEvent('mousemove'));
+      
+      expect(handler).toHaveBeenCalledWith({ active: true });
+      expect(document.body.classList.contains('pointer-mode')).toBe(true);
+    });
+    
+    it('should deactivate after cursor hide delay', async () => {
+      const handler = jest.fn();
+      nav.on('pointerModeChange', handler);
+      
+      document.dispatchEvent(new MouseEvent('mousemove'));
+      await new Promise(r => setTimeout(r, 3100)); // Wait for cursorHideDelayMs
+      
+      expect(handler).toHaveBeenLastCalledWith({ active: false });
+    });
+  });
+});
+```
+
 ### P5: Deliverable
 
 Complete implementation with:
-- RemoteHandler processing key events
-- FocusManager tracking and moving focus
+- RemoteHandler processing key events (all KEY_MAP codes)
+- FocusManager with spatial navigation algorithm
 - NavigationManager coordinating screens
-- Event emission for all key presses
-- Focus memory per screen
-- JSDoc comments
-```
+- PointerModeHandler for Magic Remote
+- Event emission for keyPress, screenChange, focusChange, pointerModeChange
+- Focus memory per screen with save/restore
+- JSDoc comments on all public methods
+````
 
 ---
 
@@ -2576,128 +2794,450 @@ Complete implementation with event emitters, error handling, and tests.
 You are implementing the Plex Stream Resolver module for Retune, a webOS TV application.
 
 ### P10-V2: Task
-Resolve playable stream URLs for media items, preferring direct play over transcoding.
+Resolve playable stream URLs from Plex media items, handle transcode decisions, and manage playback sessions with progress reporting.
 
 ### P10-V2: Files to Create
 - src/modules/plex/stream/index.ts
 - src/modules/plex/stream/PlexStreamResolver.ts
+- src/modules/plex/stream/SessionManager.ts
 - src/modules/plex/stream/interfaces.ts
-- src/modules/plex/stream/types.ts
 - src/modules/plex/stream/__tests__/PlexStreamResolver.test.ts
 
-### P10-V2: Type Definitions
+### P10-V2: Type Definitions (use exactly)
 
 ```typescript
 interface StreamRequest {
-  itemKey: string;               // ratingKey of media
-  startOffsetMs?: number;        // Starting position
-  directPlay?: boolean;          // Prefer direct play
-  subtitleStreamId?: number;
-  audioStreamId?: number;
+  itemKey: string;              // ratingKey of media
+  partId?: string;              // Specific part if multi-part
+  startOffsetMs?: number;       // For resume
+  audioStreamId?: string;       // Preferred audio track
+  subtitleStreamId?: string;    // Preferred subtitle track
+  maxBitrate?: number;          // For quality selection
+  directPlay?: boolean;         // Prefer direct play
+  directStream?: boolean;       // Prefer direct stream
 }
 
 interface StreamDecision {
-  playbackUrl: string;
-  protocol: 'hls' | 'dash' | 'direct';
+  playbackUrl: string;          // Final URL for playback
+  protocol: 'hls' | 'dash' | 'http';
+  isDirectPlay: boolean;
   isTranscoding: boolean;
   container: string;
   videoCodec: string;
   audioCodec: string;
+  subtitleDelivery: 'embed' | 'sidecar' | 'burn' | 'none';
+  sessionId: string;            // For tracking/cleanup
+  sessionKey: string;           // Plex session key
+  selectedAudioStream: PlexStream | null;
+  selectedSubtitleStream: PlexStream | null;
+  width: number;
+  height: number;
+  bitrate: number;
+  durationMs: number;
   subtitleTracks: SubtitleTrack[];
   audioTracks: AudioTrack[];
-  sessionId: string;
-  durationMs: number;
 }
 
 interface SubtitleTrack {
-  id: number;
+  id: string;
+  streamIndex: number;
   language: string;
   languageCode: string;
-  codec: string;
-  selected: boolean;
+  title: string;
+  format: 'srt' | 'vtt' | 'ass' | 'pgs' | 'vobsub';
+  url: string | null;           // For sidecar delivery
+  forced: boolean;
+  default: boolean;
 }
 
 interface AudioTrack {
-  id: number;
+  id: string;
+  streamIndex: number;
   language: string;
   languageCode: string;
+  title: string;
   codec: string;
   channels: number;
-  selected: boolean;
+  default: boolean;
 }
 
+interface PlaybackSession {
+  sessionId: string;
+  sessionKey: string;
+  itemKey: string;
+  startedAt: number;
+  lastReportedPositionMs: number;
+  lastReportedAt: number;
+}
+
+interface HlsOptions {
+  maxBitrate?: number;
+  subtitleSize?: number;  // Percentage (100 = default)
+  audioBoost?: number;    // Percentage (100 = default)
+  copyts?: boolean;       // Preserve timestamps
+}
+```
+
+### P10-V2: Interface to Implement
+
+```typescript
 interface IPlexStreamResolver {
+  // Stream resolution
   resolveStream(request: StreamRequest): Promise<StreamDecision>;
-  getStreamUrl(ratingKey: string, startOffsetMs?: number): Promise<string>;
-  reportPlaybackStart(sessionId: string, itemKey: string): Promise<void>;
-  reportPlaybackProgress(sessionId: string, positionMs: number): Promise<void>;
-  reportPlaybackStop(sessionId: string): Promise<void>;
-  cleanup(): void;
+  
+  // Direct URL construction (for simple cases)
+  getDirectPlayUrl(partKey: string): string;
+  getHlsUrl(itemKey: string, options?: HlsOptions): string;
+  
+  // Subtitle handling
+  getSubtitleUrl(subtitleKey: string): string;
+  getSubtitleTracks(itemKey: string): Promise<SubtitleTrack[]>;
+  
+  // Session management
+  startSession(sessionId: string, itemKey: string): Promise<void>;
+  reportProgress(sessionId: string, itemKey: string, positionMs: number): Promise<void>;
+  endSession(sessionId: string, itemKey: string, positionMs: number): Promise<void>;
+  
+  // Cleanup
+  terminateSession(sessionId: string): Promise<void>;
+  terminateAllSessions(): Promise<void>;
+  
+  // Events
+  on(event: 'sessionStart', handler: (session: PlaybackSession) => void): void;
+  on(event: 'sessionEnd', handler: (session: PlaybackSession) => void): void;
 }
 ```
 
 ### P10-V2: API Endpoints
-- Stream Decision: GET /video/:/transcode/universal/decision
-- Direct Play: GET /library/parts/{partId}/file
-- HLS Master: GET /video/:/transcode/universal/start.m3u8
-- Timeline: POST /:/timeline
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| /video/:/transcode/universal/decision | GET | Get stream decision |
+| /video/:/transcode/universal/start.m3u8 | GET | Get HLS playlist |
+| /library/parts/{partId}/file | GET | Direct play URL |
+| /:/timeline | POST | Report playback progress |
+| /video/:/transcode/universal/stop | GET | Stop transcode session |
 
 ### P10-V2: Implementation Requirements
 
-1. **resolveStream()**:
-   - First try direct play capability check
-   - webOS 4.0+ supports H.264, HEVC, AAC, AC3
-   - Fall back to HLS transcoding if needed
+#### 1. Stream Resolution Flow
 
-2. **Direct Play Check**:
 ```typescript
-const directPlayCodecs = ['h264', 'hevc'];
-const directPlayContainers = ['mp4', 'mkv'];
-const directPlayAudio = ['aac', 'ac3', 'eac3'];
-
-function canDirectPlay(media: PlexMedia): boolean {
-  return directPlayCodecs.includes(media.videoCodec) &&
-         directPlayContainers.includes(media.container) &&
-         directPlayAudio.includes(media.audioCodec);
+async resolveStream(request: StreamRequest): Promise<StreamDecision> {
+  // 1. Get item metadata to retrieve part info
+  const item = await this.library.getItem(request.itemKey);
+  const part = this.selectBestPart(item, request.partId);
+  
+  // 2. Build decision request params
+  const params = new URLSearchParams({
+    path: `/library/metadata/${request.itemKey}`,
+    mediaIndex: '0',
+    partIndex: '0',
+    protocol: 'hls',
+    fastSeek: '1',
+    directPlay: request.directPlay !== false ? '1' : '0',
+    directStream: request.directStream !== false ? '1' : '0',
+    directStreamAudio: '1',
+    videoQuality: '100',
+    videoResolution: '1920x1080',
+    maxVideoBitrate: (request.maxBitrate || 20000).toString(),
+    subtitles: 'auto',
+    'X-Plex-Session-Identifier': this.generateSessionId(),
+    'X-Plex-Client-Profile-Extra': this.getClientProfile(),
+  });
+  
+  if (request.audioStreamId) {
+    params.append('audioStreamID', request.audioStreamId);
+  }
+  if (request.subtitleStreamId) {
+    params.append('subtitleStreamID', request.subtitleStreamId);
+  }
+  
+  // 3. Request decision
+  const decisionUrl = `${this.serverUri}/video/:/transcode/universal/decision?${params}`;
+  const response = await this.fetch(decisionUrl);
+  
+  // 4. Parse decision
+  return this.parseDecision(response, part);
 }
 ```
 
-3. **reportPlaybackProgress()**: Call every 10 seconds during playback
+#### 2. Client Profile (CRITICAL for webOS)
+
+```typescript
+private getClientProfile(): string {
+  // webOS 4.0+ supports these codecs
+  return [
+    'add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=20000)',
+    'add-limitation(scope=videoAudioCodec&scopeName=*&type=match&name=audio.channels&list=2|6)',
+    'append-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts)',
+    // H.264 up to 4K
+    'append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&videoCodec=h264)',
+    // AAC stereo
+    'append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&audioCodec=aac)',
+    // AC3 passthrough
+    'append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&audioCodec=ac3)',
+  ].join('&');
+}
+```
+
+#### 3. Progress Reporting
+
+```typescript
+async reportProgress(
+  sessionId: string, 
+  itemKey: string, 
+  positionMs: number
+): Promise<void> {
+  const params = new URLSearchParams({
+    ratingKey: itemKey,
+    key: `/library/metadata/${itemKey}`,
+    state: 'playing',
+    time: positionMs.toString(),
+    duration: this.activeSession?.durationMs?.toString() || '0',
+  });
+  
+  await this.fetch(`${this.serverUri}/:/timeline?${params}`, {
+    method: 'POST',
+    headers: this.auth.getAuthHeaders(),
+  });
+  
+  // Update session tracking
+  if (this.sessions.has(sessionId)) {
+    const session = this.sessions.get(sessionId)!;
+    session.lastReportedPositionMs = positionMs;
+    session.lastReportedAt = Date.now();
+  }
+}
+```
+
+#### 4. Session Cleanup
+
+```typescript
+async endSession(
+  sessionId: string, 
+  itemKey: string, 
+  positionMs: number
+): Promise<void> {
+  // Report final position
+  await this.fetch(`${this.serverUri}/:/timeline`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      ratingKey: itemKey,
+      key: `/library/metadata/${itemKey}`,
+      state: 'stopped',
+      time: positionMs.toString(),
+    }),
+    headers: this.auth.getAuthHeaders(),
+  });
+  
+  // If transcoding, stop the transcode session
+  if (this.activeTranscodeSession) {
+    await this.fetch(
+      `${this.serverUri}/video/:/transcode/universal/stop?session=${sessionId}`,
+      { headers: this.auth.getAuthHeaders() }
+    );
+  }
+  
+  // Remove from tracking
+  this.sessions.delete(sessionId);
+  this.emit('sessionEnd', { sessionId, itemKey, positionMs });
+}
+```
+
+#### 5. Subtitle Delivery Decision
+
+```typescript
+private determineSubtitleDelivery(
+  track: PlexStream,
+  decision: any
+): 'embed' | 'sidecar' | 'burn' | 'none' {
+  // Image-based subtitles must be burned in
+  if (['pgs', 'vobsub', 'dvdsub'].includes(track.format || '')) {
+    return 'burn';
+  }
+  
+  // If transcoding, server may embed or burn
+  if (decision.transcodeDecision === 'transcode') {
+    return decision.subtitleDecision === 'burn' ? 'burn' : 'embed';
+  }
+  
+  // For direct play, deliver as sidecar
+  if (['srt', 'vtt', 'webvtt', 'subrip'].includes(track.format || '')) {
+    return 'sidecar';
+  }
+  
+  // ASS/SSA may need burn for styling
+  if (track.format === 'ass') {
+    return 'burn';
+  }
+  
+  return 'none';
+}
+```
 
 ### P10-V2: Error Handling
-| Error | Recovery |
-|-------|----------|
-| Direct play fails | Fall back to transcoding |
-| Transcode fails | Return error with STREAM_UNAVAILABLE |
-| Session expired | Create new session |
 
-### P10-V2: Test Specifications
+| Error | Code | Recovery |
+| --- | --- | --- |
+| Item not found | 404 | Throw `PLAYBACK_SOURCE_NOT_FOUND` |
+| Server busy transcoding | 503 | Retry after 2s, max 3 attempts |
+| Unsupported codec | Decision error | Fallback to forced transcode |
+| Network timeout | Timeout | Retry with backoff |
+| Session expired | 401 | Re-authenticate |
+
+```typescript
+async resolveStreamWithRetry(request: StreamRequest): Promise<StreamDecision> {
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await this.resolveStream(request);
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (this.isRetryable(error)) {
+        await this.sleep(Math.pow(2, attempt) * 1000);
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw lastError;
+}
+```
+
+### P10-V2: Test Specification
+
 ```typescript
 describe('PlexStreamResolver', () => {
   describe('resolveStream', () => {
-    it('should prefer direct play for compatible media');
-    it('should fall back to HLS for incompatible media');
-    it('should include offset in URL');
-    it('should parse subtitle tracks');
-    it('should parse audio tracks');
+    it('should return HLS URL for compatible content', async () => {
+      // Mock decision response with direct play
+      mockFetch({ MediaContainer: { ... } });
+      
+      const result = await resolver.resolveStream({ itemKey: '12345' });
+      
+      expect(result.protocol).toBe('hls');
+      expect(result.playbackUrl).toContain('start.m3u8');
+    });
+    
+    it('should fall back to transcode for unsupported codec', async () => {
+      // Mock HEVC content that requires transcode
+      mockFetch({ MediaContainer: { videoCodec: 'hevc' } });
+      
+      const result = await resolver.resolveStream({ itemKey: '12345' });
+      
+      expect(result.isTranscoding).toBe(true);
+    });
+    
+    it('should include audio/subtitle track selection', async () => {
+      const result = await resolver.resolveStream({
+        itemKey: '12345',
+        audioStreamId: 'audio-2',
+        subtitleStreamId: 'sub-1',
+      });
+      
+      expect(result.selectedAudioStream?.id).toBe('audio-2');
+      expect(result.selectedSubtitleStream?.id).toBe('sub-1');
+    });
   });
   
-  describe('direct play detection', () => {
-    it('should detect H.264 as playable');
-    it('should detect HEVC as playable');
-    it('should require transcoding for unsupported codecs');
+  describe('progress reporting', () => {
+    it('should report progress to timeline endpoint', async () => {
+      await resolver.reportProgress('session-1', '12345', 60000);
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/:/timeline'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('time=60000'),
+        })
+      );
+    });
+    
+    it('should update session tracking state', async () => {
+      resolver.startSession('session-1', '12345');
+      await resolver.reportProgress('session-1', '12345', 60000);
+      
+      const session = resolver.getSession('session-1');
+      expect(session?.lastReportedPositionMs).toBe(60000);
+    });
   });
   
-  describe('playback reporting', () => {
-    it('should report playback start');
-    it('should report progress at interval');
-    it('should report stop on cleanup');
+  describe('session management', () => {
+    it('should stop transcode on session end', async () => {
+      await resolver.endSession('session-1', '12345', 120000);
+      
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('universal/stop'),
+        expect.anything()
+      );
+    });
+    
+    it('should emit sessionEnd event', async () => {
+      const handler = jest.fn();
+      resolver.on('sessionEnd', handler);
+      
+      await resolver.endSession('session-1', '12345', 120000);
+      
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: 'session-1' })
+      );
+    });
+  });
+  
+  describe('subtitle handling', () => {
+    it('should return sidecar URL for SRT subtitles', async () => {
+      const tracks = await resolver.getSubtitleTracks('12345');
+      const srtTrack = tracks.find(t => t.format === 'srt');
+      
+      expect(srtTrack?.url).toContain('/library/streams');
+    });
+    
+    it('should indicate burn-in for PGS subtitles', async () => {
+      const result = await resolver.resolveStream({
+        itemKey: '12345',
+        subtitleStreamId: 'pgs-sub',
+      });
+      
+      expect(result.subtitleDelivery).toBe('burn');
+    });
   });
 });
 ```
 
+### P10-V2: Mock Requirements
+
+When testing this module, mock:
+- `fetch` global function
+- `IPlexAuth.getAuthHeaders()`
+- `IPlexServerDiscovery.getActiveConnectionUri()`
+- `IPlexLibrary.getItem()`
+
+### P10-V2: Performance Requirements
+
+| Operation | Target | Max |
+| --- | --- | --- |
+| resolveStream() | 500ms | 2000ms |
+| reportProgress() | 100ms | 500ms |
+| endSession() | 200ms | 1000ms |
+
 ### P10-V2: Deliverable
-Complete implementation with codec detection and timeline reporting.
+
+Complete implementation with:
+- PlexStreamResolver class with all IPlexStreamResolver methods
+- SessionManager for tracking active sessions
+- Client profile configuration for webOS
+- Subtitle delivery logic
+- Progress reporting
+- Session cleanup on terminate
+- Error retry with backoff
+- JSDoc comments
+- Unit tests
 
 ````
 

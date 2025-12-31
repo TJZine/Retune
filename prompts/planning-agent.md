@@ -143,6 +143,60 @@ Create `operational-plan.md`:
 - [ ] Phase milestone achieved: [description]
 ```
 
+### Step 6: Generate Orchestration Documents
+
+For EACH module being passed to the Coding Agent, create `orchestration-docs/session-[module-id]-[attempt].md`:
+
+> [!IMPORTANT]
+> Orchestration documents REFERENCE the implementation prompts — they do NOT copy them.
+> This ensures the SSOT (artifact-7) remains the single source of truth.
+
+Use template from `prompts/templates/orchestration-document.md`:
+
+```markdown
+# Coding Session: [MODULE_NAME]
+
+## Session Metadata
+| Field | Value |
+| :--- | :--- |
+| **Module ID** | [module-id] |
+| **Session ID** | [UUID-v4] |
+| **Attempt** | [N] of 3 |
+
+## Pre-Flight Status
+| Module | Required Status | Actual Status | Gate |
+| :--- | :--- | :--- | :---: |
+| [dep-1] | complete | [check implementation-state.json] | ✅/❌ |
+
+## Implementation Spec (READ ONLY)
+> The complete implementation specification is at:
+> `spec-pack/artifact-7-implementation-prompts.md#prompt-[N]`
+>
+> Context handoff is at:
+> `spec-pack/artifact-9-context-handoff.md#module-[name]`
+
+## Session Context
+[Previous attempt results, blockers cleared, spec updates]
+
+## Failure Handling
+| Failure Type | Action |
+| :--- | :--- |
+| Type/test error | Self-fix and retry |
+| Spec ambiguity | **HALT** → escalate to Phase 1 |
+```
+
+Update `implementation-state.json` with session tracking:
+
+```json
+{
+  "[module-id]": {
+    "status": "pending",
+    "orchestrationDoc": "orchestration-docs/session-[module-id]-1.md",
+    "attempts": 0
+  }
+}
+```
+
 ---
 
 ## ESCALATION TRIGGERS

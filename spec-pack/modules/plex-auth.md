@@ -225,6 +225,8 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 
 **Returns**: `true` if token is valid, `false` otherwise
 
+**Performance Budget**: 5000ms timeout (abort and return false if exceeded)
+
 **Side Effects**: None
 
 **Implementation Notes**:

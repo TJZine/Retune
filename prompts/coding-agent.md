@@ -244,7 +244,24 @@ Implementation state updated to `review`. Awaiting Code Review Agent.
 
 ## AGENT MEMORY
 
-After each session, record decisions for future sessions:
+> **Full specification**: See `prompts/agent-memory-system.md` for complete format.
+
+### At Session Start
+
+Read previous session memory if this is a retry:
+
+```typescript
+// Check for previous attempts
+const previousSession = await readMemory(moduleId);
+if (previousSession?.status === 'failed') {
+  // Apply learnings from previous blockers
+  applyLearnings(previousSession.blockers);
+}
+```
+
+### At Session End
+
+Record session context for future sessions:
 
 ```markdown
 ## Session: [ISO timestamp]
@@ -257,6 +274,40 @@ After each session, record decisions for future sessions:
 
 ### Files Modified
 - [List of files]
+
+### Verification Results
+| Check | Status |
+| :--- | :--- |
+| Type check | ✅/❌ |
+| Lint | ✅/❌ |
+| Tests | ✅/❌ |
 ```
 
 Save to: `agent-memory/coding-agent/[module-name].md`
+
+---
+
+## FAILURE ANALYSIS
+
+When verification fails, run escalation detection to determine next action:
+
+```bash
+# Pipe error output to escalation detector
+npm test 2>&1 | ./scripts/escalation-detector.sh -
+
+# Exit code determines action:
+# 0 = Code bug → Fix and retry
+# 1 = Spec gap → HALT and escalate to Phase 1
+# 2 = Unknown → Manual review
+```
+
+### On Escalation Required
+
+1. Update `implementation-state.json`:
+
+   ```json
+   { "status": "blocked", "blockedReason": "[description]" }
+   ```
+
+2. Create escalation report per `planning-agent.md` format
+3. Do NOT retry without spec clarification

@@ -538,25 +538,251 @@ body.pointer-mode .focusable:hover {
 
 ---
 
-## 11. Verification Commands
+## 12. Centralized Logging Interface
 
-Add to each module spec:
+> [!NOTE]
+> **Purpose**: Consistent log format across all modules for debugging on-device and in development.
+
+```typescript
+/**
+ * Application Logger Interface
+ * Use this instead of console.* for structured logging
+ */
+interface ILogger {
+  debug(module: string, message: string, data?: unknown): void;
+  info(module: string, message: string, data?: unknown): void;
+  warn(module: string, message: string, data?: unknown): void;
+  error(module: string, message: string, error?: Error, data?: unknown): void;
+  performance(module: string, operation: string, durationMs: number): void;
+}
+
+class AppLogger implements ILogger {
+  private readonly LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+  private currentLevel: number = 1; // Default: info
+  
+  private format(
+    level: string, 
+    module: string, 
+    message: string, 
+    data?: unknown
+  ): string {
+    const timestamp = new Date().toISOString();
+    const dataStr = data ? ` | ${JSON.stringify(data)}` : '';
+    return `[${timestamp}] [${level.toUpperCase()}] [${module}] ${message}${dataStr}`;
+  }
+  
+  debug(module: string, message: string, data?: unknown): void {
+    if (this.currentLevel <= 0) {
+      console.debug(this.format('debug', module, message, data));
+    }
+  }
+  
+  info(module: string, message: string, data?: unknown): void {
+    if (this.currentLevel <= 1) {
+      console.info(this.format('info', module, message, data));
+    }
+  }
+  
+  warn(module: string, message: string, data?: unknown): void {
+    if (this.currentLevel <= 2) {
+      console.warn(this.format('warn', module, message, data));
+    }
+  }
+  
+  error(module: string, message: string, error?: Error, data?: unknown): void {
+    console.error(this.format('error', module, message, { 
+      ...data, 
+      errorMessage: error?.message,
+      stack: error?.stack 
+    }));
+  }
+  
+  performance(module: string, operation: string, durationMs: number): void {
+    if (this.currentLevel <= 0) {
+      console.debug(this.format('perf', module, `${operation}: ${durationMs}ms`));
+    }
+  }
+  
+  setLevel(level: 'debug' | 'info' | 'warn' | 'error'): void {
+    this.currentLevel = this.LOG_LEVELS[level];
+  }
+}
+
+// Global singleton
+export const logger = new AppLogger();
+```
+
+**Usage**:
+
+```typescript
+import { logger } from './utils/logger';
+
+logger.info('PlexAuth', 'PIN requested', { pinId: 12345 });
+logger.error('VideoPlayer', 'Stream failed', error, { url: streamUrl });
+logger.performance('ChannelScheduler', 'getProgramAtTime', 2.5);
+```
+
+---
+
+## 13. Startup Time Budget
+
+> [!IMPORTANT]
+> **Constraint**: Cold start to playback must complete within 8 seconds for optimal user experience.
+
+| Phase | Budget | Cumulative |
+|-------|--------|------------|
+| App shell render | 500ms | 500ms |
+| Module initialization | 1000ms | 1500ms |
+| Auth validation | 1500ms | 3000ms |
+| Server connection | 2000ms | 5000ms |
+| Channel load | 1500ms | 6500ms |
+| First stream start | 1500ms | 8000ms |
+
+**Measurement**:
+
+```typescript
+class StartupProfiler {
+  private marks: Map<string, number> = new Map();
+  
+  mark(phase: string): void {
+    this.marks.set(phase, performance.now());
+    logger.performance('Startup', phase, this.getElapsed());
+  }
+  
+  getElapsed(): number {
+    return performance.now() - (this.marks.get('start') ?? 0);
+  }
+  
+  checkBudget(): boolean {
+    return this.getElapsed() < 8000;
+  }
+}
+```
+
+---
+
+## 14. Unified Retry Policy
+
+> [!TIP]
+> **Purpose**: Consistent retry behavior across all network operations to reduce code duplication.
+
+```typescript
+interface RetryConfig {
+  maxAttempts: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+  retryOn: (error: Error) => boolean;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+  retryOn: (error) => {
+    // Retry on network errors, not on 4xx client errors
+    if (error instanceof TypeError && error.message.includes('fetch')) return true;
+    if ('status' in error && typeof error.status === 'number') {
+      return error.status >= 500 || error.status === 408 || error.status === 429;
+    }
+    return false;
+  }
+};
+
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  config: Partial<RetryConfig> = {}
+): Promise<T> {
+  const cfg = { ...DEFAULT_RETRY_CONFIG, ...config };
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (!cfg.retryOn(lastError) || attempt === cfg.maxAttempts) {
+        throw lastError;
+      }
+      
+      const delay = Math.min(
+        cfg.baseDelayMs * Math.pow(cfg.backoffMultiplier, attempt - 1),
+        cfg.maxDelayMs
+      );
+      
+      logger.warn('Retry', `Attempt ${attempt} failed, retrying in ${delay}ms`, {
+        error: lastError.message
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+```
+
+**Usage in modules**:
+
+```typescript
+// PlexAuth
+const response = await withRetry(() => fetch(url, options));
+
+// VideoPlayer - more aggressive retries
+const stream = await withRetry(() => this.loadStream(url), {
+  maxAttempts: 5,
+  baseDelayMs: 500
+});
+```
+
+---
+
+## 15. Accessibility Test Commands
+
+Add these commands to CI/CD for accessibility validation:
 
 ```bash
-# TypeScript compilation
-npx tsc --noEmit
+# Focus ring visibility check
+npm run test:a11y:focus
 
-# Module-specific tests
-npm test -- --grep "ModuleName"
+# Color contrast audit (requires manual setup)
+npm run test:a11y:contrast
 
-# Integration tests
-npm run test:integration
+# Keyboard navigation coverage
+npm run test:a11y:keyboard
+```
 
-# Performance check
-npm run test:perf
+**Focus Visibility Test**:
 
-# Memory snapshot
-npm run test:memory
+```typescript
+describe('Accessibility: Focus Visibility', () => {
+  it('should have focus ring with minimum 4px outline', () => {
+    const focusedElement = document.querySelector('.focused');
+    const styles = window.getComputedStyle(focusedElement!);
+    const outline = parseFloat(styles.outlineWidth || '0');
+    const boxShadow = styles.boxShadow;
+    
+    expect(outline >= 4 || boxShadow !== 'none').toBe(true);
+  });
+  
+  it('should have visible focus on all interactive elements', () => {
+    const focusables = document.querySelectorAll('.focusable');
+    focusables.forEach(el => {
+      (el as HTMLElement).focus();
+      const styles = window.getComputedStyle(el);
+      expect(styles.outline !== 'none' || styles.boxShadow !== 'none').toBe(true);
+    });
+  });
+  
+  it('should have text contrast ratio >= 4.5:1', () => {
+    // Note: Requires color contrast calculation library
+    // Example assertion
+    const ratio = calculateContrastRatio('#ffffff', '#000000');
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
 ```
 
 ---
@@ -573,3 +799,7 @@ npm run test:memory
 - [x] Subtitle burn-in rules documented
 - [x] Event handler error isolation pattern
 - [x] Magic Remote pointer mode behavior
+- [x] Centralized logging interface
+- [x] Startup time budget defined
+- [x] Unified retry policy
+- [x] Accessibility test commands

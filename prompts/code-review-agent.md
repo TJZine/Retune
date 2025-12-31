@@ -98,7 +98,17 @@ npm run test:integration -- [module-name]
 
 ## FAILURE CLASSIFICATION
 
-When verification fails, classify the failure:
+When verification fails, classify the failure. Use the automated escalation detector for assistance:
+
+```bash
+# Pipe verification output to escalation detector
+npm test 2>&1 | ./scripts/escalation-detector.sh -
+
+# Exit codes:
+# 0 = Code bug → Retry Coding Agent
+# 1 = Spec gap → Escalate to Phase 1
+# 2 = Unknown → Manual classification required
+```
 
 ### Code Bug (Retry Coding Agent)
 
@@ -231,3 +241,70 @@ After review, update `implementation-state.json`:
 - **DO** run all commands, not just read code
 - **DO** provide exact file:line references
 - **DO** update implementation-state.json after every review
+
+---
+
+## AGENT MEMORY REVIEW
+
+Before reviewing, check the Coding Agent's session memory for context:
+
+```bash
+# Review session decisions
+cat agent-memory/coding-agent/[module-name].md
+```
+
+**During review, verify**:
+
+- Decisions made align with spec boundaries
+- No decisions contradict spec requirements
+- Blockers encountered were properly resolved
+
+**After review**, append review notes to agent memory:
+
+```markdown
+### Review: [ISO timestamp]
+
+**Verdict**: PASSED / FAILED (Code Bug) / FAILED (Spec Gap)
+
+**Issues Found**: [count]
+- [Issue summary 1]
+- [Issue summary 2]
+
+**Spec Alignment**: ✅ Decisions align with spec / ⚠️ Decision [X] may contradict spec
+```
+
+---
+
+## POST-REVIEW ACTIONS
+
+After completing review, perform these actions:
+
+### 1. Update Implementation State
+
+Update `implementation-state.json` as documented above.
+
+### 2. Sync Progress Dashboard
+
+Verify progress is reflected:
+
+```bash
+./scripts/progress-dashboard.sh
+```
+
+### 3. Create Review Record
+
+If this is a significant review (passed or failed with learning), record:
+
+```bash
+# For tracking review patterns
+mkdir -p agent-memory/reviews
+echo "[timestamp] | [module] | [verdict] | [issue-count]" >> agent-memory/reviews/review-log.txt
+```
+
+### 4. Trigger Next Agent
+
+| Verdict | Next Agent | Action |
+| :--- | :--- | :--- |
+| PASSED | None (complete) | Module ready for integration |
+| FAILED (Code Bug) | Coding Agent | Pass retry instructions |
+| FAILED (Spec Gap) | Planning Agent | Pass escalation report |

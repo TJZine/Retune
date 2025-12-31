@@ -550,6 +550,129 @@ Overall AI Readiness: [XX]%
 
 ---
 
+## PHASE 10: Orchestration Workflow Validation
+
+This phase ensures the Planning Agent → Coding Agent handoff is properly structured for deterministic implementation.
+
+### 10.1 Orchestration Template Check
+
+Verify orchestration document template exists and is complete:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `prompts/templates/orchestration-document.md` exists | ✅/❌ | |
+| Template includes session metadata section | ✅/❌ | |
+| Template includes dependency check table | ✅/❌ | |
+| Template references SSOT (not copies) | ✅/❌ | |
+| Template includes failure handling matrix | ✅/❌ | |
+| Template includes deliverables checklist | ✅/❌ | |
+
+### 10.2 Planning Agent Integration Check
+
+Verify the Planning Agent prompt is updated to create orchestration documents:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `planning-agent.md` includes orchestration step | ✅/❌ | |
+| Step sequence: Context Handoff → Orchestration Doc | ✅/❌ | |
+| Orchestration doc references (not copies) prompts | ✅/❌ | |
+| Session state tracking specified | ✅/❌ | |
+
+### 10.3 Implementation State Machine Check
+
+Verify `implementation-state.json` (Artifact 10) supports session tracking:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| Module status enum includes `pending`, `in-progress`, `review`, `complete`, `blocked` | ✅/❌ | |
+| Session ID field supported | ✅/❌ | |
+| Attempt counter supported | ✅/❌ | |
+| Blocked reason tracking | ✅/❌ | |
+
+### 10.4 Gate Script Check
+
+Verify automated pre-flight gate checking exists:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `scripts/gate-check.sh` exists and is executable | ✅/❌ | |
+| Script checks dependency status from implementation-state.json | ✅/❌ | |
+| Script verifies shared-types compile | ✅/❌ | |
+| Script checks context handoff exists | ✅/❌ | |
+| Script checks orchestration document exists | ✅/❌ | |
+| Script outputs pass/fail with clear messaging | ✅/❌ | |
+
+### 10.5 Agent Memory System Check
+
+Verify session persistence for cross-session context:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `prompts/agent-memory-system.md` defines memory format | ✅/❌ | |
+| `agent-memory/` directory structure specified | ✅/❌ | |
+| Session JSON format defined with required fields | ✅/❌ | |
+| Session markdown format defined for human readability | ✅/❌ | |
+| `coding-agent.md` references agent memory system | ✅/❌ | |
+| Previous attempt context available to retry sessions | ✅/❌ | |
+| Memory retention policy defined | ✅/❌ | |
+
+### 10.6 Escalation Detection Check
+
+Verify automatic detection of spec gaps vs code bugs:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `scripts/escalation-detector.sh` exists and is executable | ✅/❌ | |
+| Spec gap patterns defined (ambiguity, missing types, contradictions) | ✅/❌ | |
+| Code bug patterns defined (compile errors, test failures, runtime) | ✅/❌ | |
+| Script outputs clear ESCALATE vs RETRY decision | ✅/❌ | |
+| Exit codes documented (0=retry, 1=escalate, 2=unknown) | ✅/❌ | |
+| Integration with implementation-state.json documented | ✅/❌ | |
+
+### 10.7 Progress Dashboard Check
+
+Verify implementation progress visualization:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `scripts/progress-dashboard.sh` exists and is executable | ✅/❌ | |
+| Displays per-phase breakdown | ✅/❌ | |
+| Shows module status with visual indicators | ✅/❌ | |
+| Displays blocked reasons when applicable | ✅/❌ | |
+| Shows overall progress percentage | ✅/❌ | |
+| Shows estimated remaining LoC | ✅/❌ | |
+
+### 10.8 CI/CD Integration Check
+
+Verify continuous integration pipeline exists:
+
+| Check | Status | Notes |
+| :--- | :--- | :--- |
+| `.github/workflows/ci.yml` exists | ✅/❌ | |
+| Pipeline includes lint step | ✅/❌ | |
+| Pipeline includes type-check step | ✅/❌ | |
+| Pipeline includes test step | ✅/❌ | |
+| Pipeline includes build step | ✅/❌ | |
+| Pipeline triggers on push/PR to main branches | ✅/❌ | |
+
+### 10.9 Orchestration Workflow Score
+
+```text
+Template Completeness: [XX]%
+Agent Integration: [XX]%
+State Tracking: [XX]%
+Gate Automation: [XX]%
+Agent Memory: [XX]%
+Escalation Detection: [XX]%
+Progress Visibility: [XX]%
+CI/CD: [XX]%
+Overall Orchestration: [XX]%
+```
+
+**GATE**: If Orchestration Score < 90%, fix workflow gaps before proceeding to implementation.
+
+---
+
 ## OUTPUT FORMAT
 
 ## Executive Summary
@@ -576,6 +699,7 @@ Overall AI Readiness: [XX]%
 | 7. Implementation Prompts | XX% | 🟢 / 🟡 / 🔴 |
 | 8. Traceability | XX% | 🟢 / 🟡 / 🔴 |
 | 9. AI Readiness | XX% | 🟢 / 🟡 / 🔴 |
+| 10. Orchestration Workflow | XX% | 🟢 / 🟡 / 🔴 |
 | **OVERALL** | **XX%** | **STATUS** |
 
 ## Readiness Assessment
@@ -707,15 +831,16 @@ After fix, grep for `StreamDescriptor` - all references should resolve.
 
 | Phase | Weight | Rationale |
 | :--- | :--- | :--- |
-| Structural Completeness | 12% | Foundation must exist |
-| Type System Integrity | 18% | Types are contracts |
-| Interface Contracts | 17% | Defines module boundaries |
-| Dependencies & Integration | 12% | Modules must connect |
-| Implementability | 13% | Must be buildable |
+| Structural Completeness | 10% | Foundation must exist |
+| Type System Integrity | 16% | Types are contracts |
+| Interface Contracts | 15% | Defines module boundaries |
+| Dependencies & Integration | 10% | Modules must connect |
+| Implementability | 12% | Must be buildable |
 | Test Specifications | 5% | Verification coverage |
-| Implementation Prompts | 8% | AI agent usability (critical for workflow) |
-| Traceability | 5% | Requirements coverage |
-| **AI Readiness** | **10%** | **Determinism for coding agents** |
+| Implementation Prompts | 8% | AI agent usability |
+| Traceability | 4% | Requirements coverage |
+| AI Readiness | 10% | Determinism for coding agents |
+| **Orchestration Workflow** | **10%** | **Planning → Coding handoff** |
 
 ---
 

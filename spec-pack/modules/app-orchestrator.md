@@ -37,7 +37,7 @@ export interface IAppOrchestrator {
   closeEPG(): void;
   toggleEPG(): void;
   
-  // Error Handling (CRITICAL)
+  // Error Handling (CRITICAL - Complete Error Type Coverage)
   /**
    * Handle a global application error with user-facing recovery options.
    * Displays error overlay with appropriate message and actions.
@@ -56,6 +56,62 @@ export interface IAppOrchestrator {
     moduleId: string,
     handler: (error: AppError) => boolean
   ): void;
+  
+  /**
+   * Get recovery actions for a specific error type.
+   * Used by error UI to display appropriate buttons.
+   */
+  getRecoveryActions(errorCode: OrchestratorErrorCode): ErrorRecoveryAction[];
+}
+
+/**
+ * All error types the orchestrator must handle with specific recovery strategies.
+ * Each error type maps to predefined recovery actions.
+ */
+type OrchestratorErrorCode =
+  // Authentication Errors
+  | 'AUTH_REQUIRED'        // No stored credentials → show auth screen
+  | 'AUTH_EXPIRED'         // Token expired → re-validate or re-auth
+  | 'AUTH_INVALID'         // Token rejected → clear credentials, show auth
+  | 'AUTH_RATE_LIMITED'    // Too many attempts → wait and retry
+  
+  // Network Errors
+  | 'NETWORK_OFFLINE'      // No connectivity → show retry, wait for reconnect
+  | 'NETWORK_TIMEOUT'      // Request timeout → retry with backoff
+  | 'SERVER_UNREACHABLE'   // Plex server offline → offer server selection
+  | 'SERVER_SSL_ERROR'     // Certificate issue → warn user, offer proceed
+  
+  // Playback Errors
+  | 'STREAM_NOT_FOUND'     // 404 on stream → skip to next item
+  | 'STREAM_DECODE_ERROR'  // Codec issue → try transcode, then skip
+  | 'STREAM_NETWORK_ERROR' // Mid-playback disconnect → retry, then skip
+  | 'TRANSCODE_FAILED'     // Server can't transcode → skip item
+  
+  // Content Errors  
+  | 'CHANNEL_EMPTY'        // No content in channel → prompt configuration
+  | 'CONTENT_UNAVAILABLE'  // Plex item deleted → refresh library, skip
+  | 'LIBRARY_UNAVAILABLE'  // Library deleted → prompt reconfiguration
+  
+  // Storage Errors
+  | 'STORAGE_QUOTA'        // localStorage full → cleanup, notify user
+  | 'STORAGE_CORRUPTED'    // Invalid JSON → clear and restart
+  
+  // Module Errors
+  | 'MODULE_INIT_FAILED'   // Module didn't start → retry or degrade
+  | 'MODULE_CRASH'         // Runtime error → restart module
+  
+  // Critical Errors
+  | 'INITIALIZATION_FAILED' // App can't start → retry or exit
+  | 'UNRECOVERABLE';        // Fatal error → exit app
+
+/**
+ * Recovery action definition for error handling UI
+ */
+interface ErrorRecoveryAction {
+  label: string;           // Button text
+  action: () => void;      // Handler function
+  isPrimary: boolean;      // Primary button styling
+  requiresNetwork: boolean; // Grey out if offline
 }
 
 /**

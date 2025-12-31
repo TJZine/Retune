@@ -4,11 +4,48 @@
   "specPackVersion": "1.0.0",
   "currentPhase": 1,
   "phases": {
-    "1": { "name": "Core Infrastructure", "status": "pending", "modules": ["event-emitter", "plex-auth", "app-lifecycle", "navigation"] },
-    "2": { "name": "Plex Integration", "status": "pending", "modules": ["plex-server-discovery", "plex-library", "plex-stream-resolver"] },
-    "3": { "name": "Core Playback (MVP)", "status": "pending", "modules": ["video-player", "channel-manager", "channel-scheduler"] },
-    "4": { "name": "Full EPG Experience", "status": "pending", "modules": ["epg-ui"] },
-    "5": { "name": "Integration & Polish", "status": "pending", "modules": ["app-orchestrator"] }
+    "1": {
+      "name": "Core Infrastructure",
+      "status": "pending",
+      "modules": [
+        "event-emitter",
+        "plex-auth",
+        "app-lifecycle",
+        "navigation"
+      ]
+    },
+    "2": {
+      "name": "Plex Integration",
+      "status": "pending",
+      "modules": [
+        "plex-server-discovery",
+        "plex-library",
+        "plex-stream-resolver"
+      ]
+    },
+    "3": {
+      "name": "Core Playback (MVP)",
+      "status": "pending",
+      "modules": [
+        "video-player",
+        "channel-manager",
+        "channel-scheduler"
+      ]
+    },
+    "4": {
+      "name": "Full EPG Experience",
+      "status": "pending",
+      "modules": [
+        "epg-ui"
+      ]
+    },
+    "5": {
+      "name": "Integration & Polish",
+      "status": "pending",
+      "modules": [
+        "app-orchestrator"
+      ]
+    }
   },
   "modules": {
     "event-emitter": {
@@ -19,12 +56,20 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 1,
-      "estimatedLoC": 80
+      "estimatedLoC": 80,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "plex-auth": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["event-emitter"],
+      "blockedBy": [
+        "event-emitter"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -34,7 +79,9 @@
     "app-lifecycle": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["event-emitter"],
+      "blockedBy": [
+        "event-emitter"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -44,7 +91,9 @@
     "navigation": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["event-emitter"],
+      "blockedBy": [
+        "event-emitter"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -54,7 +103,9 @@
     "plex-server-discovery": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["plex-auth"],
+      "blockedBy": [
+        "plex-auth"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -64,7 +115,10 @@
     "plex-library": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["plex-auth", "plex-server-discovery"],
+      "blockedBy": [
+        "plex-auth",
+        "plex-server-discovery"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -74,7 +128,10 @@
     "plex-stream-resolver": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["plex-auth", "plex-server-discovery"],
+      "blockedBy": [
+        "plex-auth",
+        "plex-server-discovery"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -84,7 +141,9 @@
     "channel-manager": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["plex-library"],
+      "blockedBy": [
+        "plex-library"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -94,7 +153,9 @@
     "channel-scheduler": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["channel-manager"],
+      "blockedBy": [
+        "channel-manager"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -104,7 +165,9 @@
     "video-player": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["plex-stream-resolver"],
+      "blockedBy": [
+        "plex-stream-resolver"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -114,7 +177,11 @@
     "epg-ui": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["navigation", "channel-scheduler", "channel-manager"],
+      "blockedBy": [
+        "navigation",
+        "channel-scheduler",
+        "channel-manager"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,
@@ -124,7 +191,16 @@
     "app-orchestrator": {
       "status": "pending",
       "specVersion": "1.0.0",
-      "blockedBy": ["app-lifecycle", "navigation", "plex-auth", "plex-library", "channel-manager", "channel-scheduler", "video-player", "epg-ui"],
+      "blockedBy": [
+        "app-lifecycle",
+        "navigation",
+        "plex-auth",
+        "plex-library",
+        "channel-manager",
+        "channel-scheduler",
+        "video-player",
+        "epg-ui"
+      ],
       "implementedBy": null,
       "reviewedBy": null,
       "verificationPassed": null,

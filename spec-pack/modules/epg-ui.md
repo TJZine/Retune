@@ -388,6 +388,7 @@ class EPGVirtualizer {
   
   private readonly ROW_BUFFER = 2;
   private readonly TIME_BUFFER_MINUTES = 60;
+  private readonly MAX_POOL_SIZE = 250; // Recycle when exceeded
   
   calculateVisibleRange(state: EPGState): VirtualizedGridState {
     const { scrollPosition } = state;
@@ -446,6 +447,122 @@ class EPGVirtualizer {
     }
     
     this.visibleCells = newVisibleCells;
+  }
+  
+  /**
+   * DOM Element Pool Management (CRITICAL)
+   * Reuses DOM elements to minimize GC pressure and maintain 60fps
+   */
+  
+  /**
+   * Get an element from the pool or create a new one if pool is empty.
+   * Pool elements are cleaned of previous content before reuse.
+   */
+  private getOrCreateElement(): HTMLElement {
+    // Check pool for reusable element
+    for (const [key, element] of this.elementPool) {
+      this.elementPool.delete(key);
+      this.resetElement(element);
+      return element;
+    }
+    
+    // Create new element if pool is empty
+    const element = document.createElement('div');
+    element.className = 'epg-cell';
+    element.innerHTML = `
+      <div class="epg-cell-title"></div>
+      <div class="epg-cell-time"></div>
+    `;
+    return element;
+  }
+  
+  /**
+   * Return an element to the pool for later reuse.
+   * If pool exceeds MAX_POOL_SIZE, remove oldest entries.
+   */
+  private recycleElement(key: string, cell: EPGProgramCell): void {
+    const element = cell.cellElement;
+    if (!element) return;
+    
+    // Remove from DOM but don't destroy
+    element.remove();
+    element.classList.remove('focused', 'current');
+    
+    // Add to pool with unique key
+    const poolKey = `pool-${Date.now()}-${Math.random()}`;
+    this.elementPool.set(poolKey, element);
+    
+    // Prevent pool from growing unbounded
+    if (this.elementPool.size > this.MAX_POOL_SIZE) {
+      const oldestKey = this.elementPool.keys().next().value;
+      if (oldestKey) {
+        this.elementPool.delete(oldestKey);
+      }
+    }
+  }
+  
+  /**
+   * Reset element content for reuse.
+   * Clears text content and inline styles, keeps structure.
+   */
+  private resetElement(element: HTMLElement): void {
+    const title = element.querySelector('.epg-cell-title');
+    const time = element.querySelector('.epg-cell-time');
+    if (title) title.textContent = '';
+    if (time) time.textContent = '';
+    
+    // Reset positioning
+    element.style.left = '';
+    element.style.width = '';
+    element.style.top = '';
+    
+    // Remove state classes
+    element.classList.remove('focused', 'current');
+    element.removeAttribute('data-key');
+  }
+  
+  /**
+   * Render a cell to the DOM using a pooled or new element.
+   */
+  private renderCell(key: string, cell: EPGProgramCell): void {
+    const element = this.getOrCreateElement();
+    
+    // Set content
+    const title = element.querySelector('.epg-cell-title');
+    const time = element.querySelector('.epg-cell-time');
+    if (title) title.textContent = cell.program.item.title;
+    if (time) time.textContent = this.formatTimeRange(cell.program);
+    
+    // Calculate position
+    const startMinutes = (cell.program.scheduledStartTime - this.state.currentDayStart) / 60000;
+    const durationMinutes = cell.program.item.durationMs / 60000;
+    
+    element.style.left = `${startMinutes * this.config.pixelsPerMinute}px`;
+    element.style.width = `${durationMinutes * this.config.pixelsPerMinute}px`;
+    element.style.top = `${cell.rowIndex * this.config.rowHeight}px`;
+    element.setAttribute('data-key', key);
+    
+    // Mark current program
+    if (this.isProgramCurrent(cell.program)) {
+      element.classList.add('current');
+    }
+    
+    // Append to grid
+    this.gridContainer.appendChild(element);
+    cell.cellElement = element;
+  }
+  
+  /**
+   * Force recycle all elements when memory pressure detected.
+   */
+  forceRecycleAll(): void {
+    for (const [key, cell] of this.visibleCells) {
+      this.recycleElement(key, cell);
+    }
+    this.visibleCells.clear();
+    
+    // Clear pool completely to free memory
+    this.elementPool.clear();
   }
 }
 ```
