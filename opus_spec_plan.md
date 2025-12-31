@@ -136,10 +136,18 @@ export type { PublicType } from './types';
 1. [Specific requirement with acceptance criteria]
 2. [Another requirement]
 
-### MUST NOT:
+### MUST NOT (Negative Requirements):
 
-1. [Anti-pattern to avoid]
-2. [Another thing not to do]
+1. [Anti-pattern to avoid with rationale]
+2. [Security constraint - e.g., "MUST NOT cache credentials beyond session"]
+3. [Performance constraint - e.g., "MUST NOT block main thread >16ms"]
+4. [Scope constraint - e.g., "MUST NOT handle X — that's [other module]'s responsibility"]
+
+### Performance Budgets:
+
+| Operation | Max Time | Max Memory | Notes |
+|-----------|----------|------------|-------|
+| [operation] | <Xms | +XMB | [constraint rationale] |
 
 ### State Management:
 
@@ -455,6 +463,104 @@ A checklist for validating the complete implementation:
 - [ ] Runs on webOS 4.0 emulator
 - [ ] Memory usage under 200MB after 1 hour
 - [ ] No console errors during normal operation
+
+---
+
+## ARTIFACT 9: Context Handoff Protocol
+
+For EACH module, create a context handoff document for the Coding Agent:
+
+```markdown
+## Module: [MODULE_NAME]
+
+### SSOT References
+| Concept | File | Lines |
+| :--- | :--- | :--- |
+| Interface | shared-types.ts | L[X]-[Y] |
+| Requirements | [module].spec.md | L[X]-[Y] |
+| Tests | [module].spec.md | L[X]-[Y] |
+
+### Active Assumptions
+1. [Decision made during spec/review that coding agent MUST honor]
+
+### Scope Boundaries
+| IN Scope | OUT of Scope |
+| :--- | :--- |
+| [Feature X] | [Feature Y - handled by Module Z] |
+
+### Verification Commands
+\`\`\`bash
+npx tsc --noEmit
+npm test -- --grep "[ModuleName]"
+\`\`\`
+
+### Rollback Procedure
+1. `git checkout -- src/modules/[module-name]/`
+2. Re-request implementation with updated context
+```
+
+---
+
+## ARTIFACT 10: Implementation State Machine
+
+Track progress across separate agent sessions:
+
+```json
+{
+  "version": "1.0.0",
+  "lastUpdated": "[ISO timestamp]",
+  "currentPhase": 1,
+  "modules": {
+    "[module-name]": {
+      "status": "pending|in-progress|review|complete|blocked",
+      "specVersion": "1.0.0",
+      "blockedBy": ["[dependency-modules]"],
+      "implementedBy": null,
+      "reviewedBy": null,
+      "verificationPassed": null,
+      "contextHandoff": "context-handoff/[module-name].md"
+    }
+  },
+  "phases": {
+    "1": { "name": "Core Infrastructure", "status": "pending" }
+  }
+}
+```
+
+**Update Protocol**:
+
+1. Planning Agent initializes with `pending` status
+2. Coding Agent updates to `in-progress` before starting
+3. Coding Agent updates to `review` after implementation
+4. Code Review Agent updates to `complete` or `blocked`
+
+---
+
+## ARTIFACT 11: Agent Memory Template
+
+For each agent session, record decisions for future sessions:
+
+```markdown
+# Agent Memory: [Agent Name]
+
+## Session: [ISO timestamp]
+
+### Module: [module-name]
+
+### Decisions Made (within spec boundaries)
+- [Decision with rationale]
+
+### Blockers Encountered
+- [Blocker and resolution]
+
+### Files Modified
+- [List of files]
+
+### Open Questions
+- [Any questions for next session]
+```
+
+Save to: `agent-memory/[agent-name]/[module-name].md`
 
 ---
 

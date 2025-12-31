@@ -234,19 +234,37 @@ Scan specs for ambiguous language and unclear requirements:
 
 **Ambiguity Markers** (flag these phrases):
 
+**Vague Intent:**
+
 - "should probably"
 - "might need to"
 - "as appropriate"
 - "etc."
-
 - "and so on"
 - "similar to"
 - "something like"
+
+**Incomplete Specification:**
+
 - "TBD"
 - "TODO"
 - "to be determined"
 - "implementation detail"
 - "left as exercise"
+
+**AI-Problematic Phrases** (commonly cause implementation drift):
+
+- "appropriately" (e.g., "handle appropriately")
+- "as needed"
+- "if necessary"
+- "standard practice"
+- "best practice"
+- "where applicable"
+- "consider" (without explicit decision criteria)
+- "may" (without explicit conditions)
+- "typically" / "usually" / "often" (implies exceptions not specified)
+- "reasonable" (e.g., "reasonable timeout")
+- "suitable" / "appropriate" (without criteria)
 
 ### Ambiguities Found
 
@@ -331,28 +349,96 @@ For each test case specified, verify:
 | :--- | :--- | :--- | :--- |
 | | | "Too vague" / "No assertion" / "Missing edge case" | |
 
-### 6.3 Test Score
+### 6.3 Integration Test Matrix
+
+Verify cross-module interactions are specified:
+
+| Module A | Module B | Scenario | Expected Result | Specified |
+| :--- | :--- | :--- | :--- | :--- |
+| Scheduler | VideoPlayer | Program ends mid-stream | Graceful transition | ✅/❌ |
+| PlexAuth | PlexLibrary | Token expires during request | Re-auth and retry | ✅/❌ |
+| Navigation | EPG | Focus moves off-screen | Scroll to maintain visibility | ✅/❌ |
+
+### Missing Integration Tests
+
+| Module Pair | Missing Scenario | Impact |
+| :--- | :--- | :--- |
+| | | |
+
+### 6.4 Performance Budget Verification
+
+For resource-constrained platforms, verify performance requirements are explicit:
+
+| Operation | Budget Specified | Value | Adequate |
+| :--- | :--- | :--- | :--- |
+| Token validation | ✅/❌ | <100ms | ✅/⚠️/❌ |
+| Channel switch | ✅/❌ | <500ms | ✅/⚠️/❌ |
+| EPG scroll frame | ✅/❌ | <16ms | ✅/⚠️/❌ |
+| Memory per module | ✅/❌ | <50MB | ✅/⚠️/❌ |
+
+### 6.5 Negative Requirements Check
+
+Verify each module spec includes explicit "MUST NOT" section:
+
+| Module | Has Negative Requirements | Count | Adequate |
+| :--- | :--- | :--- | :--- |
+| | ✅/❌ | X | ✅/⚠️/❌ |
+
+### Missing Negative Requirements
+
+Common patterns that should be specified:
+
+- Security: "MUST NOT cache credentials beyond session"
+- Performance: "MUST NOT block main thread for >16ms"
+- Scope: "MUST NOT handle [X] — that's [other module]'s responsibility"
+
+| Module | Missing Negative Requirement | Impact |
+| :--- | :--- | :--- |
+| | | |
+
+### 6.6 Test Score
 
 ```text
-Test Coverage: [XX]%
-Test Specificity: [XX]%
+Unit Test Coverage: [XX]%
+Integration Test Coverage: [XX]%
+Performance Budgets Specified: [XX]%
+Negative Requirements Coverage: [XX]%
+Overall Test Score: [XX]%
 ```
 
 ---
 
 ## PHASE 7: Implementation Prompt Quality
 
-### 7.1 Prompt Self-Containment Check
+### 7.1 Prompt Self-Sufficiency Test
 
-Each implementation prompt should work WITHOUT referencing other files:
+Each implementation prompt MUST work WITHOUT referencing other files. A coding agent should be able to implement SOLELY from the prompt.
 
-### Prompt Self-Containment Audit
+### Self-Sufficiency Audit
 
-| Module Prompt | Has Context | Has Interface | Has Types | Has Tests | Has Constraints | Score |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| plex-auth.prompt.md | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | X/5 |
+For EACH prompt, verify:
 
-### 7.2 Prompt Clarity Check
+| Check | Prompt | Status | Issue |
+| :--- | :--- | :--- | :--- |
+| Contains COMPLETE interface (not "see shared-types.ts") | | ✅/❌ | |
+| Contains ALL type definitions actually referenced | | ✅/❌ | |
+| Contains ALL constants/config values inline | | ✅/❌ | |
+| Contains EXACT test assertions (not "should work correctly") | | ✅/❌ | |
+| Contains EXACT error message strings | | ✅/❌ | |
+| Contains NO external file references | | ✅/❌ | |
+| Contains verification commands | | ✅/❌ | |
+
+### 7.2 Prompt Context Completeness
+
+Each prompt MUST include:
+
+- [ ] Target file paths (exact, not "in appropriate location")
+- [ ] All dependencies with versions
+- [ ] Platform constraints relevant to this module
+- [ ] Memory/performance budgets if applicable
+- [ ] Integration test scenarios with other modules
+
+### 7.3 Prompt Clarity Check
 
 Verify prompts are unambiguous:
 
@@ -362,13 +448,17 @@ Verify prompts are unambiguous:
 | :--- | :--- | :--- | :--- |
 | | Missing constraint | No memory limit mentioned | Add constraint |
 | | Ambiguous output | "Return appropriate error" | Specify error type |
+| | External reference | "See shared-types.ts for type" | Inline the type definition |
 
-### 7.3 Prompt Score
+### 7.4 Prompt Score
 
 ```text
-Self-Containment: [XX]%
+Self-Sufficiency: [XX]%
+Context Completeness: [XX]%
 Clarity: [XX]%
 ```
+
+**GATE**: If Self-Sufficiency < 90%, prompts require revision before coding agent handoff.
 
 ---
 
@@ -404,6 +494,62 @@ Backward Traceability (Spec → Plan): [XX]%
 
 ---
 
+## PHASE 9: AI Implementation Readiness
+
+This phase validates that specs are mechanically actionable for AI coding agents, not just human-readable.
+
+### 9.1 Deterministic Implementation Check
+
+For EACH module spec, verify the following are EXPLICIT (not implied):
+
+| Check | Module | Status | Issue |
+| :--- | :--- | :--- | :--- |
+| All algorithms have pseudocode (not prose descriptions) | | ✅/❌ | |
+| All edge cases enumerated (no "handle appropriately") | | ✅/❌ | |
+| All config values explicit (no defaults buried in prose) | | ✅/❌ | |
+| All error codes/messages specified verbatim | | ✅/❌ | |
+| Return types exhaustive (no implicit `undefined` paths) | | ✅/❌ | |
+| Async boundaries explicit (`Promise<T>` vs `T`) | | ✅/❌ | |
+
+### 9.2 Copy-Paste Sufficiency Test
+
+For EACH method in EACH interface:
+
+- [ ] Implementation possible SOLELY from spec (no external docs needed)
+- [ ] All referenced types are fully defined inline or in shared-types
+- [ ] All error conditions have explicit recovery strategies
+- [ ] All validation rules have exact criteria (not "valid email" but regex/rules)
+
+### Missing Determinism Found
+
+| Module | Method/Section | Issue | Required Clarification |
+| :--- | :--- | :--- | :--- |
+| | | "handle errors appropriately" | List specific errors and recovery actions |
+
+### 9.3 Spec Gap Detection
+
+Verify no gaps exist that would force coding agent to make assumptions:
+
+| Gap Type | Module | Location | Impact | Resolution |
+| :--- | :--- | :--- | :--- | :--- |
+| Missing type definition | | | | |
+| Ambiguous behavior | | | | |
+| Contradicting requirements | | | | |
+| Unspecified edge case | | | | |
+
+### 9.4 AI Readiness Score
+
+```text
+Determinism: [XX]%
+Self-Sufficiency: [XX]%
+Ambiguity-Free: [XX]%
+Overall AI Readiness: [XX]%
+```
+
+**GATE**: If AI Readiness < 95%, specs require revision before Phase 2 (Implementation).
+
+---
+
 ## OUTPUT FORMAT
 
 ## Executive Summary
@@ -429,6 +575,7 @@ Backward Traceability (Spec → Plan): [XX]%
 | 6. Test Specifications | XX% | 🟢 / 🟡 / 🔴 |
 | 7. Implementation Prompts | XX% | 🟢 / 🟡 / 🔴 |
 | 8. Traceability | XX% | 🟢 / 🟡 / 🔴 |
+| 9. AI Readiness | XX% | 🟢 / 🟡 / 🔴 |
 | **OVERALL** | **XX%** | **STATUS** |
 
 ## Readiness Assessment
@@ -560,14 +707,15 @@ After fix, grep for `StreamDescriptor` - all references should resolve.
 
 | Phase | Weight | Rationale |
 | :--- | :--- | :--- |
-| Structural Completeness | 15% | Foundation must exist |
-| Type System Integrity | 20% | Types are contracts |
-| Interface Contracts | 20% | Defines module boundaries |
-| Dependencies & Integration | 15% | Modules must connect |
-| Implementability | 15% | Must be buildable |
+| Structural Completeness | 12% | Foundation must exist |
+| Type System Integrity | 18% | Types are contracts |
+| Interface Contracts | 17% | Defines module boundaries |
+| Dependencies & Integration | 12% | Modules must connect |
+| Implementability | 13% | Must be buildable |
 | Test Specifications | 5% | Verification coverage |
-| Implementation Prompts | 5% | AI agent usability |
+| Implementation Prompts | 8% | AI agent usability (critical for workflow) |
 | Traceability | 5% | Requirements coverage |
+| **AI Readiness** | **10%** | **Determinism for coding agents** |
 
 ---
 
@@ -601,6 +749,226 @@ When re-running this review after improvements:
 ## New Issues Found
 
 - 🆕 MINOR-015: [Introduced by fix to BLOCK-001]
+
+---
+
+## META DEVELOPMENT WORKFLOW
+
+This review prompt is part of a multi-agent AI development workflow. Understanding the workflow context ensures consistent review practices.
+
+### Two-Phase Workflow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PHASE 1: SPEC GENERATION & REVIEW                      │
+│                       (Loops until ≥95% on this prompt)                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────────┐          ┌──────────────┐                               │
+│   │   SPEC GEN   │─────────▶│ PLAN REVIEW  │◀─────────┐                    │
+│   │   AGENT      │          │   AGENT      │          │                    │
+│   └──────────────┘          └──────────────┘          │                    │
+│         │                         │                   │                    │
+│         ▼                         ▼                   │                    │
+│   spec-pack/               review-vN.md               │                    │
+│   modules/*.md             issue-registry.md          │                    │
+│                                   │                   │                    │
+│                                   ▼                   │                    │
+│                          ┌──────────────┐             │                    │
+│                          │  Score < 95% │─────────────┘                    │
+│                          │  or BLOCKING │   (iterate)                      │
+│                          └──────────────┘                                  │
+│                                   │                                        │
+│                                   ▼ (Score ≥ 95%, no BLOCKING)             │
+│                          ┌──────────────┐                                  │
+│                          │   PHASE 1    │                                  │
+│                          │   COMPLETE   │                                  │
+│                          └──────────────┘                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 2: IMPLEMENTATION (per module)                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────────┐          ┌──────────────┐          ┌──────────────┐     │
+│   │   PLANNING   │─────────▶│   CODING     │─────────▶│ CODE REVIEW  │     │
+│   │   AGENT      │          │   AGENT      │          │   AGENT      │     │
+│   └──────────────┘          └──────────────┘          └──────────────┘     │
+│                                                             │              │
+│                                                   ┌─────────┴─────────┐    │
+│                                                   │ Code bug? → Retry │    │
+│                                                   │ Spec gap? → Phase 1│   │
+│                                                   └───────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Agent Execution Model
+
+- **Separate sessions**: Each agent runs in its own context window
+- **Sequential within phase**: Agents run one after another
+- **Phase-based parallelism**: Multiple modules per phase if context allows
+- **Spec is SSOT**: Coding Agent never modifies specs
+
+---
+
+## SPEC MUTATION POLICY
+
+When this review finds issues, use the **hybrid approach**:
+
+### Issue Resolution Process
+
+1. **Plan Review Agent** runs this META prompt
+2. **On each pass**: Create `issue-registry-vN.md` with ALL issues found
+3. **Spec Gen Agent** receives registry and fixes ALL non-blocking issues
+4. **Plan Review Agent** runs again
+5. **Repeat until score ≥ 95% AND zero BLOCKING issues**
+
+### Issue Registry Format
+
+```markdown
+# Issue Registry v[N]
+
+## Summary
+- Total issues: [count]
+- Blocking: [count]
+- Major: [count]
+- Minor: [count]
+
+## Blocking Issues
+### BLOCK-001: [Title]
+- **Location**: [file:line]
+- **Fix Required**: [specific action]
+- **Cascading Impact**: [other affected areas]
+
+## Major Issues
+...
+```
+
+---
+
+## FAILURE HANDLING POLICY
+
+When Code Review Agent detects failures during Phase 2:
+
+### Two-Tier Escalation
+
+| Failure Type | Example | Action |
+| :--- | :--- | :--- |
+| **Code bug** | Test fails, type error, runtime crash | Retry Coding Agent with error log |
+| **Spec gap** | Assertion impossible, ambiguous spec | Escalate to Phase 1 |
+
+### Spec Gap Indicators
+
+A failure is a **spec gap** (not a code bug) when:
+
+- Test assertion requires behavior not specified in spec
+- Multiple valid interpretations lead to different implementations
+- Spec references type/constant not defined anywhere
+- Spec contradicts itself between sections
+- Recovery strategy for error case is not specified
+
+---
+
+## ADDITIONAL ARTIFACT REQUIREMENTS
+
+Beyond Artifacts 1-8, the spec pack MUST include:
+
+### Artifact 9: Context Handoff Protocol
+
+For EACH module, provide explicit handoff documentation:
+
+```markdown
+## Module: [MODULE_NAME]
+
+### SSOT References
+| Concept | File | Lines |
+| :--- | :--- | :--- |
+| Interface | shared-types.ts | L45-72 |
+| Requirements | module.spec.md | L123-156 |
+
+### Active Assumptions
+1. [Decision made during spec/review that coding agent MUST honor]
+2. [Another decision with rationale]
+
+### Scope Boundaries
+| IN Scope | OUT of Scope |
+| :--- | :--- |
+| [Feature X] | [Feature Y - handled by Module Z] |
+
+### Verification Commands
+\`\`\`bash
+npx tsc --noEmit
+npm test -- --grep "[ModuleName]"
+\`\`\`
+
+### Rollback Procedure
+1. `git checkout -- src/modules/[module-name]/`
+2. Re-request implementation with updated context
+```
+
+### Artifact 10: Implementation State Machine
+
+Track progress across separate agent sessions:
+
+```json
+{
+  "version": "1.0.0",
+  "lastUpdated": "[ISO timestamp]",
+  "currentPhase": 2,
+  "modules": {
+    "plex-auth": {
+      "status": "complete",
+      "specVersion": "1.0.0",
+      "blockedBy": [],
+      "implementedBy": "coding-agent",
+      "reviewedBy": "review-agent",
+      "verificationPassed": true
+    },
+    "channel-scheduler": {
+      "status": "in-progress",
+      "specVersion": "1.0.0",
+      "blockedBy": ["plex-library"],
+      "notes": "Waiting for plex-library types"
+    }
+  }
+}
+```
+
+**Update Protocol**:
+
+1. Planning Agent updates status to `pending` with sequencing
+2. Coding Agent updates to `in-progress` before starting
+3. Coding Agent updates to `review` after implementation
+4. Code Review Agent updates to `complete` or `blocked`
+
+---
+
+## PLANNING AGENT ROLE
+
+The Planning Agent **operationalizes** specs — it does NOT rewrite them.
+
+### Planning Agent Responsibilities
+
+| Do | Don't |
+| :--- | :--- |
+| Create file-level task breakdown from specs | Rewrite interfaces or types |
+| Generate Artifact 9 (Context Handoff) per module | Add new requirements |
+| Update Artifact 10 (Implementation State) | Interpret ambiguous specs |
+| Identify blocked dependencies | Change method signatures |
+| **Escalate spec gaps to Phase 1** | Attempt to fix spec gaps |
+
+### Escalation Triggers
+
+Planning Agent MUST STOP and escalate to Phase 1 if it finds:
+
+- Type referenced but not defined
+- Behavior described ambiguously
+- Contradicting requirements between sections
+- Missing error handling specification
+- Algorithm described in prose without pseudocode
 
 ---
 
