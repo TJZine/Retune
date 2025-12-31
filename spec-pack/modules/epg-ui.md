@@ -14,6 +14,9 @@
 
 Provides the visual program guide interface displaying channels vertically and time horizontally in a grid format. Implements virtualized rendering for performance, focus management for D-pad navigation, and real-time updates with current time indicator. Designed for 10-foot TV viewing experience.
 
+> [!TIP]
+> **Accessibility**: See `accessibility-guidelines.md` for focus ring requirements, color contrast ratios, and text sizing standards for TV displays.
+
 ## Public Interface
 
 ```typescript
@@ -161,11 +164,51 @@ interface EPGInternalState {
 
 ### Error Handling
 
-| Scenario | Handling |
-| -------- | -------- |
-| Schedule not loaded | Show "Loading..." placeholder |
-| Empty channel | Show "No programs" message |
-| Focus on boundary | Return false from navigation |
+| Scenario | Error Type | Handling | User Message |
+| -------- | ---------- | -------- | ------------ |
+| Schedule not loaded | `LOADING` | Show skeleton placeholder | "Loading..." |
+| Empty channel | `EMPTY_CHANNEL` | Show message cell | "No programs scheduled" |
+| Focus on boundary | `NAV_BOUNDARY` | Return false from navigation | (No message) |
+| Render failure | `RENDER_ERROR` | Log error, show fallback row | "Unable to display row" |
+| Data parse error | `PARSE_ERROR` | Skip item, log warning | (Handle silently) |
+| Scroll timeout | `SCROLL_TIMEOUT` | Reset scroll position | (Handle silently) |
+| DOM pool exhausted | `POOL_EXHAUSTED` | Force recycle oldest | (Handle silently) |
+
+**Error Recovery Implementation**:
+
+```typescript
+class EPGErrorBoundary {
+  private errorCounts = new Map<string, number>();
+  private readonly MAX_ERRORS_PER_TYPE = 3;
+  
+  handleError(type: EPGErrorType, context: string, error?: Error): void {
+    const count = (this.errorCounts.get(type) ?? 0) + 1;
+    this.errorCounts.set(type, count);
+    
+    console.warn(`[EPG] ${type} in ${context}:`, error?.message);
+    
+    switch (type) {
+      case 'RENDER_ERROR':
+        // Show fallback row, don't crash entire grid
+        this.showFallbackRow(context);
+        break;
+      case 'SCROLL_TIMEOUT':
+        // Reset to known good state
+        this.resetScrollPosition();
+        break;
+      case 'POOL_EXHAUSTED':
+        // Aggressive cleanup
+        this.forceRecycleAll();
+        break;
+    }
+    
+    // If too many errors, emit degraded mode event
+    if (count >= this.MAX_ERRORS_PER_TYPE) {
+      this.emit('degradedMode', { type, count });
+    }
+  }
+}
+```
 
 ## Layout Specification
 
@@ -742,14 +785,55 @@ describe('EPGComponent', () => {
 ```typescript
 describe('Performance', () => {
   it('should render 5-channel × 3-hour window in <100ms', () => {
-    // Time grid render
+    const start = performance.now();
+    epg.loadChannels(fiveChannels);
+    epg.loadScheduleForChannel(...);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(100);
   });
   
-  it('should maintain 60fps during scroll', () => {
-    // Measure frame times during continuous scroll
+  it('should maintain 60fps during scroll (frame time <16.67ms)', async () => {
+    const frameTimes: number[] = [];
+    let lastFrame = performance.now();
+    
+    // Measure 30 frames during scroll
+    const measureFrame = () => {
+      const now = performance.now();
+      frameTimes.push(now - lastFrame);
+      lastFrame = now;
+    };
+    
+    const rafCallback = (count = 30) => {
+      if (count > 0) {
+        measureFrame();
+        epg.scrollToTime(Date.now() + count * 60000);
+        requestAnimationFrame(() => rafCallback(count - 1));
+      }
+    };
+    
+    rafCallback();
+    await new Promise(r => setTimeout(r, 600)); // Wait for 30 frames
+    
+    // Calculate 95th percentile frame time
+    const sorted = [...frameTimes].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * 0.95)];
+    
+    expect(p95).toBeLessThan(16.67); // 60fps = 16.67ms per frame
+  });
+  
+  it('should maintain DOM element count under 200 during virtualized render', () => {
+    epg.loadChannels(fiftyChannels);
+    const cellCount = document.querySelectorAll('.epg-cell').length;
+    expect(cellCount).toBeLessThan(200);
+  });
+  
+  it('should complete focus transition in <10ms', () => {
+    const start = performance.now();
+    epg.focusProgram(2, 5);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(10);
   });
 });
-```
 
 ## File Structure
 

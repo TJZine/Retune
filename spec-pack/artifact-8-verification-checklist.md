@@ -234,6 +234,9 @@ This checklist validates that the Retune implementation is complete, correct, an
 
 ## Phase 4: Performance Tests
 
+> [!TIP]
+> **Profiling Guide**: Use Chrome DevTools via LG's webOS Developer Mode for profiling. See `performance-profiling-guide.md` for detailed instructions on measuring frame rates, memory usage, and performance bottlenecks on webOS.
+
 ### 4.1 UI Responsiveness
 
 - [ ] Frame rate ≥ 60fps during normal operation

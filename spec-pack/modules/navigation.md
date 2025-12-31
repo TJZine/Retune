@@ -14,6 +14,9 @@
 
 Handles all user input from the LG remote control, translates key codes to semantic actions, manages focus state across the application, implements TV-appropriate navigation patterns, and coordinates screen/modal transitions. This is the central input handling and focus management system.
 
+> [!TIP]
+> **Accessibility**: See `accessibility-guidelines.md` for focus ring visibility requirements, focus trap behavior, and keyboard navigation standards.
+
 ## Public Interface
 
 ```typescript
@@ -466,10 +469,18 @@ registerFocusable(element: FocusableElement): void {
 
 When explicit neighbors are not defined, use geometric analysis to find the best target:
 
+> [!NOTE]
+> **Complexity**: O(n) where n = number of focusable elements.  
+> For typical screens with <50 focusable elements, this completes in <1ms.  
+> For large grids (EPG), use explicit neighbors or FocusGroup for O(1) lookup.
+
 ```typescript
 /**
  * Find the nearest focusable element in a given direction using spatial analysis.
  * Algorithm uses projection overlap and distance to determine best candidate.
+ * 
+ * @complexity O(n) where n = number of focusable elements
+ * @performance Target: <2ms for 50 elements
  */
 private _calculateSpatialNeighbor(
   fromId: string, 

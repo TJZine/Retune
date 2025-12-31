@@ -497,7 +497,7 @@ Estimated Effort: [X hours]
 Priority: Minor issues + suggestions
 Estimated Effort: [X hours]
 
-## Specific Improvements (Detailed)
+## Specific Improvements EXAMPLE (Detailed)
 
 For each issue, provide the EXACT fix:
 

@@ -1002,6 +1002,61 @@ interface IPlexServerDiscovery {
 - All connections fail: Return null, let caller handle
 - Server list empty: Return empty array
 
+### P7: Test Specification
+
+```typescript
+describe('PlexServerDiscovery', () => {
+  describe('getAvailableServers', () => {
+    it('should fetch server list from plex.tv', async () => {
+      mockFetch.mockResolvedValueOnce(mockServerListResponse);
+      const servers = await discovery.getAvailableServers();
+      expect(servers).toHaveLength(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('plex.tv/api/v2/resources'),
+        expect.any(Object)
+      );
+    });
+  });
+  
+  describe('testConnection', () => {
+    it('should return success and latency for working connection', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true });
+      const result = await discovery.testConnection('http://192.168.1.5:32400');
+      expect(result.success).toBe(true);
+      expect(result.latencyMs).toBeGreaterThan(0);
+    });
+    
+    it('should timeout after 5 seconds', async () => {
+      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+      const result = await discovery.testConnection('http://192.168.1.5:32400');
+      expect(result.success).toBe(false);
+    });
+  });
+  
+  describe('findBestConnection', () => {
+    it('should prefer local HTTPS connections', async () => {
+      const server = createServerWithConnections([
+        { uri: 'http://192.168.1.5:32400', local: true },
+        { uri: 'https://192.168.1.5:32400', local: true },
+        { uri: 'https://relay.plex.direct', relay: true }
+      ]);
+      mockAllConnectionsSucceed();
+      
+      const best = await discovery.findBestConnection(server);
+      expect(best?.uri).toBe('https://192.168.1.5:32400');
+    });
+    
+    it('should fall back to relay when direct fails', async () => {
+      mockDirectConnectionsFail();
+      mockRelaySucceeds();
+      
+      const best = await discovery.findBestConnection(server);
+      expect(best?.relay).toBe(true);
+    });
+  });
+});
+```
+
 ### P7: Deliverable
 
 Complete implementation with:
@@ -1092,7 +1147,7 @@ interface IPlexLibrary {
   getItem(ratingKey: string): Promise<PlexMediaItem>;
   getSeasons(showRatingKey: string): Promise<PlexSeason[]>;
   getEpisodes(seasonRatingKey: string): Promise<PlexMediaItem[]>;
-  getAllEpisodes(showRatingKey: string): Promise<PlexMediaItem[]>;
+  getShowEpisodes(showRatingKey: string): Promise<PlexMediaItem[]>;
   search(query: string, options?: SearchOptions): Promise<PlexMediaItem[]>;
   getCollections(libraryId: string): Promise<PlexCollection[]>;
   getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
@@ -1157,7 +1212,7 @@ interface IPlexLibrary {
 
 3. **TV Show Hierarchy**
    ```typescript
-   async getAllEpisodes(showRatingKey: string): Promise<PlexMediaItem[]> {
+   async getShowEpisodes(showRatingKey: string): Promise<PlexMediaItem[]> {
      const seasons = await this.getSeasons(showRatingKey);
      const episodePromises = seasons.map(s => this.getEpisodes(s.ratingKey));
      const episodeArrays = await Promise.all(episodePromises);
@@ -1302,7 +1357,7 @@ interface IChannelManager {
        case 'collection':
          return this.plexLibrary.getCollectionItems(source.collectionKey);
        case 'show':
-         const episodes = await this.plexLibrary.getAllEpisodes(source.showKey);
+         const episodes = await this.plexLibrary.getShowEpisodes(source.showKey);
          if (source.seasonFilter) {
            return episodes.filter(e => source.seasonFilter!.includes(e.seasonNumber!));
          }

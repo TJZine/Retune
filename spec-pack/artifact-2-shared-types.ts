@@ -122,6 +122,74 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
 }
 
 // ============================================
+// UNIFIED ERROR CODES (SUGGEST-004)
+// ============================================
+
+/**
+ * Unified error codes for consistent error handling across all modules.
+ * Use these codes in error objects to enable centralized error handling.
+ * 
+ * @example
+ * ```typescript
+ * throw new AppError(AppErrorCode.NETWORK_TIMEOUT, 'Request timed out');
+ * 
+ * // In error handler:
+ * if (error.code === AppErrorCode.AUTH_EXPIRED) {
+ *   navigation.goTo('auth');
+ * }
+ * ```
+ */
+export enum AppErrorCode {
+  // Authentication Errors (1xx)
+  AUTH_REQUIRED = 'AUTH_REQUIRED',
+  AUTH_EXPIRED = 'AUTH_EXPIRED',
+  AUTH_INVALID = 'AUTH_INVALID',
+  AUTH_FAILED = 'AUTH_FAILED',
+  
+  // Network Errors (2xx)  
+  NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
+  NETWORK_OFFLINE = 'NETWORK_OFFLINE',
+  SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
+  MIXED_CONTENT_BLOCKED = 'MIXED_CONTENT_BLOCKED',
+  
+  // Playback Errors (3xx)
+  PLAYBACK_DECODE_ERROR = 'PLAYBACK_DECODE_ERROR',
+  PLAYBACK_FORMAT_UNSUPPORTED = 'PLAYBACK_FORMAT_UNSUPPORTED',
+  PLAYBACK_DRM_ERROR = 'PLAYBACK_DRM_ERROR',
+  PLAYBACK_SOURCE_NOT_FOUND = 'PLAYBACK_SOURCE_NOT_FOUND',
+  
+  // Scheduler Errors (4xx)
+  SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
+  SCHEDULER_INVALID_TIME = 'SCHEDULER_INVALID_TIME',
+  
+  // Storage Errors (5xx)
+  STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
+  STORAGE_CORRUPTED = 'STORAGE_CORRUPTED',
+  
+  // UI Errors (6xx)
+  UI_RENDER_ERROR = 'UI_RENDER_ERROR',
+  UI_NAVIGATION_BLOCKED = 'UI_NAVIGATION_BLOCKED',
+  
+  // Generic
+  UNKNOWN = 'UNKNOWN',
+}
+
+/**
+ * Base application error with unified error code.
+ */
+export class AppError extends Error {
+  constructor(
+    public readonly code: AppErrorCode,
+    message: string,
+    public readonly recoverable: boolean = false,
+    public readonly context?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 

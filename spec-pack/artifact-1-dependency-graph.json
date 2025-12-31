@@ -4,6 +4,8 @@
   "projectName": "Retune",
   "projectDescription": "webOS application that transforms Plex media libraries into simulated linear television channels",
   "targetPlatform": "webOS 4.0+ (Chromium 68)",
+  
+  "_prioritySemantics": "Priority indicates implementation order. Lower numbers = implement first. Priority 1 modules have no dependencies. Same-priority modules can be implemented in parallel.",
 
   "modules": [
     {

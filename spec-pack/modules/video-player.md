@@ -603,19 +603,57 @@ describe('VideoPlayer', () => {
   });
   
   describe('error handling', () => {
-    it('should retry on NETWORK_ERROR', () => {
+    it('should retry on NETWORK_ERROR with exponential backoff', async () => {
       // Trigger MEDIA_ERR_NETWORK
-      // Verify retry scheduled
+      const retrySpy = jest.spyOn(player as any, '_scheduleRetry');
+      triggerError(2); // MEDIA_ERR_NETWORK
+      
+      // First retry after 1s
+      expect(retrySpy).toHaveBeenCalledWith(1000);
+      
+      // Trigger again - second retry after 2s
+      jest.advanceTimersByTime(1000);
+      triggerError(2);
+      expect(retrySpy).toHaveBeenCalledWith(2000);
+      
+      // Third retry after 4s
+      jest.advanceTimersByTime(2000);
+      triggerError(2);
+      expect(retrySpy).toHaveBeenCalledWith(4000);
     });
     
-    it('should emit error on DECODE_ERROR', () => {
-      // Trigger MEDIA_ERR_DECODE
-      // Verify error event emitted with recoverable: false
+    it('should emit error on DECODE_ERROR (non-recoverable)', () => {
+      const errorHandler = jest.fn();
+      player.on('error', errorHandler);
+      
+      triggerError(3); // MEDIA_ERR_DECODE
+      
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'DECODE_ERROR',
+          recoverable: false
+        })
+      );
     });
     
-    it('should stop retrying after max attempts', () => {
-      // Exhaust retryAttempts
-      // Verify error emitted
+    it('should stop retrying after max attempts (3)', () => {
+      const errorHandler = jest.fn();
+      player.on('error', errorHandler);
+      
+      // Exhaust all 3 retry attempts
+      for (let i = 0; i < 4; i++) {
+        triggerError(2);
+        jest.advanceTimersByTime(Math.pow(2, i) * 1000);
+      }
+      
+      // Should emit error after max retries
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'NETWORK_ERROR',
+          recoverable: false,
+          retryCount: 3
+        })
+      );
     });
   });
   
