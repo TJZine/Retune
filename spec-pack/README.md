@@ -1,7 +1,7 @@
 # Retune Implementation Spec Pack
 
 **Version:** 1.0.0  
-**Generated:** December 30, 2024  
+**Generated:** 2026-01-01  
 **Platform:** LG webOS 4.0+ (Chromium 68)
 
 ---
@@ -33,17 +33,31 @@ Retune creates a traditional TV experience from your Plex library:
 
 ## Artifacts in This Pack
 
+Canonical artifact map: `INDEX.md`
+
 | # | Artifact | File | Purpose |
 |---|----------|------|---------|
 | 1 | Module Dependency Graph | `artifact-1-dependency-graph.json` | Module relationships and implementation order |
-| 2 | Shared Types | `artifact-2-shared-types.ts` | All TypeScript types and interfaces |
-| 3 | Module Specs | `modules/*.md` | Detailed specs for each module |
+| 2 | Shared Types | `artifact-2-shared-types.ts` | Central contracts: all shared types + public interfaces |
+| 3 | Module Specs | `modules/*.md` | Detailed spec per module |
 | 4 | Integration Contracts | `artifact-4-integration-contracts.md` | Inter-module communication patterns |
-| 5 | Configuration | `artifact-5-config.ts` | All constants and configuration |
+| 5 | Configuration | `artifact-5-config.ts` | Constants, budgets, feature flags |
 | 6 | File Manifest | `artifact-6-file-manifest.json` | Complete list of files to create |
-| 7 | Implementation Prompts | `artifact-7-implementation-prompts.md` | Self-contained AI agent prompts |
-| 8 | Verification Checklist | `artifact-8-verification-checklist.md` | Test and validation checklist |
-| 9 | Plex API Examples | `artifact-9-plex-api-examples.md` | JSON response examples for Plex endpoints |
+| 7 | Implementation Prompts | `artifact-7-implementation-prompts.md` | Self-contained AI agent prompts (canonical + deprecated history) |
+| 8 | Verification Checklist | `artifact-8-verification-checklist.md` | Validation checklist |
+| 9 | Context Handoff Protocol | `context-handoff/*.md` | Per-module SSOT pointers for coding agents |
+| 10 | Implementation State Machine | `artifact-10-implementation-state.json` | Cross-session progress tracking |
+| 11 | Agent Memory Template | `artifact-11-agent-memory-template.md` | Session memory template for agents |
+
+### Supplemental Artifacts (Non-Required)
+
+See `INDEX.md` for the canonical list. Commonly used supplements:
+- `artifact-12-platform-constraints.md`
+- `artifact-14-integration-tests.md`
+- `artifact-15-mock-factories.ts`
+- `artifact-16-logging-patterns.md`
+- `artifact-9-plex-api-examples.md`
+- `supplements/error-messages.ts`
 
 ---
 
@@ -159,7 +173,7 @@ Retune creates a traditional TV experience from your Plex library:
 ```mermaid
 graph TB
     subgraph "Phase 1: Core Infrastructure"
-        EE["TypedEventEmitter<br/>(shared-types)"]
+        EE[event-emitter]
         PA[plex-auth]
         AL[app-lifecycle]
         NAV[navigation]

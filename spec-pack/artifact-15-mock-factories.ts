@@ -329,12 +329,12 @@ export function createMockLibraryItemsResponse(
                 duration: item.durationMs,
                 thumb: item.thumb,
                 summary: item.summary,
-                Media: item.media?.map(m => ({
+                Media: item.media ? item.media.map(m => ({
                     id: m.id,
                     container: m.container,
                     videoCodec: m.videoCodec,
                     audioCodec: m.audioCodec
-                }))
+                })) : undefined
             }))
         }
     };
@@ -532,7 +532,10 @@ function createMockTextTrackList(): TextTrackList {
     return {
         length: 0,
         [Symbol.iterator]: function* () { yield* tracks; },
-        getTrackById: (id: string) => tracks.find(t => t.id === id) ?? null,
+        getTrackById: (id: string) => {
+            const found = tracks.find(t => t.id === id);
+            return found ? found : null;
+        },
         item: (index: number) => tracks[index],
         onaddtrack: null,
         onchange: null,
@@ -567,8 +570,15 @@ export function createMockLocalStorage(): Storage {
     return {
         get length() { return store.size; },
         clear: () => store.clear(),
-        getItem: (key: string) => store.get(key) ?? null,
-        key: (index: number) => Array.from(store.keys())[index] ?? null,
+        getItem: (key: string) => {
+            const value = store.get(key);
+            return value !== undefined ? value : null;
+        },
+        key: (index: number) => {
+            const keys = Array.from(store.keys());
+            const value = keys[index];
+            return value !== undefined ? value : null;
+        },
         removeItem: (key: string) => store.delete(key),
         setItem: (key: string, value: string) => {
             // Simulate 5MB quota

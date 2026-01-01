@@ -29,6 +29,61 @@ Execute the following review phases IN ORDER. Do not skip phases.
 
 ---
 
+## PHASE 0: Retune Fail-Fast Sweeps (Repo-Specific)
+
+Run these commands from the repo root and paste results into the review. If any **FAIL**, stop and remediate before proceeding to Phase 1.
+
+### 0.1 Chromium 68 / ES2017 Syntax Guardrails
+
+```bash
+# FAIL if any results (ES2020 operators)
+rg -n "\\?\\.|\\?\\?" spec-pack --glob "*.ts"
+
+# FAIL if any results (not available in Chromium 68)
+rg -n "AbortSignal\\.timeout" spec-pack
+rg -n "\\.flat\\(" spec-pack
+```
+
+### 0.2 Shared Types Must Be Types-Only
+
+```bash
+# FAIL if any results (Artifact 2 must not export runtime values)
+rg -n "^export\\s+(class|function|const|let|var)\\b" spec-pack/artifact-2-shared-types.ts
+
+# FAIL if any results (historical anti-pattern; AppError is an interface, not a class)
+rg -n "new\\s+AppError\\b|throw\\s+new\\s+AppError\\b" spec-pack
+```
+
+### 0.3 Error Model Canonicalization
+
+```bash
+# PASS condition: AppErrorType appears ONLY in Artifact 2 (and ADRs) and is marked deprecated.
+rg -n "\\bAppErrorType\\b" spec-pack
+
+# PASS condition: AppErrorCode is the only active error taxonomy in module specs/prompts.
+rg -n "\\bAppErrorCode\\b" spec-pack/modules spec-pack/artifact-7-implementation-prompts.md
+```
+
+### 0.4 Context Handoff Protocol Must Be Actionable
+
+```bash
+# PASS condition: no "Section Anchor" placeholders; handoffs should provide rg commands or stable pointers.
+rg -n "Section Anchor" spec-pack/context-handoff
+
+# PASS condition: prompt references point at canonical prompts (V2 where applicable).
+rg -n "Prompt\\s+7:|Prompt\\s+8: Plex Library Access|Prompt\\s+9: Channel Manager Module\\b(?!\\s*\\(V2\\))|Prompt\\s+11: App Lifecycle Module|Prompt\\s+12: App Orchestrator Module" spec-pack/context-handoff
+```
+
+### 0.5 Workflow Alignment (Planning → Implementation)
+
+```bash
+# PASS condition: no references to removed/moved artifacts
+rg -n "artifact-11-error-messages\\.ts" spec-pack dev-workflow.md --glob "!spec-pack/decisions/*"
+
+# PASS condition: INDEX exists and maps required artifacts 1–11
+test -f spec-pack/INDEX.md && echo "OK: spec-pack/INDEX.md exists"
+```
+
 ## PHASE 1: Structural Completeness Audit
 
 ### 1.1 Artifact Inventory

@@ -90,6 +90,7 @@ const RETRY_CONFIG = {
 ```typescript
 // src/modules/plex/stream/index.ts
 export { PlexStreamResolver } from './PlexStreamResolver';
+export { getMimeType } from './utils';
 export type { IPlexStreamResolver } from './interfaces';
 export type {
   StreamRequest,
@@ -97,6 +98,45 @@ export type {
   HlsOptions
 } from './types';
 ```
+
+### Utility: getMimeType
+
+This helper function (previously in shared-types) should be implemented here:
+
+```typescript
+// src/modules/plex/stream/utils.ts
+
+/**
+ * Get MIME type for a stream protocol.
+ * Used when creating video source elements.
+ * 
+ * @param protocol - The stream protocol (hls, dash, or direct/http)
+ * @returns The appropriate MIME type string
+ * 
+ * @example
+ * const descriptor: StreamDescriptor = {
+ *   url: decision.playbackUrl,
+ *   protocol: decision.protocol,
+ *   mimeType: getMimeType(decision.protocol),
+ * };
+ */
+export function getMimeType(protocol: 'hls' | 'dash' | 'direct' | 'http'): string {
+  const mimeTypes: Record<string, string> = {
+    hls: 'application/x-mpegURL',
+    dash: 'application/dash+xml',
+    direct: 'video/mp4',
+    http: 'video/mp4',
+  };
+  const result = mimeTypes[protocol];
+  if (result === undefined) {
+    return 'video/mp4';
+  }
+  return result;
+}
+```
+
+> [!NOTE]
+> This function uses explicit undefined check instead of nullish coalescing (`??`) for Chromium 68 compatibility.
 
 ## Implementation Requirements
 
@@ -167,7 +207,9 @@ buildPlaybackUrl(partKey: string, serverUri: string): string {
     console.warn('Mixed content detected - playback may fail:', url.href);
   }
   
-  return `${serverUri}${partKey}?X-Plex-Token=${this.auth.getCurrentUser()?.token}`;
+  const user = this.auth.getCurrentUser();
+  const token = user ? user.token : '';
+  return `${serverUri}${partKey}?X-Plex-Token=${token}`;
 }
 ```
 
@@ -231,8 +273,9 @@ async resolveStream(request: StreamRequest): Promise<StreamDecision> {
     protocol = 'http';
   } else {
     // Transcode to HLS
+    const maxBitrate = typeof request.maxBitrate === 'number' ? request.maxBitrate : 20000;
     playbackUrl = this.getTranscodeUrl(request.itemKey, {
-      maxBitrate: request.maxBitrate ?? 20000,
+      maxBitrate,
       subtitleSize: 100,
       audioBoost: 100
     });
@@ -261,7 +304,9 @@ async resolveStream(request: StreamRequest): Promise<StreamDecision> {
     selectedSubtitleStream: subtitleStream,
     width: media.width,
     height: media.height,
-    bitrate: isTranscoding ? (request.maxBitrate ?? 8000) : media.bitrate
+    bitrate: isTranscoding
+      ? (typeof request.maxBitrate === 'number' ? request.maxBitrate : 8000)
+      : media.bitrate
   };
 }
 ```
@@ -373,9 +418,9 @@ getTranscodeUrl(itemKey: string, options: HlsOptions = {}): string {
     fastSeek: '1',
     directPlay: '0',
     directStream: '1',
-    subtitleSize: String(options.subtitleSize ?? 100),
-    audioBoost: String(options.audioBoost ?? 100),
-    maxVideoBitrate: String(options.maxBitrate ?? 8000),
+    subtitleSize: String(typeof options.subtitleSize === 'number' ? options.subtitleSize : 100),
+    audioBoost: String(typeof options.audioBoost === 'number' ? options.audioBoost : 100),
+    maxVideoBitrate: String(typeof options.maxBitrate === 'number' ? options.maxBitrate : 8000),
     subtitles: 'burn', // Burn subtitles for compatibility
     'Accept-Language': 'en',
     'X-Plex-Session-Identifier': this.generateSessionId(),
@@ -386,8 +431,10 @@ getTranscodeUrl(itemKey: string, options: HlsOptions = {}): string {
 }
 
 private getClientParams(): Record<string, string> {
+  const user = this.auth.getCurrentUser();
+  const token = user ? user.token : '';
   return {
-    'X-Plex-Token': this.auth.getCurrentUser()?.token ?? '',
+    'X-Plex-Token': token,
     'X-Plex-Client-Identifier': this.auth.getConfig().clientIdentifier,
     'X-Plex-Platform': 'webOS',
     'X-Plex-Device': 'LG Smart TV',

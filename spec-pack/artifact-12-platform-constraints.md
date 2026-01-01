@@ -105,7 +105,7 @@ function selectBestConnection(connections: PlexConnection[]): PlexConnection | n
     return scoreB - scoreA;
   });
   
-  return sorted[0] ?? null;
+  return sorted.length > 0 ? sorted[0] : null;
 }
 
 function getConnectionScore(conn: PlexConnection): number {
@@ -113,7 +113,7 @@ function getConnectionScore(conn: PlexConnection): number {
   if (conn.protocol === 'https') score += 100;
   if (conn.local) score += 50;
   if (!conn.relay) score += 25;
-  score -= conn.latencyMs ?? 0;
+  score -= conn.latencyMs !== null && conn.latencyMs !== undefined ? conn.latencyMs : 0;
   return score;
 }
 ```
@@ -242,12 +242,13 @@ const STORAGE_KEYS = {
 class StorageManager {
   private readonly QUOTA_BUFFER = 100 * 1024; // 100KB buffer
   
-  async set(key: string, value: unknown): Promise<void> {
+  async set(key: string, value: unknown): Promise<Result<void, AppError>> {
     const serialized = JSON.stringify(value);
     const size = new Blob([serialized]).size;
     
     try {
       localStorage.setItem(key, serialized);
+      return { success: true, data: undefined };
     } catch (error) {
       if (this.isQuotaError(error)) {
         console.error('[Storage] Quota exceeded, attempting cleanup');
@@ -255,15 +256,28 @@ class StorageManager {
         
         try {
           localStorage.setItem(key, serialized);
+          return { success: true, data: undefined };
         } catch (retryError) {
-          throw new AppError(
-            AppErrorCode.STORAGE_QUOTA_EXCEEDED,
-            ERROR_MESSAGES.STORAGE.QUOTA_EXCEEDED,
-            false
-          );
+          return {
+            success: false,
+            error: {
+              code: AppErrorCode.STORAGE_QUOTA_EXCEEDED,
+              message: ERROR_MESSAGES.STORAGE.QUOTA_EXCEEDED,
+              recoverable: false,
+              context: { key, sizeBytes: size }
+            }
+          };
         }
       }
-      throw error;
+      return {
+        success: false,
+        error: {
+          code: AppErrorCode.UNKNOWN,
+          message: 'Storage write failed',
+          recoverable: true,
+          cause: error
+        }
+      };
     }
   }
   
@@ -429,7 +443,7 @@ class RobustEventEmitter<EventMap> {
   private errorHandler: (event: string, error: Error) => void;
   
   constructor(options: { onHandlerError?: (event: string, error: Error) => void } = {}) {
-    this.errorHandler = options.onHandlerError ?? this.defaultErrorHandler;
+    this.errorHandler = options.onHandlerError ? options.onHandlerError : this.defaultErrorHandler;
   }
   
   emit<K extends keyof EventMap>(event: K, payload: EventMap[K]): void {
@@ -592,8 +606,8 @@ class AppLogger implements ILogger {
   error(module: string, message: string, error?: Error, data?: unknown): void {
     console.error(this.format('error', module, message, { 
       ...data, 
-      errorMessage: error?.message,
-      stack: error?.stack 
+      errorMessage: error ? error.message : undefined,
+      stack: error ? error.stack : undefined 
     }));
   }
   
@@ -650,7 +664,8 @@ class StartupProfiler {
   }
   
   getElapsed(): number {
-    return performance.now() - (this.marks.get('start') ?? 0);
+    const startMark = this.marks.get('start');
+    return performance.now() - (startMark !== undefined ? startMark : 0);
   }
   
   checkBudget(): boolean {

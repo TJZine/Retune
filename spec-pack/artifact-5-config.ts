@@ -536,7 +536,9 @@ export const STORAGE_MIGRATION_CONFIG = {
  *     // Transform existing fields if needed
  *     channels: data.channels.map(ch => ({
  *       ...ch,
- *       newChannelField: ch.existingField ?? 'fallback'
+ *       newChannelField: (ch.existingField !== undefined && ch.existingField !== null)
+ *         ? ch.existingField
+ *         : 'fallback'
  *     }))
  *   };
  * }
@@ -569,7 +571,7 @@ export function migrateStoredData<T>(
   data: { version?: number } & Record<string, unknown>
 ): T {
   let current = { ...data };
-  const storedVersion = current.version ?? 1;
+  const storedVersion = (current.version !== undefined && current.version !== null) ? current.version : 1;
   
   for (let v = storedVersion; v < STORAGE_SCHEMA_VERSION; v++) {
     const migration = STORAGE_MIGRATIONS[v + 1];

@@ -66,7 +66,7 @@ export interface IAppLifecycle {
 export interface IErrorRecovery {
   handleError(error: AppError): ErrorAction[];
   executeRecovery(action: ErrorAction): Promise<boolean>;
-  createError(type: AppErrorType, message: string, context?: Record<string, unknown>): AppError;
+  createError(code: AppErrorCode, message: string, context?: Record<string, unknown>): AppError;
 }
 ```
 
@@ -82,7 +82,8 @@ export type {
   AppPhase,
   ConnectionStatus,
   AppError,
-  AppErrorType,
+  AppErrorCode,
+  LifecycleAppError,
   AppLifecycleState,
   PersistentState,
   UserPreferences,
@@ -339,7 +340,7 @@ async initialize(): Promise<void> {
   // Restore state
   const savedState = await this.restoreState();
   
-  if (savedState?.plexAuth) {
+  if (savedState && savedState.plexAuth) {
     // Have credentials, try to resume
     this.setPhase('loading_data');
     this.emit('stateRestored', savedState);

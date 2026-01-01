@@ -412,10 +412,12 @@ private _hardResync(): void {
   this.state.nextProgram = this.getNextProgram();
   
   // Emit sync event with drift flag
+  const previousEndTime = previousCurrent ? previousCurrent.scheduledEndTime : undefined;
+  const previousEndTimeOrNow = typeof previousEndTime === 'number' ? previousEndTime : now;
   this.emit('scheduleSync', {
     ...this.getState(),
     wasHardResync: true,
-    detectedDriftMs: now - (previousCurrent?.scheduledEndTime ?? now)
+    detectedDriftMs: now - previousEndTimeOrNow
   });
 }
 ```

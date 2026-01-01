@@ -200,7 +200,7 @@ async resolveChannelContent(
     let items = await this.resolveContentSource(channel.contentSource);
     
     // Apply filters with error tolerance
-    if (channel.contentFilters?.length) {
+    if (channel.contentFilters && channel.contentFilters.length) {
       items = this.applyFiltersWithFallback(items, channel.contentFilters);
     }
     
@@ -454,14 +454,14 @@ interface MixedContentSource {
 async createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig> {
   const channel: ChannelConfig = {
     id: generateUUID(),
-    number: config.number ?? this.getNextAvailableNumber(),
-    name: config.name ?? `Channel ${this.getNextAvailableNumber()}`,
+    number: typeof config.number === 'number' ? config.number : this.getNextAvailableNumber(),
+    name: (typeof config.name === 'string' && config.name.length) ? config.name : `Channel ${this.getNextAvailableNumber()}`,
     contentSource: config.contentSource!, // Required
-    playbackMode: config.playbackMode ?? 'sequential',
-    shuffleSeed: config.shuffleSeed ?? Date.now(),
-    startTimeAnchor: config.startTimeAnchor ?? this.getTodayMidnight(),
-    skipIntros: config.skipIntros ?? false,
-    skipCredits: config.skipCredits ?? false,
+    playbackMode: config.playbackMode ? config.playbackMode : 'sequential',
+    shuffleSeed: typeof config.shuffleSeed === 'number' ? config.shuffleSeed : Date.now(),
+    startTimeAnchor: typeof config.startTimeAnchor === 'number' ? config.startTimeAnchor : this.getTodayMidnight(),
+    skipIntros: config.skipIntros === true,
+    skipCredits: config.skipCredits === true,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     lastContentRefresh: 0,
@@ -540,7 +540,7 @@ async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> 
   }
   
   // Apply filters
-  if (channel.contentFilters?.length) {
+  if (channel.contentFilters && channel.contentFilters.length) {
     items = this.applyFilters(items, channel.contentFilters);
   }
   
@@ -594,8 +594,9 @@ async resolveShowSource(source: ShowContentSource): Promise<ResolvedContentItem[
   const episodes = await this.plexLibrary.getShowEpisodes(source.showKey);
   
   let filtered = episodes;
-  if (source.seasonFilter?.length) {
-    filtered = episodes.filter(ep => source.seasonFilter!.includes(ep.seasonNumber!));
+  const seasonFilter = source.seasonFilter;
+  if (seasonFilter && seasonFilter.length) {
+    filtered = episodes.filter(ep => typeof ep.seasonNumber === 'number' && seasonFilter.indexOf(ep.seasonNumber) !== -1);
   }
   
   return filtered.map((ep, index) => this.toResolvedItem(ep, index));

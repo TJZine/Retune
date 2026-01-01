@@ -391,13 +391,13 @@ moveFocus(direction: 'up' | 'down' | 'left' | 'right'): boolean {
   
   // Check explicit neighbor first
   const currentElement = this.state.focusableElements.get(current);
-  if (currentElement?.neighbors[direction]) {
+  if (currentElement && currentElement.neighbors[direction]) {
     this.setFocus(currentElement.neighbors[direction]);
     return true;
   }
   
   // Check group navigation
-  const groupId = currentElement?.group;
+  const groupId = currentElement ? currentElement.group : undefined;
   if (groupId) {
     const group = this.state.focusGroups.get(groupId);
     if (group) {
@@ -451,7 +451,9 @@ registerFocusable(element: FocusableElement): void {
   // Add click handler for pointer mode
   element.element.addEventListener('click', () => {
     this.setFocus(element.id);
-    element.onSelect?.();
+    if (element.onSelect) {
+      element.onSelect();
+    }
   });
 }
 ```
@@ -771,7 +773,8 @@ describe('NavigationManager', () => {
     it('should set focus on registered element', () => {
       nav.registerFocusable({ id: 'btn1', element: mockElement, neighbors: {} });
       nav.setFocus('btn1');
-      expect(nav.getFocusedElement()?.id).toBe('btn1');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn1');
     });
     
     it('should not set focus on unregistered element', () => {
@@ -784,7 +787,8 @@ describe('NavigationManager', () => {
       nav.registerFocusable({ id: 'btn2', element: m2, neighbors: { left: 'btn1' } });
       nav.setFocus('btn1');
       expect(nav.moveFocus('right')).toBe(true);
-      expect(nav.getFocusedElement()?.id).toBe('btn2');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn2');
     });
     
     it('should call onFocus/onBlur callbacks', () => {
@@ -832,7 +836,8 @@ describe('NavigationManager', () => {
       nav.setFocus('btn1');
       nav.openModal('confirm');
       nav.closeModal();
-      expect(nav.getFocusedElement()?.id).toBe('btn1');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn1');
     });
     
     it('should close modal on Back button', () => {
@@ -848,7 +853,8 @@ describe('NavigationManager', () => {
       nav.setFocus('btn5');
       nav.goTo('settings');
       nav.goBack();
-      expect(nav.getFocusedElement()?.id).toBe('btn5');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn5');
     });
   });
 });

@@ -412,7 +412,8 @@ async setAudioTrack(trackId: string): Promise<void> {
       // Wait for audio to start playing with new track
       const checkInterval = setInterval(() => {
         // Verify the track switch took effect
-        if (audioTracks[targetTrack.index]?.enabled) {
+        const activeTrack = audioTracks[targetTrack.index];
+        if (activeTrack && activeTrack.enabled) {
           clearTimeout(timeout);
           clearInterval(checkInterval);
           resolve();

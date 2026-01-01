@@ -215,7 +215,8 @@
         "AppPhase",
         "ConnectionStatus",
         "AppError",
-        "AppErrorType",
+        "AppErrorCode",
+        "LifecycleAppError",
         "PersistentState",
         "UserPreferences"
       ],

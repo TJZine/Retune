@@ -1,44 +1,14 @@
-# Context Handoff Protocol
+# Context Handoff Protocol (DEPRECATED)
 
-This document provides context handoff information for AI coding agents implementing each module. Each section is self-contained with SSOT references, active assumptions, scope boundaries, and verification commands.
+This file is a legacy, monolithic handoff document from an earlier spec iteration.
 
----
+**Canonical Artifact 9** is now the per-module handoff set in `spec-pack/context-handoff/` (see `spec-pack/INDEX.md`).
 
-## Module: event-emitter
+- New SSOT: `spec-pack/context-handoff/*.md`
+- Index: `spec-pack/INDEX.md`
 
-### SSOT References
-
-| Concept | File | Section |
-| :--- | :--- | :--- |
-| Interface | artifact-2-shared-types.ts | `TypedEventEmitter` class |
-| Requirements | artifact-7-implementation-prompts.md | Prompt 1 |
-
-### Active Assumptions
-
-1. Error isolation is critical - one handler's error MUST NOT crash other handlers
-2. No external dependencies allowed (pure TypeScript)
-3. Must work in Chromium 68 (webOS 4.0)
-
-### Scope Boundaries
-
-| IN Scope | OUT of Scope |
-| :--- | :--- |
-| Generic typed event emitter | Async event handling |
-| on/off/emit/once methods | Event bubbling/capturing |
-| Error isolation per handler | Wildcard event matching |
-
-### Verification Commands
-
-```bash
-npx tsc --noEmit
-npm test -- --grep "EventEmitter"
-```
-
-### Rollback Procedure
-
-```bash
-git checkout -- src/utils/EventEmitter.ts
-```
+> [!IMPORTANT]
+> Do not implement against references in this file. It may contain outdated symbols (e.g., `TypedEventEmitter`).
 
 ---
 

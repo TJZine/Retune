@@ -146,11 +146,20 @@ private async fetchWithRetry<T>(
   
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers: { ...this.auth.getAuthHeaders(), ...options.headers },
-        signal: AbortSignal.timeout(options.timeout ?? 10000)
-      });
+      const timeoutMs = typeof options.timeout === 'number' ? options.timeout : 10000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          ...options,
+          headers: { ...this.auth.getAuthHeaders(), ...options.headers },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       
       if (response.status === 401) {
         this.emit('authExpired');
@@ -158,7 +167,8 @@ private async fetchWithRetry<T>(
       }
       
       if (response.status === 429) {
-        const retryAfter = parseInt(response.headers.get('Retry-After') ?? '5');
+        const retryAfterHeader = response.headers.get('Retry-After');
+        const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 5;
         await this.delay(retryAfter * 1000);
         continue;
       }
@@ -238,7 +248,7 @@ async getLibraryItems(
 ): Promise<PlexMediaItem[]> {
   const items: PlexMediaItem[] = [];
   let offset = 0;
-  const limit = options.limit ?? 100;
+  const limit = typeof options.limit === 'number' ? options.limit : 100;
   let hasMore = true;
   
   while (hasMore) {
@@ -293,12 +303,16 @@ async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
   const episodeArrays = await Promise.all(episodePromises);
   
   // Flatten and sort by season/episode number
-  return episodeArrays
-    .flat()
+  const flattened = episodeArrays.reduce((acc, arr) => acc.concat(arr), [] as PlexMediaItem[]);
+  return flattened
     .sort((a, b) => {
-      const seasonDiff = (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0);
+      const aSeason = typeof a.seasonNumber === 'number' ? a.seasonNumber : 0;
+      const bSeason = typeof b.seasonNumber === 'number' ? b.seasonNumber : 0;
+      const seasonDiff = aSeason - bSeason;
       if (seasonDiff !== 0) return seasonDiff;
-      return (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0);
+      const aEpisode = typeof a.episodeNumber === 'number' ? a.episodeNumber : 0;
+      const bEpisode = typeof b.episodeNumber === 'number' ? b.episodeNumber : 0;
+      return aEpisode - bEpisode;
     });
 }
 ```
@@ -325,13 +339,13 @@ async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
 getImageUrl(imagePath: string, width?: number, height?: number): string {
   if (!imagePath) return '';
   
-  const params = new URLSearchParams({
-    'X-Plex-Token': this.auth.getCurrentUser()?.token ?? '',
-  });
+  const user = this.auth.getCurrentUser();
+  const token = user ? user.token : '';
+  const params = new URLSearchParams({ 'X-Plex-Token': token });
   
   if (width) {
     params.set('width', String(width));
-    params.set('height', String(height ?? width));
+    params.set('height', String(typeof height === 'number' ? height : width));
     // Use photo transcoder for resizing
     const transcodeUrl = `/photo/:/transcode?url=${encodeURIComponent(imagePath)}&${params}`;
     return `${this.serverUri}${transcodeUrl}`;
@@ -354,14 +368,14 @@ private parseMediaItem(data: any): PlexMediaItem {
     type: this.mapMediaType(data.type),
     title: data.title,
     originalTitle: data.originalTitle,
-    sortTitle: data.titleSort ?? data.title,
-    summary: data.summary ?? '',
+    sortTitle: (data.titleSort !== undefined && data.titleSort !== null) ? data.titleSort : data.title,
+    summary: (data.summary !== undefined && data.summary !== null) ? data.summary : '',
     year: data.year,
-    durationMs: data.duration ?? 0,
+    durationMs: (data.duration !== undefined && data.duration !== null) ? data.duration : 0,
     addedAt: new Date(data.addedAt * 1000),
     updatedAt: new Date(data.updatedAt * 1000),
-    thumb: data.thumb ?? null,
-    art: data.art ?? null,
+    thumb: (data.thumb !== undefined && data.thumb !== null) ? data.thumb : null,
+    art: (data.art !== undefined && data.art !== null) ? data.art : null,
     rating: data.rating,
     audienceRating: data.audienceRating,
     contentRating: data.contentRating,
@@ -373,8 +387,8 @@ private parseMediaItem(data: any): PlexMediaItem {
     episodeNumber: data.index,
     
     // Playback state
-    viewOffset: data.viewOffset ?? 0,
-    viewCount: data.viewCount ?? 0,
+    viewOffset: (data.viewOffset !== undefined && data.viewOffset !== null) ? data.viewOffset : 0,
+    viewCount: (data.viewCount !== undefined && data.viewCount !== null) ? data.viewCount : 0,
     lastViewedAt: data.lastViewedAt ? new Date(data.lastViewedAt * 1000) : undefined,
     
     // Media files

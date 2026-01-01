@@ -84,7 +84,10 @@ function saveChannels(channels: ChannelConfig[]): void {
 function getStorageUsage(): { used: number; available: number } {
   let used = 0;
   for (const key of Object.keys(localStorage)) {
-    used += localStorage.getItem(key)?.length ?? 0;
+    const value = localStorage.getItem(key);
+    if (value) {
+      used += value.length;
+    }
   }
   // localStorage uses UTF-16, so multiply by 2
   const usedBytes = used * 2;

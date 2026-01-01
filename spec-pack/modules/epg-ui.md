@@ -182,10 +182,11 @@ class EPGErrorBoundary {
   private readonly MAX_ERRORS_PER_TYPE = 3;
   
   handleError(type: EPGErrorType, context: string, error?: Error): void {
-    const count = (this.errorCounts.get(type) ?? 0) + 1;
+    const existing = this.errorCounts.get(type);
+    const count = (existing !== undefined ? existing : 0) + 1;
     this.errorCounts.set(type, count);
     
-    console.warn(`[EPG] ${type} in ${context}:`, error?.message);
+    console.warn(`[EPG] ${type} in ${context}:`, error ? error.message : undefined);
     
     switch (type) {
       case 'RENDER_ERROR':
@@ -347,8 +348,9 @@ focusProgram(channelIndex: number, programIndex: number): void {
   const channel = this.state.channels[channelIndex];
   
   // Remove focus from previous cell
-  if (this.state.focusedCell?.cellElement) {
-    this.state.focusedCell.cellElement.classList.remove('focused');
+  const focusedCell = this.state.focusedCell;
+  if (focusedCell && focusedCell.cellElement) {
+    focusedCell.cellElement.classList.remove('focused');
   }
   
   // Find or render new cell

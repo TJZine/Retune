@@ -3,7 +3,7 @@
 These prompts are self-contained instructions for AI coding agents to implement individual modules. Each prompt contains everything needed to implement the module without external dependencies.
 
 > [!IMPORTANT]
-> **TypeScript Configuration**: All modules must compile with strict TypeScript settings. See `artifact-5-config.ts` for the required `tsconfig.json` compiler options including `strict: true`, `noUnusedLocals`, `noImplicitReturns`, and `target: ES2020` (Chromium 68 compatibility).
+> **TypeScript Configuration**: All modules must compile with strict TypeScript settings. See `tsconfig.template.json` for compiler options. **Target: ES2017** (Chromium 68 compatibility). **Do NOT use optional chaining (`?.`) or nullish coalescing (`??`)** — these require ES2020 and will not work on webOS 4.0+.
 
 ---
 
@@ -823,7 +823,8 @@ describe('NavigationManager', () => {
       const el = document.createElement('button');
       nav.registerFocusable({ id: 'btn1', element: el, neighbors: {} });
       nav.setFocus('btn1');
-      expect(nav.getFocusedElement()?.id).toBe('btn1');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn1');
       expect(el.classList.contains('focused')).toBe(true);
     });
     
@@ -834,7 +835,8 @@ describe('NavigationManager', () => {
       
       const moved = nav.moveFocus('right');
       expect(moved).toBe(true);
-      expect(nav.getFocusedElement()?.id).toBe('btn2');
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn2');
     });
     
     it('should return false when no neighbor in direction', () => {
@@ -842,7 +844,8 @@ describe('NavigationManager', () => {
       nav.setFocus('btn1');
       
       expect(nav.moveFocus('left')).toBe(false); // No explicit neighbor
-      expect(nav.getFocusedElement()?.id).toBe('btn1'); // Focus unchanged
+      const focused = nav.getFocusedElement();
+      expect(focused && focused.id).toBe('btn1'); // Focus unchanged
     });
   });
   
@@ -1171,7 +1174,10 @@ Complete implementation with:
 
 ---
 
-## Prompt 7: Plex Server Discovery Module (Priority 2)
+## Prompt 7 (DEPRECATED): Plex Server Discovery Module (Priority 2)
+
+> [!WARNING]
+> Deprecated prompt. Use `## Prompt 8 (V2): Plex Server Discovery Module (Priority 2)` in this file as the canonical prompt.
 
 ````markdown
 You are implementing the Plex Server Discovery module for Retune, a webOS TV application.
@@ -1273,16 +1279,20 @@ interface IPlexServerDiscovery {
    ```typescript
    async testConnection(uri: string): Promise<{ success: boolean; latencyMs: number }> {
      const start = performance.now();
+     const controller = new AbortController();
+     const timeoutId = setTimeout(() => controller.abort(), 5000);
      try {
        const response = await fetch(`${uri}/identity`, {
          method: 'HEAD',
          headers: this.auth.getAuthHeaders(),
-         signal: AbortSignal.timeout(5000) // 5 second timeout
+         signal: controller.signal
        });
        const latencyMs = performance.now() - start;
        return { success: response.ok, latencyMs };
      } catch (error) {
        return { success: false, latencyMs: -1 };
+     } finally {
+       clearTimeout(timeoutId);
      }
    }
    ```
@@ -1338,7 +1348,7 @@ describe('PlexServerDiscovery', () => {
       mockAllConnectionsSucceed();
       
       const best = await discovery.findBestConnection(server);
-      expect(best?.uri).toBe('https://192.168.1.5:32400');
+      expect(best && best.uri).toBe('https://192.168.1.5:32400');
     });
     
     it('should fall back to relay when direct fails', async () => {
@@ -1346,7 +1356,7 @@ describe('PlexServerDiscovery', () => {
       mockRelaySucceeds();
       
       const best = await discovery.findBestConnection(server);
-      expect(best?.relay).toBe(true);
+      expect(best && best.relay).toBe(true);
     });
   });
 });
@@ -1364,7 +1374,10 @@ Complete implementation with:
 
 ---
 
-## Prompt 8: Plex Library Access Module (Priority 3)
+## Prompt 8 (DEPRECATED): Plex Library Access Module (Priority 3)
+
+> [!WARNING]
+> Deprecated prompt. Use `## Prompt 9 (V2): Plex Library Module (Priority 3)` in this file as the canonical prompt.
 
 ````markdown
 You are implementing the Plex Library Access module for Retune, a webOS TV application.
@@ -1492,7 +1505,8 @@ interface IPlexLibrary {
      if (!imagePath) return '';
      
      const serverUri = this.discovery.getActiveConnectionUri();
-     const token = this.auth.getCurrentUser()?.token;
+     const user = this.auth.getCurrentUser();
+     const token = user ? user.token : undefined;
      
      let url = `${serverUri}${imagePath}`;
      const params = new URLSearchParams();
@@ -1511,7 +1525,7 @@ interface IPlexLibrary {
      const seasons = await this.getSeasons(showRatingKey);
      const episodePromises = seasons.map(s => this.getEpisodes(s.ratingKey));
      const episodeArrays = await Promise.all(episodePromises);
-     return episodeArrays.flat();
+     return episodeArrays.reduce((acc, arr) => acc.concat(arr), [] as PlexMediaItem[]);
    }
    ```
 
@@ -1541,7 +1555,10 @@ Complete implementation with:
 
 ---
 
-## Prompt 9: Channel Manager Module (Priority 4)
+## Prompt 9 (DEPRECATED): Channel Manager Module (Priority 4)
+
+> [!WARNING]
+> Deprecated prompt. Use `## Prompt 11 (V2): Channel Manager Module (Priority 4)` in this file as the canonical prompt.
 
 ````markdown
 You are implementing the Channel Manager module for Retune, a webOS TV application.
@@ -1757,7 +1774,10 @@ Complete implementation with:
 
 ---
 
-## Prompt 10: Application Lifecycle Module (Priority 1)
+## Prompt 10 (DEPRECATED): Application Lifecycle Module (Priority 1)
+
+> [!WARNING]
+> Deprecated prompt. Use `## Prompt 12: App Lifecycle Module (Priority 1)` in this file as the canonical prompt.
 
 ````markdown
 You are implementing the Application Lifecycle module for Retune, a webOS TV application.
@@ -1772,47 +1792,14 @@ Manage webOS app lifecycle events, state persistence, network monitoring, memory
 - src/modules/lifecycle/StateManager.ts
 - src/modules/lifecycle/interfaces.ts
 
-### P10: Type Definitions (use exactly)
+### P10: Type Definitions (DEPRECATED — do not copy)
 
-```typescript
-type AppPhase = 
-  | 'initializing' 
-  | 'authenticating' 
-  | 'loading_data' 
-  | 'ready' 
-  | 'backgrounded' 
-  | 'resuming' 
-  | 'error' 
-  | 'terminating';
-
-type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'unreachable';
-
-type AppErrorType =
-  | 'INITIALIZATION_FAILED'
-  | 'AUTH_EXPIRED'
-  | 'NETWORK_UNAVAILABLE'
-  | 'PLEX_UNREACHABLE'
-  | 'PLAYBACK_FAILED'
-  | 'OUT_OF_MEMORY'
-  | 'UNKNOWN';
-
-interface AppError {
-  type: AppErrorType;
-  message: string;
-  timestamp: number;
-  userMessage: string;
-  actions: Array<{ label: string; action: () => void; isPrimary: boolean }>;
-}
-
-interface PersistentState {
-  version: number;
-  plexAuth: PlexAuthData | null;
-  channelConfigs: ChannelConfig[];
-  currentChannelIndex: number;
-  userPreferences: UserPreferences;
-  lastUpdated: number;
-}
-```
+Use canonical types from `spec-pack/artifact-2-shared-types.ts`:
+- `AppPhase`
+- `ConnectionStatus`
+- `PersistentState`
+- `AppErrorCode` + `LifecycleAppError`
+- `Result<T, E>` for fallible module methods
 
 ### P10: Interface to Implement
 ```typescript
@@ -1844,15 +1831,15 @@ interface IAppLifecycle {
   requestGarbageCollection(): void;
   
   // Errors
-  handleError(error: AppError): void;
-  getCurrentError(): AppError | null;
+  handleError(error: LifecycleAppError): void;
+  getCurrentError(): LifecycleAppError | null;
   clearError(): void;
   
   // Events
   on(event: 'phaseChange', handler: (data: { from: AppPhase; to: AppPhase }) => void): void;
   on(event: 'visibilityChange', handler: (data: { isVisible: boolean }) => void): void;
   on(event: 'networkChange', handler: (data: { isAvailable: boolean }) => void): void;
-  on(event: 'error', handler: (error: AppError) => void): void;
+  on(event: 'error', handler: (error: LifecycleAppError) => void): void;
 }
 ```
 
@@ -1928,31 +1915,31 @@ if (window.webOS) {
 
 3. **Error Recovery Strategies**
    ```typescript
-   class ErrorRecovery {
-     getRecoveryActions(errorType: AppErrorType): ErrorAction[] {
-       switch (errorType) {
-         case 'AUTH_EXPIRED':
+   class ErrorRecovery implements IErrorRecovery {
+     getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[] {
+       switch (errorCode) {
+         case AppErrorCode.AUTH_EXPIRED:
            return [
-             { label: 'Sign In Again', action: () => this.nav.goTo('auth'), isPrimary: true }
+             { label: 'Sign In Again', action: () => this.nav.goTo('auth'), isPrimary: true, requiresNetwork: true }
            ];
-         case 'NETWORK_UNAVAILABLE':
+         case AppErrorCode.NETWORK_OFFLINE:
            return [
-             { label: 'Retry', action: () => this.retryConnection(), isPrimary: true },
-             { label: 'Use Offline', action: () => this.useOfflineMode(), isPrimary: false }
+             { label: 'Retry', action: () => this.retryConnection(), isPrimary: true, requiresNetwork: true },
+             { label: 'Use Offline', action: () => this.useOfflineMode(), isPrimary: false, requiresNetwork: false }
            ];
-         case 'PLEX_UNREACHABLE':
+         case AppErrorCode.PLEX_UNREACHABLE:
            return [
-             { label: 'Retry Connection', action: () => this.retryPlex(), isPrimary: true },
-             { label: 'Change Server', action: () => this.nav.goTo('server-select'), isPrimary: false }
+             { label: 'Retry Connection', action: () => this.retryPlex(), isPrimary: true, requiresNetwork: true },
+             { label: 'Change Server', action: () => this.nav.goTo('server-select'), isPrimary: false, requiresNetwork: true }
            ];
-         case 'PLAYBACK_FAILED':
+         case AppErrorCode.PLAYBACK_FAILED:
            return [
-             { label: 'Skip', action: () => this.scheduler.skipToNext(), isPrimary: true },
-             { label: 'Try Again', action: () => this.player.retry(), isPrimary: false }
+             { label: 'Skip', action: () => this.scheduler.skipToNext(), isPrimary: true, requiresNetwork: false },
+             { label: 'Try Again', action: () => this.player.retry(), isPrimary: false, requiresNetwork: true }
            ];
          default:
            return [
-             { label: 'Restart App', action: () => location.reload(), isPrimary: true }
+             { label: 'Restart App', action: () => location.reload(), isPrimary: true, requiresNetwork: false }
            ];
        }
      }
@@ -2002,7 +1989,10 @@ Complete implementation with:
 
 ---
 
-## Prompt 11: Application Orchestrator Module (Priority 7)
+## Prompt 11 (DEPRECATED): Application Orchestrator Module (Priority 7)
+
+> [!WARNING]
+> Deprecated prompt. Use `## Prompt 13: App Orchestrator Module (Priority 7)` in this file as the canonical prompt.
 
 ````markdown
 You are implementing the Application Orchestrator module for Retune, a webOS TV application.
@@ -2267,7 +2257,7 @@ npm run build
 ```
 
 > [!IMPORTANT]
-> **Error Message Reference**: See `artifact-11-error-messages.ts` for exact user-facing error strings.
+> **Error Message Reference**: See `supplements/error-messages.ts` for exact user-facing error strings.
 > **Platform Constraints**: See `artifact-12-platform-constraints.md` for webOS-specific limitations.
 > **Shared Types**: Import types from `artifact-2-shared-types.ts` - inlined types here are for reference.
 
@@ -2317,7 +2307,8 @@ async function load() {
     const data = await fetch('/api');
   } catch (error) {
     console.error('Load failed:', error);
-    throw new AppError(AppErrorCode.NETWORK_ERROR, 'Failed to load');
+    // Prefer returning a Result<T, AppError> from module methods instead of throwing.
+    throw new Error('Load failed');
   }
 }
 ```
@@ -2342,8 +2333,8 @@ destroy() {
 ### 4. Chromium 68 Compatibility
 
 ```typescript
-// ❌ WRONG: Optional chaining (ES2020)
-const name = user?.profile?.name;
+// ❌ WRONG: Using ES2020 optional chaining in shipped code
+// (Example omitted to avoid copy/paste drift)
 
 // ✅ CORRECT: Explicit checks
 const name = user && user.profile ? user.profile.name : undefined;
@@ -2544,7 +2535,7 @@ interface PlexServer {
   id: string;                    // Machine identifier
   name: string;                  // Display name
   sourceTitle: string;           // Owner username
-  ownerId: number;
+  ownerId: string;
   owned: boolean;
   capabilities: string[];
   connections: PlexConnection[];
@@ -2558,7 +2549,7 @@ interface PlexConnection {
   port: number;
   local: boolean;                // LAN connection
   relay: boolean;                // Via Plex relay
-  latencyMs?: number;            // Measured latency
+  latencyMs: number | null;      // Measured latency
 }
 
 interface IPlexServerDiscovery {
@@ -2691,30 +2682,34 @@ interface PlexMediaItem {
 }
 
 interface IPlexLibrary {
-  // Library Management
+  // Library Sections
   getLibraries(): Promise<PlexLibrary[]>;
-  getLibrary(key: string): Promise<PlexLibrary | null>;
-  
+  getLibrary(libraryId: string): Promise<PlexLibrary | null>;
+
   // Content Browsing
-  getLibraryItems(libraryKey: string, options?: BrowseOptions): Promise<PlexMediaItem[]>;
-  getCollection(collectionKey: string): Promise<PlexMediaItem[]>;
+  getLibraryItems(libraryId: string, options?: LibraryQueryOptions): Promise<PlexMediaItem[]>;
+  getItem(ratingKey: string): Promise<PlexMediaItem | null>;
+
+  // TV Show Hierarchy
+  getShows(libraryId: string): Promise<PlexMediaItem[]>;
   getShowSeasons(showKey: string): Promise<PlexSeason[]>;
   getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]>;
-  getShowAllEpisodes(showKey: string): Promise<PlexMediaItem[]>;
-  
-  // Item Details
-  getItemMetadata(ratingKey: string): Promise<PlexMediaItem>;
-  getRelatedItems(ratingKey: string): Promise<PlexMediaItem[]>;
-  
+  getShowEpisodes(showKey: string): Promise<PlexMediaItem[]>;
+
+  // Collections/Playlists
+  getCollections(libraryId: string): Promise<PlexCollection[]>;
+  getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
+  getPlaylists(): Promise<PlexPlaylist[]>;
+  getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]>;
+
   // Search
-  search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
-  
-  // Media URLs
-  getImageUrl(path: string, width?: number, height?: number): string;
-  
-  // Events
-  on(event: 'libraryRefreshed', handler: (library: PlexLibrary) => void): void;
-  on(event: 'searchComplete', handler: (results: SearchResult[]) => void): void;
+  search(query: string, options?: SearchOptions): Promise<PlexMediaItem[]>;
+
+  // Image URLs
+  getImageUrl(imagePath: string, width?: number, height?: number): string;
+
+  // Refresh
+  refreshLibrary(libraryId: string): Promise<void>;
 }
 
 interface BrowseOptions {
@@ -2891,29 +2886,32 @@ interface HlsOptions {
 
 ```typescript
 interface IPlexStreamResolver {
-  // Stream resolution
+  // Stream Resolution
   resolveStream(request: StreamRequest): Promise<StreamDecision>;
-  
-  // Direct URL construction (for simple cases)
-  getDirectPlayUrl(partKey: string): string;
-  getHlsUrl(itemKey: string, options?: HlsOptions): string;
-  
-  // Subtitle handling
-  getSubtitleUrl(subtitleKey: string): string;
-  getSubtitleTracks(itemKey: string): Promise<SubtitleTrack[]>;
-  
-  // Session management
-  startSession(sessionId: string, itemKey: string): Promise<void>;
-  reportProgress(sessionId: string, itemKey: string, positionMs: number): Promise<void>;
-  endSession(sessionId: string, itemKey: string, positionMs: number): Promise<void>;
-  
-  // Cleanup
-  terminateSession(sessionId: string): Promise<void>;
-  terminateAllSessions(): Promise<void>;
-  
+
+  // Session Management
+  startSession(itemKey: string): Promise<string>;
+  updateProgress(
+    sessionId: string,
+    itemKey: string,
+    positionMs: number,
+    state: 'playing' | 'paused' | 'stopped'
+  ): Promise<void>;
+  endSession(sessionId: string, itemKey: string): Promise<void>;
+
+  // Direct Play Check
+  canDirectPlay(item: PlexMediaItem): boolean;
+
+  // Transcode Options
+  getTranscodeUrl(itemKey: string, options: HlsOptions): string;
+
   // Events
-  on(event: 'sessionStart', handler: (session: PlaybackSession) => void): void;
-  on(event: 'sessionEnd', handler: (session: PlaybackSession) => void): void;
+  on(event: 'sessionStart', handler: (session: { sessionId: string; itemKey: string }) => void): void;
+  on(
+    event: 'sessionEnd',
+    handler: (session: { sessionId: string; itemKey: string; positionMs: number }) => void
+  ): void;
+  on(event: 'error', handler: (error: StreamResolverError) => void): void;
 }
 ```
 
@@ -3003,7 +3001,10 @@ async reportProgress(
     key: `/library/metadata/${itemKey}`,
     state: 'playing',
     time: positionMs.toString(),
-    duration: this.activeSession?.durationMs?.toString() || '0',
+    duration: (() => {
+      const durationMs = this.activeSession ? this.activeSession.durationMs : undefined;
+      return typeof durationMs === 'number' ? durationMs.toString() : '0';
+    })(),
   });
   
   await this.fetch(`${this.serverUri}/:/timeline?${params}`, {
@@ -3150,8 +3151,8 @@ describe('PlexStreamResolver', () => {
         subtitleStreamId: 'sub-1',
       });
       
-      expect(result.selectedAudioStream?.id).toBe('audio-2');
-      expect(result.selectedSubtitleStream?.id).toBe('sub-1');
+      expect(result.selectedAudioStream && result.selectedAudioStream.id).toBe('audio-2');
+      expect(result.selectedSubtitleStream && result.selectedSubtitleStream.id).toBe('sub-1');
     });
   });
   
@@ -3173,7 +3174,7 @@ describe('PlexStreamResolver', () => {
       await resolver.reportProgress('session-1', '12345', 60000);
       
       const session = resolver.getSession('session-1');
-      expect(session?.lastReportedPositionMs).toBe(60000);
+      expect(session && session.lastReportedPositionMs).toBe(60000);
     });
   });
   
@@ -3204,7 +3205,7 @@ describe('PlexStreamResolver', () => {
       const tracks = await resolver.getSubtitleTracks('12345');
       const srtTrack = tracks.find(t => t.format === 'srt');
       
-      expect(srtTrack?.url).toContain('/library/streams');
+      expect(srtTrack && srtTrack.url).toContain('/library/streams');
     });
     
     it('should indicate burn-in for PGS subtitles', async () => {
@@ -3261,11 +3262,12 @@ You are implementing the Channel Manager module for Retune, a webOS TV applicati
 Manage virtual TV channels, including CRUD operations, content resolution, and channel switching.
 
 ### P11-V2: Files to Create
-- src/modules/channels/manager/index.ts
-- src/modules/channels/manager/ChannelManager.ts
-- src/modules/channels/manager/interfaces.ts
-- src/modules/channels/manager/types.ts
-- src/modules/channels/manager/__tests__/ChannelManager.test.ts
+- src/modules/scheduler/channel-manager/index.ts
+- src/modules/scheduler/channel-manager/ChannelManager.ts
+- src/modules/scheduler/channel-manager/ContentResolver.ts
+- src/modules/scheduler/channel-manager/interfaces.ts
+- src/modules/scheduler/channel-manager/types.ts
+- src/modules/scheduler/channel-manager/__tests__/ChannelManager.test.ts
 
 ### P11-V2: Type Definitions
 
@@ -3309,40 +3311,40 @@ interface ResolvedContentItem {
 }
 
 interface IChannelManager {
-  // CRUD
+  // Channel CRUD
   createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig>;
   updateChannel(id: string, updates: Partial<ChannelConfig>): Promise<ChannelConfig>;
   deleteChannel(id: string): Promise<void>;
-  
+
   // Retrieval
-  getChannels(): ChannelConfig[];
   getChannel(id: string): ChannelConfig | null;
+  getAllChannels(): ChannelConfig[];
   getChannelByNumber(number: number): ChannelConfig | null;
-  
-  // Ordering
-  reorderChannels(orderedIds: string[]): Promise<void>;
-  
+
   // Content Resolution
-  resolveChannelContent(channelId: string, forceRefresh?: boolean): Promise<ResolvedChannelContent>;
-  refreshAllChannelContent(): Promise<void>;
-  
-  // Playback State
+  resolveChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+  refreshChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+
+  // Ordering / Current Channel
+  reorderChannels(orderedIds: string[]): void;
+  setCurrentChannel(channelId: string): void;
   getCurrentChannel(): ChannelConfig | null;
-  switchToChannel(channelId: string): Promise<void>;
-  switchToChannelByNumber(number: number): Promise<void>;
-  nextChannel(): Promise<void>;
-  previousChannel(): Promise<void>;
-  
-  // Persistence
+  getNextChannel(): ChannelConfig | null;
+  getPreviousChannel(): ChannelConfig | null;
+
+  // Import/Export
   exportChannels(): string;
-  importChannels(json: string): Promise<{ imported: number; skipped: number }>;
-  
+  importChannels(data: string): Promise<ImportResult>;
+
+  // Persistence
+  saveChannels(): Promise<void>;
+  loadChannels(): Promise<void>;
+
   // Events
-  on(event: 'channelCreated', handler: (channel: ChannelConfig) => void): void;
-  on(event: 'channelUpdated', handler: (channel: ChannelConfig) => void): void;
-  on(event: 'channelDeleted', handler: (channelId: string) => void): void;
-  on(event: 'channelSwitch', handler: (channel: ChannelConfig) => void): void;
-  on(event: 'contentResolved', handler: (content: ResolvedChannelContent) => void): void;
+  on<K extends keyof ChannelManagerEventMap>(
+    event: K,
+    handler: (payload: ChannelManagerEventMap[K]) => void
+  ): void;
 }
 ```
 
@@ -3438,151 +3440,49 @@ Complete implementation with content resolution for all source types.
 ## Prompt 12: App Lifecycle Module (Priority 1)
 
 ````markdown
-You are implementing the App Lifecycle module for Retune, a webOS TV application.
+You are implementing the Application Lifecycle module for Retune, a webOS TV application.
 
 ### P12: Task
-Manage application lifecycle events, state persistence, and integration with webOS platform.
+Implement lifecycle hooks, persistence, network/memory monitoring, and error recovery glue so the app can run for long sessions and survive background/foreground transitions.
+
+### P12: SSOT (Do not drift)
+- Interfaces + types: `spec-pack/artifact-2-shared-types.ts` (`IAppLifecycle`, `IErrorRecovery`, `AppPhase`, `PersistentState`, `LifecycleEventMap`)
+- Module spec: `spec-pack/modules/app-lifecycle.md`
+- Platform constraints: `spec-pack/artifact-12-platform-constraints.md`
+- Config/constants: `spec-pack/artifact-5-config.ts`
 
 ### P12: Files to Create
 - src/modules/lifecycle/index.ts
 - src/modules/lifecycle/AppLifecycle.ts
+- src/modules/lifecycle/ErrorRecovery.ts
+- src/modules/lifecycle/StateManager.ts
 - src/modules/lifecycle/interfaces.ts
 - src/modules/lifecycle/types.ts
-- src/modules/lifecycle/StateManager.ts
 - src/modules/lifecycle/__tests__/AppLifecycle.test.ts
+- src/modules/lifecycle/__tests__/ErrorRecovery.test.ts
+- src/modules/lifecycle/__tests__/StateManager.test.ts
 
-### P12: Type Definitions
+### P12: Interface to Implement (canonical)
+Implement `IAppLifecycle` and `IErrorRecovery` exactly as defined in `spec-pack/artifact-2-shared-types.ts`.
 
-```typescript
-type AppState = 'launching' | 'active' | 'background' | 'suspended' | 'terminating';
+### P12: Constraints
+- Target Chromium 68: no optional chaining (`?.`) or nullish coalescing (`??`) in shipped code.
+- Persistence MUST handle localStorage quota errors gracefully.
+- All lifecycle event listeners MUST be removed on shutdown.
 
-interface IAppLifecycle {
-  // State
-  getState(): AppState;
-  isActive(): boolean;
-  isBackground(): boolean;
-  
-  // Lifecycle Hooks
-  onLaunch(handler: () => Promise<void>): void;
-  onRelaunch(handler: (params: LaunchParams) => void): void;
-  onPause(handler: () => void): void;
-  onResume(handler: () => void): void;
-  onClose(handler: () => Promise<boolean>): void;  // Return false to cancel
-  
-  // State Persistence
-  saveState(): Promise<void>;
-  restoreState(): Promise<PersistentState | null>;
-  clearState(): Promise<void>;
-  
-  // webOS Integration
-  registerForVisibilityChanges(): void;
-  keepAlive(): void;             // Prevent suspension
-  stopKeepAlive(): void;
-  
-  // Events
-  on(event: 'stateChange', handler: (state: AppState) => void): void;
-  on(event: 'visibilityChange', handler: (visible: boolean) => void): void;
-}
-
-interface PersistentState {
-  version: number;
-  currentChannelId: string | null;
-  lastPlaybackPosition: {
-    channelId: string;
-    positionMs: number;
-    timestamp: number;
-  } | null;
-  volume: number;
-}
-
-interface LaunchParams {
-  action?: string;
-  channelId?: string;
-  fromDeepLink?: boolean;
-}
-```
-
-### P12: Implementation Requirements
-
-1. **Visibility Change Detection**:
-```typescript
-registerForVisibilityChanges() {
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      this.transitionTo('background');
-      this.emit('visibilityChange', false);
-    } else {
-      this.transitionTo('active');
-      this.emit('visibilityChange', true);
-    }
-  });
-  
-  // webOS-specific
-  window.addEventListener('webOSRelaunch', (e: CustomEvent) => {
-    this.handleRelaunch(e.detail);
-  });
-}
-```
-
-2. **Keep-Alive** (Prevent webOS Suspension):
-```typescript
-keepAlive() {
-  this.keepAliveInterval = setInterval(() => {
-    // Touch DOM to prevent suspension
-    document.dispatchEvent(new Event('click'));
-  }, 30000);
-}
-```
-
-3. **State Persistence**: localStorage key 'retune_app_state'
-
-### P12: Error Handling
-
-| Error | Recovery |
-|-------|----------|
-| State restore fails | Return null, start fresh |
-| Save fails (quota) | Clear old data, retry |
-| Visibility API missing | Use focus/blur events |
-
-### P12: Test Specifications
+### P12: Minimum Test Cases
 ```typescript
 describe('AppLifecycle', () => {
-  describe('state transitions', () => {
-    it('should start in launching state');
-    it('should transition to active after launch');
-    it('should transition to background on visibility hidden');
-    it('should transition to active on visibility visible');
-    it('should emit stateChange events');
-  });
-  
-  describe('lifecycle hooks', () => {
-    it('should call onLaunch once at startup');
-    it('should call onPause when backgrounded');
-    it('should call onResume when foregrounded');
-    it('should call onClose before termination');
-  });
-  
-  describe('state persistence', () => {
-    it('should save state to localStorage');
-    it('should restore state on init');
-    it('should handle missing state gracefully');
-    it('should handle corrupted state gracefully');
-  });
-  
-  describe('keep-alive', () => {
-    it('should touch DOM every 30 seconds');
-    it('should stop on stopKeepAlive call');
-  });
-  
-  describe('webOS integration', () => {
-    it('should handle webOSRelaunch event');
-    it('should parse launch parameters');
-  });
+  it('registers and tears down visibility listeners');
+  it('saves and restores PersistentState via StateManager');
+  it('invokes onPause/onResume callbacks on visibility changes');
+});
+
+describe('ErrorRecovery', () => {
+  it('maps AppErrorCode to recovery actions');
+  it('executes recovery actions safely and returns boolean');
 });
 ```
-
-### P12: Deliverable
-Complete implementation with webOS integration and state management.
 
 ````
 
@@ -3591,260 +3491,47 @@ Complete implementation with webOS integration and state management.
 ## Prompt 13: App Orchestrator Module (Priority 7)
 
 ````markdown
-You are implementing the App Orchestrator module for Retune, a webOS TV application.
+You are implementing the Application Orchestrator module for Retune, a webOS TV application.
 
 ### P13: Task
-Coordinate all modules, handle initialization sequence, and manage cross-module communication.
+Coordinate module initialization and inter-module wiring per the integration contracts so the app can start, restore state, and run the core playback loop reliably.
+
+### P13: SSOT (Do not drift)
+- Interfaces + types: `spec-pack/artifact-2-shared-types.ts` (`IAppOrchestrator`, `OrchestratorConfig`, `ModuleStatus`)
+- Module spec: `spec-pack/modules/app-orchestrator.md`
+- Dependency graph: `spec-pack/artifact-1-dependency-graph.json`
+- Integration contracts: `spec-pack/artifact-4-integration-contracts.md`
+- Verification checklist: `spec-pack/artifact-8-verification-checklist.md`
 
 ### P13: Files to Create
-- src/core/Orchestrator.ts
-- src/core/interfaces.ts
-- src/App.ts
+- src/Orchestrator.ts
 - src/index.ts
+- src/App.ts
 - src/__tests__/Orchestrator.test.ts
-- src/__tests__/integration/FullFlow.test.ts
 
-### P13: Type Definitions
+### P13: Interface to Implement (canonical)
+Implement `IAppOrchestrator` exactly as defined in `spec-pack/artifact-2-shared-types.ts`.
 
+### P13: Required Behaviors
+1) Initialize modules in dependency order (see `spec-pack/artifact-1-dependency-graph.json` phases).
+2) Wire events per `spec-pack/artifact-4-integration-contracts.md`.
+3) Perform state restore flow using lifecycle persistence before entering steady-state playback.
+4) Centralize global error handling (`handleGlobalError`) and expose recovery actions.
+
+### P13: Minimum Test Cases
 ```typescript
-interface IOrchestratorConfig {
-  containerId: string;
-  debugMode?: boolean;
-}
-
-### P13: Interface to Implement
-
-```typescript
-interface IOrchestrator {
-  initialize(config: IOrchestratorConfig): Promise<void>;
-  destroy(): void;
-  
-  // Module Access
-  getAuth(): IPlexAuth;
-  getDiscovery(): IPlexServerDiscovery;
-  getLibrary(): IPlexLibrary;
-  getStreamResolver(): IPlexStreamResolver;
-  getChannelManager(): IChannelManager;
-  getScheduler(): IChannelScheduler;
-  getPlayer(): IVideoPlayer;
-  getNavigation(): INavigationManager;
-  getEPG(): IEPGComponent;
-  getLifecycle(): IAppLifecycle;
-}
-```
-
-### P13: Initialization Sequence
-
-```typescript
-async initialize(config: IOrchestratorConfig): Promise<void> {
-  try {
-    // Phase 1: Core Infrastructure
-    this.eventEmitter = new EventEmitter();
-    this.lifecycle = new AppLifecycle();
-    this.lifecycle.registerForVisibilityChanges();
-    
-    // Phase 2: Navigation (needed for all screens)
-    this.navigation = new NavigationManager({ containerId: config.containerId });
-    this.navigation.initialize();
-    
-    // Phase 3: Plex Authentication
-    this.auth = new PlexAuth(PLEX_CONFIG);
-    await this.auth.loadStoredCredentials();
-    
-    if (!this.auth.isAuthenticated()) {
-      this.navigation.goTo('auth');
-      return; // Wait for auth completion
-    }
-    
-    // Phase 4: Server Connection
-    this.discovery = new PlexServerDiscovery(this.auth);
-    const servers = await this.discovery.discoverServers();
-    
-    if (!this.discovery.getSelectedServer()) {
-      this.navigation.goTo('serverSelect');
-      return; // Wait for server selection
-    }
-    
-    // Phase 5: Library & Content
-    this.library = new PlexLibrary(this.auth, this.discovery.getServerUri()!);
-    this.streamResolver = new PlexStreamResolver(this.auth, this.discovery.getServerUri()!);
-    
-    // Phase 6: Channels
-    this.channelManager = new ChannelManager(this.library);
-    await this.channelManager.loadChannels();
-    
-    // Phase 7: Playback
-    this.scheduler = new ChannelScheduler();
-    this.player = new VideoPlayer();
-    await this.player.initialize({ containerId: config.containerId });
-    
-    // Phase 8: UI
-    this.epg = new EPGComponent();
-    this.epg.initialize(EPG_CONFIG);
-    
-    // Phase 9: Bind Events
-    this.setupEventBindings();
-    
-    // Phase 10: Start Playback
-    const currentChannel = this.channelManager.getCurrentChannel();
-    if (currentChannel) {
-      await this.switchToChannel(currentChannel.id);
-    }
-    
-    this.navigation.goTo('home');
-    this.lifecycle.keepAlive();
-    
-  } catch (error) {
-    this.handleInitError(error);
-  }
-}
-```
-
-### P13: Event Bindings
-
-```typescript
-setupEventBindings() {
-  // Auth changes
-  this.auth.on('authChange', (isAuthenticated) => {
-    if (!isAuthenticated) {
-      this.player.stop();
-      this.navigation.goTo('auth');
-    }
-  });
-  
-  // Program transitions
-  this.scheduler.on('programStart', async (program) => {
-    const stream = await this.resolveStreamForProgram(program);
-    await this.player.loadStream(stream);
-    await this.player.seekTo(program.elapsedMs);
-    await this.player.play();
-  });
-  
-  this.scheduler.on('programEnd', (program) => {
-    // Next program will be handled by next programStart
-  });
-  
-  // Content changes
-  this.channelManager.on('contentResolved', (content) => {
-    if (content.channelId === this.channelManager.getCurrentChannel()?.id) {
-      this.scheduler.loadChannel({
-        channelId: content.channelId,
-        anchorTime: this.channelManager.getCurrentChannel()!.anchorTime,
-        content: content.items,
-        playbackMode: this.channelManager.getCurrentChannel()!.playbackMode,
-        shuffleSeed: this.channelManager.getCurrentChannel()!.shuffleSeed,
-        loopSchedule: true
-      });
-    }
-  });
-  
-  // Channel switching
-  this.channelManager.on('channelSwitch', async (channel) => {
-    await this.switchToChannel(channel.id);
-  });
-  
-  // EPG selection
-  this.epg.on('channelSelected', ({ channel }) => {
-    this.channelManager.switchToChannel(channel.id);
-    this.epg.hide();
-  });
-  
-  // Lifecycle
-  this.lifecycle.onPause(() => {
-    this.player.pause();
-    this.lifecycle.saveState();
-  });
-  
-  this.lifecycle.onResume(() => {
-    this.scheduler.syncToCurrentTime();
-    this.player.play();
-  });
-  
-  // Player errors
-  this.player.on('error', (error) => {
-    if (error.code === 'NETWORK_ERROR' && error.retryable) {
-      // Retry handled by player
-    } else {
-      // Skip to next program
-      this.scheduler.skipToNext();
-    }
-  });
-}
-```
-
-### P13: Error Handling
-
-```typescript
-handleInitError(error: Error) {
-  console.error('Initialization failed:', error);
-  
-  if (error.message.includes('auth')) {
-    this.navigation.goTo('auth');
-  } else if (error.message.includes('server')) {
-    this.navigation.goTo('serverSelect');
-  } else {
-    this.navigation.goTo('error', { 
-      message: 'Failed to initialize. Please restart.',
-      action: 'Retry',
-      onAction: () => window.location.reload()
-    });
-  }
-}
-```
-
-### P13: Test Specifications
-
-```typescript
-describe('Orchestrator', () => {
-  describe('initialization sequence', () => {
-    it('should initialize modules in correct order');
-    it('should stop at auth screen when not authenticated');
-    it('should stop at server select when no server selected');
-    it('should complete full init when authenticated with server');
-    it('should handle init errors gracefully');
-  });
-  
-  describe('event propagation', () => {
-    it('should handle auth changes');
-    it('should handle program start events');
-    it('should handle channel switch events');
-    it('should handle lifecycle pause/resume');
-    it('should handle player errors');
-  });
-  
-  describe('channel switching', () => {
-    it('should resolve content for new channel');
-    it('should load schedule into scheduler');
-    it('should resolve stream for current program');
-    it('should seek player to correct position');
-  });
-  
-  describe('error recovery', () => {
-    it('should recover from stream errors by skipping');
-    it('should recover from network errors with retry');
-    it('should redirect to auth on token expiry');
-  });
-});
-
-// Integration tests
-describe('Integration: Full Channel Switch Flow', () => {
-  it('should complete channel switch end-to-end', async () => {
-    // 1. User presses channel up
-    // 2. ChannelManager emits channelSwitch
-    // 3. Orchestrator resolves content
-    // 4. Scheduler loads and emits programStart
-    // 5. Player loads and plays stream
-    // Verify all steps complete within 3 seconds
-  });
-  
-  it('should recover from complete server disconnect', async () => {
-    // 1. Simulate network disconnect
-    // 2. Player emits error
-    // 3. Orchestrator attempts recovery
-    // 4. If recovery fails, show error screen
-  });
+describe('AppOrchestrator', () => {
+  it('initializes modules in correct phase order');
+  it('wires scheduler -> player and player -> scheduler events');
+  it('restores persisted state and resumes playback when available');
+  it('handles module init failures via handleGlobalError');
 });
 ```
+
+### P13: Implementation Notes
+- Treat `spec-pack/modules/app-orchestrator.md` as the SSOT for sequencing and wiring.
+- Ensure any sample code included in the implementation is Chromium 68 compatible (no `?.` / `??`).
+- Always implement the `IAppOrchestrator` signature from `spec-pack/artifact-2-shared-types.ts` (ignore any legacy snippets elsewhere).
 
 ### P13: Mock Requirements
 - All module interfaces should be mockable

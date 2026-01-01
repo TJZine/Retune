@@ -34,7 +34,8 @@ describe('Integration: Authentication Flow', () => {
     // 6. Verify credentials stored
     const stored = await plexAuth.getStoredCredentials();
     expect(stored).not.toBeNull();
-    expect(stored?.token.token).toBe('valid-token');
+    if (!stored) throw new Error('Expected stored credentials');
+    expect(stored.token.token).toBe('valid-token');
   });
   
   it('should handle token expiry during playback', async () => {
@@ -129,7 +130,9 @@ describe('Integration: EPG Navigation', () => {
     navigation._simulateKeyPress('down');
     
     const focused = epg.getFocusedProgram();
-    expect(focused?.channelIndex).toBe(2); // 0-indexed
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    expect(focused.channelIndex).toBe(2); // 0-indexed
     
     // 3. Navigate to future program
     navigation._simulateKeyPress('right');
@@ -137,14 +140,18 @@ describe('Integration: EPG Navigation', () => {
     
     // 4. Verify info panel updated
     const infoPanel = document.querySelector('.epg-info-panel');
-    expect(infoPanel?.textContent).toContain(focused?.program.item.title);
+    expect(infoPanel).not.toBeNull();
+    expect((infoPanel as HTMLElement).textContent).toContain(focused.program.item.title);
     
     // 5. Select channel
     navigation._simulateKeyPress('ok');
     
     // 6. Verify EPG closed and channel switched
     await waitFor(() => !epg.isVisible());
-    expect(channelManager.getCurrentChannel()?.id).toBe('channel-3');
+    const current = channelManager.getCurrentChannel();
+    expect(current).not.toBeNull();
+    if (!current) throw new Error('Expected current channel');
+    expect(current.id).toBe('channel-3');
   });
   
   it('should handle navigation at grid boundaries', async () => {
@@ -160,7 +167,10 @@ describe('Integration: EPG Navigation', () => {
     expect(moved).toBe(false);
     
     // Focus should remain on first row
-    expect(epg.getFocusedProgram()?.channelIndex).toBe(0);
+    const focused = epg.getFocusedProgram();
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    expect(focused.channelIndex).toBe(0);
   });
   
   it('should maintain focus during scroll', async () => {
@@ -170,7 +180,10 @@ describe('Integration: EPG Navigation', () => {
     
     // Focus a program
     epg.focusProgram(2, 1);
-    const focusedProgram = epg.getFocusedProgram()?.program;
+    const focused = epg.getFocusedProgram();
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    const focusedProgram = focused.program;
     
     // Scroll grid (navigating down past visible channels)
     for (let i = 0; i < 5; i++) {
@@ -179,7 +192,10 @@ describe('Integration: EPG Navigation', () => {
     
     // Verify focus moved to new position (not lost)
     expect(epg.getFocusedProgram()).not.toBeNull();
-    expect(epg.getFocusedProgram()?.channelIndex).toBe(7); // 2 + 5
+    const focused = epg.getFocusedProgram();
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    expect(focused.channelIndex).toBe(7); // 2 + 5
   });
   
   it('should handle focus when scrolled off-screen and back', async () => {
@@ -189,7 +205,10 @@ describe('Integration: EPG Navigation', () => {
     
     // Focus a program near top
     epg.focusProgram(1, 0);
-    const initialProgram = epg.getFocusedProgram()?.program;
+    const focused = epg.getFocusedProgram();
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    const initialProgram = focused.program;
     
     // Scroll down far enough that original row is recycled
     for (let i = 0; i < 10; i++) {
@@ -202,7 +221,10 @@ describe('Integration: EPG Navigation', () => {
     }
     
     // Focus should return to original position
-    expect(epg.getFocusedProgram()?.channelIndex).toBe(1);
+    const focused = epg.getFocusedProgram();
+    expect(focused).not.toBeNull();
+    if (!focused) throw new Error('Expected focused program');
+    expect(focused.channelIndex).toBe(1);
   });
 });
 ```
@@ -308,7 +330,10 @@ describe('Integration: App Lifecycle', () => {
     
     // Verify state saved
     const savedState = JSON.parse(localStorage.getItem('retune_state') || '{}');
-    expect(savedState.channelId).toBe(channelManager.getCurrentChannel()?.id);
+    const current = channelManager.getCurrentChannel();
+    expect(current).not.toBeNull();
+    if (!current) throw new Error('Expected current channel');
+    expect(savedState.channelId).toBe(current.id);
     expect(savedState.position).toBeGreaterThan(0);
   });
 });
@@ -331,7 +356,7 @@ describe('Integration: Memory Management', () => {
     }
     
     // Verify memory used
-    const memoryBefore = performance.memory?.usedJSHeapSize || 0;
+    const memoryBefore = performance.memory ? performance.memory.usedJSHeapSize : 0;
     
     // Emit memory warning
     appLifecycle._emitMemoryWarning({ level: 'warning' });
@@ -366,7 +391,7 @@ describe('Integration: Number Input Channel Switch', () => {
     // Verify overlay shown
     await waitFor(() => {
       const overlay = document.querySelector('.channel-input-overlay');
-      return overlay?.textContent === '1';
+      return !!overlay && overlay.textContent === '1';
     });
     
     navigation._simulateKeyPress('num2');
@@ -374,14 +399,17 @@ describe('Integration: Number Input Channel Switch', () => {
     // Verify overlay updated
     await waitFor(() => {
       const overlay = document.querySelector('.channel-input-overlay');
-      return overlay?.textContent === '12';
+      return !!overlay && overlay.textContent === '12';
     });
     
     // Wait for timeout commit
     await sleep(2100);
     
     // Verify channel switched
-    expect(channelManager.getCurrentChannel()?.number).toBe(12);
+    const current = channelManager.getCurrentChannel();
+    expect(current).not.toBeNull();
+    if (!current) throw new Error('Expected current channel');
+    expect(current.number).toBe(12);
   });
   
   it('should switch immediately on 3rd digit', async () => {
@@ -394,7 +422,10 @@ describe('Integration: Number Input Channel Switch', () => {
     
     // Should switch immediately without timeout
     await sleep(100);
-    expect(channelManager.getCurrentChannel()?.number).toBe(123);
+    const current = channelManager.getCurrentChannel();
+    expect(current).not.toBeNull();
+    if (!current) throw new Error('Expected current channel');
+    expect(current.number).toBe(123);
   });
 });
 ```
@@ -410,8 +441,8 @@ async function waitFor(
   predicate: () => boolean | Promise<boolean>,
   options: { timeout?: number; interval?: number } = {}
 ): Promise<void> {
-  const timeout = options.timeout ?? 5000;
-  const interval = options.interval ?? 100;
+  const timeout = options.timeout !== undefined ? options.timeout : 5000;
+  const interval = options.interval !== undefined ? options.interval : 100;
   const start = Date.now();
   
   while (Date.now() - start < timeout) {

@@ -30,26 +30,14 @@ export interface IDisposable {
 }
 
 /**
- * Type-safe event emitter with error isolation.
+ * Type-safe event emitter interface with error isolation.
  * One handler's error does not prevent other handlers from executing.
  * 
  * @template TEventMap - A record type mapping event names to payload types
  * 
- * @example
- * ```typescript
- * interface MyEvents {
- *   userLogin: { userId: string };
- *   userLogout: { userId: string; reason: string };
- * }
- * 
- * const emitter = new TypedEventEmitter<MyEvents>();
- * emitter.on('userLogin', (payload) => console.log(payload.userId));
- * emitter.emit('userLogin', { userId: '123' });
- * ```
+ * @see spec-pack/modules/event-emitter.md for reference implementation
  */
-export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
-  private handlers: Map<keyof TEventMap, Set<(payload: unknown) => void>> = new Map();
-
+export interface IEventEmitter<TEventMap extends Record<string, unknown>> {
   /**
    * Register an event handler
    * @returns A disposable to remove the handler
@@ -57,16 +45,7 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
   on<K extends keyof TEventMap>(
     event: K,
     handler: (payload: TEventMap[K]) => void
-  ): IDisposable {
-    if (!this.handlers.has(event)) {
-      this.handlers.set(event, new Set());
-    }
-    this.handlers.get(event)!.add(handler as (payload: unknown) => void);
-
-    return {
-      dispose: () => this.off(event, handler)
-    };
-  }
+  ): IDisposable;
 
   /**
    * Unregister an event handler
@@ -74,51 +53,32 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
   off<K extends keyof TEventMap>(
     event: K,
     handler: (payload: TEventMap[K]) => void
-  ): void {
-    this.handlers.get(event)?.delete(handler as (payload: unknown) => void);
-  }
+  ): void;
+
+  /**
+   * Register a one-time event handler
+   * @returns A disposable to remove the handler before it fires
+   */
+  once<K extends keyof TEventMap>(
+    event: K,
+    handler: (payload: TEventMap[K]) => void
+  ): IDisposable;
 
   /**
    * Emit an event to all registered handlers.
-   * CRITICAL: Errors in handlers are caught and logged, NOT propagated.
-   * This ensures one faulty handler doesn't crash the entire app.
+   * Errors in handlers are caught and logged, NOT propagated.
    */
-  emit<K extends keyof TEventMap>(event: K, payload: TEventMap[K]): void {
-    const eventHandlers = this.handlers.get(event);
-    if (!eventHandlers) return;
-
-    eventHandlers.forEach(handler => {
-      try {
-        handler(payload);
-      } catch (error) {
-        // Error isolation: log but don't propagate
-        console.error(
-          `[EventEmitter] Handler error for event '${String(event)}':`,
-          error
-        );
-        // Optionally report to error tracking service
-        // ErrorReporter.captureException(error);
-      }
-    });
-  }
+  emit<K extends keyof TEventMap>(event: K, payload: TEventMap[K]): void;
 
   /**
    * Remove all handlers for a specific event or all events
    */
-  removeAllListeners(event?: keyof TEventMap): void {
-    if (event) {
-      this.handlers.delete(event);
-    } else {
-      this.handlers.clear();
-    }
-  }
+  removeAllListeners(event?: keyof TEventMap): void;
 
   /**
    * Get the count of handlers for an event
    */
-  listenerCount(event: keyof TEventMap): number {
-    return this.handlers.get(event)?.size ?? 0;
-  }
+  listenerCount(event: keyof TEventMap): number;
 }
 
 // ============================================
@@ -131,7 +91,12 @@ export class TypedEventEmitter<TEventMap extends Record<string, unknown>> {
  * 
  * @example
  * ```typescript
- * throw new AppError(AppErrorCode.NETWORK_TIMEOUT, 'Request timed out');
+ * const error: AppError = {
+ *   code: AppErrorCode.NETWORK_TIMEOUT,
+ *   message: 'Request timed out',
+ *   recoverable: true
+ * };
+ * return { success: false, error };
  * 
  * // In error handler:
  * if (error.code === AppErrorCode.AUTH_EXPIRED) {
@@ -170,55 +135,61 @@ export enum AppErrorCode {
   UI_RENDER_ERROR = 'UI_RENDER_ERROR',
   UI_NAVIGATION_BLOCKED = 'UI_NAVIGATION_BLOCKED',
 
+  // System / Lifecycle Errors (7xx)
+  INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
+  PLEX_UNREACHABLE = 'PLEX_UNREACHABLE',
+  DATA_CORRUPTION = 'DATA_CORRUPTION',
+  PLAYBACK_FAILED = 'PLAYBACK_FAILED',
+  OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+
   // Generic
   UNKNOWN = 'UNKNOWN',
 }
 
 /**
- * Base application error with unified error code.
- */
-export class AppError extends Error {
-  constructor(
-    public readonly code: AppErrorCode,
-    message: string,
-    public readonly recoverable: boolean = false,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'AppError';
-  }
-}
-
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
-
-/**
- * Get MIME type for a stream decision's protocol.
- * Used when creating video source elements.
- * 
- * @param protocol - The stream protocol (hls, dash, or direct/http)
- * @returns The appropriate MIME type string
+ * Base application error structure (types-only).
+ * Use this interface for error objects across all modules.
  * 
  * @example
  * ```typescript
- * const descriptor: StreamDescriptor = {
- *   url: decision.playbackUrl,
- *   protocol: decision.protocol,
- *   mimeType: getMimeType(decision.protocol),
- *   // ...
+ * const error: AppError = {
+ *   code: AppErrorCode.NETWORK_TIMEOUT,
+ *   message: 'Request timed out after 5000ms',
+ *   recoverable: true,
+ *   context: { endpoint: '/api/v2/resources' }
  * };
  * ```
  */
-export function getMimeType(protocol: 'hls' | 'dash' | 'direct' | 'http'): string {
-  const mimeTypes: Record<string, string> = {
-    hls: 'application/x-mpegURL',
-    dash: 'application/dash+xml',
-    direct: 'video/mp4',
-    http: 'video/mp4',
-  };
-  return mimeTypes[protocol] ?? 'video/mp4';
+export interface AppError {
+  /** Error code from canonical taxonomy */
+  code: AppErrorCode;
+  /** Technical error message */
+  message: string;
+  /** Whether recovery might succeed */
+  recoverable: boolean;
+  /** Additional context for debugging */
+  context?: Record<string, unknown>;
 }
+
+// ============================================
+// MIME TYPE CONSTANTS
+// ============================================
+
+/**
+ * MIME types for stream protocols.
+ * Use when creating video source elements.
+ * 
+ * NOTE: The getMimeType() helper function should be implemented
+ * in the plex-stream-resolver module, not in shared types.
+ */
+export type StreamProtocol = 'hls' | 'dash' | 'direct' | 'http';
+
+/**
+ * MIME type mapping for reference (implementation in plex-stream-resolver)
+ * - hls: 'application/x-mpegURL'
+ * - dash: 'application/dash+xml'
+ * - direct/http: 'video/mp4'
+ */
 
 // ============================================
 // LOGGING INFRASTRUCTURE
@@ -314,7 +285,10 @@ export interface PlexAuthToken {
   email: string;
   /** Avatar URL */
   thumb: string;
-  /** Token expiration - usually null (long-lived tokens) */
+  /**
+   * Token expiration time (if known).
+   * Plex tokens may be short-lived (e.g., JWTs); treat `null` as "unknown" and revalidate on startup.
+   */
   expiresAt: Date | null;
   /** When token was issued */
   issuedAt: Date;
@@ -713,6 +687,28 @@ export interface HlsOptions {
   subtitleSize?: number;
   /** Audio boost percentage */
   audioBoost?: number;
+}
+
+/**
+ * Plex Stream Resolver error codes (module-level)
+ */
+export type StreamResolverErrorCode =
+  | 'ITEM_NOT_FOUND'
+  | 'SERVER_BUSY'
+  | 'UNSUPPORTED_CODEC'
+  | 'NETWORK_TIMEOUT'
+  | 'SESSION_EXPIRED'
+  | 'MIXED_CONTENT_BLOCKED'
+  | 'TRANSCODE_FAILED';
+
+/**
+ * Stream resolver error structure
+ */
+export interface StreamResolverError {
+  code: StreamResolverErrorCode;
+  message: string;
+  recoverable: boolean;
+  retryAfterMs?: number;
 }
 
 // ============================================
@@ -1561,7 +1557,10 @@ export type ConnectionStatus =
   | 'unreachable';
 
 /**
- * Application error types
+ * @deprecated Use AppErrorCode instead.
+ *
+ * Legacy lifecycle error taxonomy retained only to support older drafts/docs.
+ * Do not use this in new specs or implementations.
  */
 export type AppErrorType =
   | 'INITIALIZATION_FAILED'
@@ -1574,13 +1573,18 @@ export type AppErrorType =
   | 'UNKNOWN';
 
 /**
- * Application error with recovery options
+ * Extended application error for lifecycle/UI surfaces.
+ *
+ * Best practice: keep a single canonical taxonomy (`AppErrorCode`) and
+ * add UI-specific fields here rather than introducing a second taxonomy.
  */
-export interface AppError {
-  /** Error type */
-  type: AppErrorType;
+export interface LifecycleAppError {
+  /** Canonical error code */
+  code: AppErrorCode;
   /** Technical error message */
   message: string;
+  /** Whether recovery might succeed */
+  recoverable: boolean;
   /** When error occurred */
   timestamp: number;
   /** Additional context */
@@ -1618,7 +1622,7 @@ export interface AppLifecycleState {
   /** Plex connection status */
   plexConnectionStatus: ConnectionStatus;
   /** Current error if any */
-  currentError: AppError | null;
+  currentError: LifecycleAppError | null;
 }
 
 /**
@@ -1665,14 +1669,69 @@ export interface UserPreferences {
  * Module health status
  */
 export interface ModuleStatus {
-  /** Module name */
+  id: string;
   name: string;
-  /** Whether module is initialized */
-  initialized: boolean;
-  /** Whether module is healthy */
-  healthy: boolean;
-  /** Last error message if unhealthy */
-  lastError?: string;
+  status: 'pending' | 'initializing' | 'ready' | 'error' | 'disabled';
+  loadTimeMs?: number;
+  error?: AppError;
+  memoryUsageMB?: number;
+}
+
+/**
+ * Orchestrator configuration (module configs passed at initialization)
+ */
+export interface OrchestratorConfig {
+  plexConfig: PlexAuthConfig;
+  playerConfig: VideoPlayerConfig;
+  navConfig: NavigationConfig;
+  epgConfig: EPGConfig;
+}
+
+/**
+ * Orchestrator error codes (high-level orchestration failures)
+ *
+ * NOTE: This is a separate taxonomy from AppErrorCode and is used only by the
+ * orchestrator UI/recovery layer. Prefer mapping module errors to AppErrorCode
+ * where possible.
+ */
+export type OrchestratorErrorCode =
+  // Authentication Errors
+  | 'AUTH_REQUIRED'
+  | 'AUTH_EXPIRED'
+  | 'AUTH_INVALID'
+  | 'AUTH_RATE_LIMITED'
+  // Network Errors
+  | 'NETWORK_OFFLINE'
+  | 'NETWORK_TIMEOUT'
+  | 'SERVER_UNREACHABLE'
+  | 'SERVER_SSL_ERROR'
+  // Playback Errors
+  | 'STREAM_NOT_FOUND'
+  | 'STREAM_DECODE_ERROR'
+  | 'STREAM_NETWORK_ERROR'
+  | 'TRANSCODE_FAILED'
+  // Content Errors
+  | 'CHANNEL_EMPTY'
+  | 'CONTENT_UNAVAILABLE'
+  | 'LIBRARY_UNAVAILABLE'
+  // Storage Errors
+  | 'STORAGE_QUOTA'
+  | 'STORAGE_CORRUPTED'
+  // Module Errors
+  | 'MODULE_INIT_FAILED'
+  | 'MODULE_CRASH'
+  // Critical Errors
+  | 'INITIALIZATION_FAILED'
+  | 'UNRECOVERABLE';
+
+/**
+ * Recovery action definition for error handling UI
+ */
+export interface ErrorRecoveryAction {
+  label: string;
+  action: () => void;
+  isPrimary: boolean;
+  requiresNetwork: boolean;
 }
 
 // ============================================
@@ -1755,7 +1814,7 @@ export interface LifecycleEventMap {
   visibilityChange: { isVisible: boolean };
   networkChange: { isAvailable: boolean };
   plexConnectionChange: { status: ConnectionStatus };
-  error: AppError;
+  error: LifecycleAppError;
   stateRestored: PersistentState;
   beforeTerminate: void;
 }
@@ -1790,4 +1849,468 @@ export interface SearchOptions {
   libraryId?: string;
   /** Maximum results */
   limit?: number;
+}
+
+// ============================================
+// MODULE PUBLIC INTERFACES (Centralized Contracts)
+// ============================================
+
+/**
+ * Plex Authentication Interface
+ * Handles OAuth flow and token management
+ */
+export interface IPlexAuth {
+  /** Initiate PIN-based OAuth flow */
+  requestPin(): Promise<PlexPinRequest>;
+  /** Check if PIN has been claimed */
+  checkPinStatus(pinId: number): Promise<PlexPinRequest>;
+  /** Cancel pending PIN request */
+  cancelPin(pinId: number): Promise<void>;
+  /** Validate an auth token */
+  validateToken(token: string): Promise<boolean>;
+  /** Get stored credentials from localStorage */
+  getStoredCredentials(): Promise<PlexAuthData | null>;
+  /** Store credentials to localStorage */
+  storeCredentials(auth: PlexAuthData): Promise<void>;
+  /** Clear all stored credentials */
+  clearCredentials(): Promise<void>;
+  /** Check if user is authenticated */
+  isAuthenticated(): boolean;
+  /** Get current user profile */
+  getCurrentUser(): PlexAuthToken | null;
+  /** Get headers required for Plex API requests */
+  getAuthHeaders(): Record<string, string>;
+}
+
+/**
+ * Plex Server Discovery Interface
+ * Manages server discovery, connection testing, and selection
+ */
+export interface IPlexServerDiscovery {
+  // Discovery
+  discoverServers(): Promise<PlexServer[]>;
+  refreshServers(): Promise<PlexServer[]>;
+
+  // Connection Testing
+  testConnection(server: PlexServer, connection: PlexConnection): Promise<number | null>;
+  findFastestConnection(server: PlexServer): Promise<PlexConnection | null>;
+
+  // Server Selection
+  selectServer(serverId: string): Promise<boolean>;
+  getSelectedServer(): PlexServer | null;
+  getSelectedConnection(): PlexConnection | null;
+  getServerUri(): string | null;
+
+  // State
+  getServers(): PlexServer[];
+  isConnected(): boolean;
+
+  // Events
+  on(event: 'serverChange', handler: (server: PlexServer | null) => void): void;
+  on(event: 'connectionChange', handler: (uri: string | null) => void): void;
+}
+
+/**
+ * Plex Library Interface
+ * Provides access to Plex media libraries and content
+ */
+export interface IPlexLibrary {
+  /** Get all libraries */
+  getLibraries(): Promise<PlexLibrary[]>;
+  /** Get a specific library */
+  getLibrary(libraryId: string): Promise<PlexLibrary | null>;
+  /** Get items from a library with optional filtering */
+  getLibraryItems(libraryId: string, options?: LibraryQueryOptions): Promise<PlexMediaItem[]>;
+  /** Get a specific media item */
+  getItem(ratingKey: string): Promise<PlexMediaItem | null>;
+  /** Get TV shows within a library */
+  getShows(libraryId: string): Promise<PlexMediaItem[]>;
+  /** Get seasons for a show */
+  getShowSeasons(showKey: string): Promise<PlexSeason[]>;
+  /** Get episodes for a season */
+  getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]>;
+  /** Get all episodes for a show (flattened) */
+  getShowEpisodes(showKey: string): Promise<PlexMediaItem[]>;
+  /** Search for content */
+  search(query: string, options?: SearchOptions): Promise<PlexMediaItem[]>;
+  /** Get collections in a library */
+  getCollections(libraryId: string): Promise<PlexCollection[]>;
+  /** Get items in a collection */
+  getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
+  /** Get user playlists */
+  getPlaylists(): Promise<PlexPlaylist[]>;
+  /** Get items in a playlist */
+  getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]>;
+  /** Generate image URL with auth token */
+  getImageUrl(imagePath: string, width?: number, height?: number): string;
+  /** Refresh cached library data */
+  refreshLibrary(libraryId: string): Promise<void>;
+}
+
+/**
+ * Plex Stream Resolver Interface
+ * Resolves media items to playable stream URLs
+ */
+export interface IPlexStreamResolver {
+  // Stream Resolution
+  resolveStream(request: StreamRequest): Promise<StreamDecision>;
+
+  // Session Management
+  startSession(itemKey: string): Promise<string>;
+  updateProgress(
+    sessionId: string,
+    itemKey: string,
+    positionMs: number,
+    state: 'playing' | 'paused' | 'stopped'
+  ): Promise<void>;
+  endSession(sessionId: string, itemKey: string): Promise<void>;
+
+  // Direct Play Check
+  canDirectPlay(item: PlexMediaItem): boolean;
+
+  // Transcode Options
+  getTranscodeUrl(itemKey: string, options: HlsOptions): string;
+
+  // Events
+  on(event: 'sessionStart', handler: (session: { sessionId: string; itemKey: string }) => void): void;
+  on(
+    event: 'sessionEnd',
+    handler: (session: { sessionId: string; itemKey: string; positionMs: number }) => void
+  ): void;
+  on(event: 'error', handler: (error: StreamResolverError) => void): void;
+}
+
+/**
+ * Channel Manager Interface
+ * Manages virtual TV channel CRUD operations
+ */
+export interface IChannelManager {
+  // Channel CRUD
+  createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig>;
+  updateChannel(id: string, updates: Partial<ChannelConfig>): Promise<ChannelConfig>;
+  deleteChannel(id: string): Promise<void>;
+
+  // Retrieval
+  getChannel(id: string): ChannelConfig | null;
+  getAllChannels(): ChannelConfig[];
+  getChannelByNumber(number: number): ChannelConfig | null;
+
+  // Content Resolution
+  resolveChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+  refreshChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+
+  // Ordering / Current Channel
+  reorderChannels(orderedIds: string[]): void;
+  setCurrentChannel(channelId: string): void;
+  getCurrentChannel(): ChannelConfig | null;
+  getNextChannel(): ChannelConfig | null;
+  getPreviousChannel(): ChannelConfig | null;
+
+  // Import/Export
+  exportChannels(): string;
+  importChannels(data: string): Promise<ImportResult>;
+
+  // Persistence
+  saveChannels(): Promise<void>;
+  loadChannels(): Promise<void>;
+
+  // Events
+  on<K extends keyof ChannelManagerEventMap>(
+    event: K,
+    handler: (payload: ChannelManagerEventMap[K]) => void
+  ): void;
+}
+
+/**
+ * Channel Scheduler Interface
+ * Provides deterministic schedule generation for channels
+ */
+export interface IChannelScheduler {
+  // Schedule Generation
+  loadChannel(config: ScheduleConfig): void;
+  unloadChannel(): void;
+
+  // Time-based Queries (Core Algorithm)
+  getProgramAtTime(time: number): ScheduledProgram;
+  getCurrentProgram(): ScheduledProgram;
+  getNextProgram(): ScheduledProgram;
+  getPreviousProgram(): ScheduledProgram;
+
+  // Window Queries (for EPG)
+  getScheduleWindow(startTime: number, endTime: number): ScheduleWindow;
+  getUpcoming(count: number): ScheduledProgram[];
+
+  // Playback Sync
+  syncToCurrentTime(): void;
+  isScheduleStale(currentTime: number): boolean;
+  recalculateFromTime(time: number): void;
+
+  // Navigation
+  jumpToProgram(program: ScheduledProgram): void;
+  skipToNext(): void;
+  skipToPrevious(): void;
+
+  // State
+  getState(): SchedulerState;
+  getScheduleIndex(): ScheduleIndex;
+
+  // Events
+  on(event: 'programStart', handler: (program: ScheduledProgram) => void): void;
+  on(event: 'programEnd', handler: (program: ScheduledProgram) => void): void;
+  on(event: 'scheduleSync', handler: (state: SchedulerState) => void): void;
+}
+
+/**
+ * Deterministic Shuffle Generator
+ */
+export interface IShuffleGenerator {
+  shuffle<T>(items: T[], seed: number): T[];
+  shuffleIndices(count: number, seed: number): number[];
+  generateSeed(channelId: string, anchorTime: number): number;
+}
+
+/**
+ * Video Player Interface
+ * Wraps HTML5 video element for webOS
+ */
+export interface IVideoPlayer {
+  // Lifecycle
+  initialize(config: VideoPlayerConfig): Promise<void>;
+  destroy(): void;
+
+  // Stream Management
+  loadStream(descriptor: StreamDescriptor): Promise<void>;
+  unloadStream(): void;
+
+  // Playback Control
+  play(): Promise<void>;
+  pause(): void;
+  stop(): void;
+  seekTo(positionMs: number): Promise<void>;
+  seekRelative(deltaMs: number): Promise<void>;
+
+  // Volume
+  setVolume(level: number): void;
+  getVolume(): number;
+  mute(): void;
+  unmute(): void;
+  toggleMute(): void;
+
+  // Tracks
+  setSubtitleTrack(trackId: string | null): Promise<void>;
+  setAudioTrack(trackId: string): Promise<void>;
+  getAvailableSubtitles(): SubtitleTrack[];
+  getAvailableAudio(): AudioTrack[];
+
+  // State
+  getState(): PlaybackState;
+  getCurrentTimeMs(): number;
+  getDurationMs(): number;
+  isPlaying(): boolean;
+
+  // Events
+  on<K extends keyof PlayerEventMap>(event: K, handler: (payload: PlayerEventMap[K]) => void): void;
+  off<K extends keyof PlayerEventMap>(event: K, handler: (payload: PlayerEventMap[K]) => void): void;
+
+  // webOS Specific
+  requestMediaSession(): void;
+  releaseMediaSession(): void;
+}
+
+/**
+ * EPG Component Interface
+ * Electronic Program Guide UI component
+ */
+export interface IEPGComponent {
+  // Lifecycle
+  initialize(config: EPGConfig): void;
+  destroy(): void;
+
+  // Visibility
+  show(): void;
+  hide(): void;
+  toggle(): void;
+  isVisible(): boolean;
+
+  // Data Loading
+  loadChannels(channels: ChannelConfig[]): void;
+  loadScheduleForChannel(channelId: string, schedule: ScheduleWindow): void;
+  refreshCurrentTime(): void;
+
+  // Navigation
+  focusChannel(channelIndex: number): void;
+  focusProgram(channelIndex: number, programIndex: number): void;
+  focusNow(): void;
+  scrollToTime(time: number): void;
+  scrollToChannel(channelIndex: number): void;
+
+  // Input Handling
+  handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+  handleSelect(): boolean;
+  handleBack(): boolean;
+
+  // State
+  getState(): EPGState;
+  getFocusedProgram(): ScheduledProgram | null;
+
+  // Events
+  on<K extends keyof EPGEventMap>(event: K, handler: (payload: EPGEventMap[K]) => void): void;
+  off<K extends keyof EPGEventMap>(event: K, handler: (payload: EPGEventMap[K]) => void): void;
+}
+
+/**
+ * EPG Info Panel Interface
+ * Program details overlay
+ */
+export interface IEPGInfoPanel {
+  show(program: ScheduledProgram): void;
+  hide(): void;
+  update(program: ScheduledProgram): void;
+}
+
+/**
+ * Navigation Manager Interface
+ * Handles remote control input and focus management
+ */
+export interface INavigationManager {
+  // Initialization
+  initialize(config: NavigationConfig): void;
+  destroy(): void;
+
+  // Screen Navigation
+  goTo(screen: Screen, params?: Record<string, unknown>): void;
+  goBack(): boolean;
+  replaceScreen(screen: Screen): void;
+  getScreenParams(): Record<string, unknown>;
+
+  // Focus Management
+  setFocus(elementId: string): void;
+  getFocusedElement(): FocusableElement | null;
+  moveFocus(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+
+  // Registration
+  registerFocusable(element: FocusableElement): void;
+  unregisterFocusable(elementId: string): void;
+  registerFocusGroup(group: FocusGroup): void;
+  unregisterFocusGroup(groupId: string): void;
+
+  // Modals
+  openModal(modalId: string): void;
+  closeModal(modalId?: string): void;
+  isModalOpen(modalId?: string): boolean;
+
+  // Input Blocking
+  blockInput(): void;
+  unblockInput(): void;
+  isInputBlocked(): boolean;
+
+  // State
+  getCurrentScreen(): Screen;
+  getState(): NavigationState;
+
+  // Events
+  on<K extends keyof NavigationEventMap>(
+    event: K,
+    handler: (payload: NavigationEventMap[K]) => void
+  ): void;
+  off<K extends keyof NavigationEventMap>(
+    event: K,
+    handler: (payload: NavigationEventMap[K]) => void
+  ): void;
+
+  // Long-press handling
+  handleLongPress(button: RemoteButton, callback: () => void): void;
+  cancelLongPress(): void;
+}
+
+/**
+ * Focus Manager Interface (internal)
+ */
+export interface IFocusManager {
+  focus(elementId: string): boolean;
+  blur(): void;
+  findNeighbor(fromId: string, direction: 'up' | 'down' | 'left' | 'right'): string | null;
+  saveFocusState(screenId: string): void;
+  restoreFocusState(screenId: string): boolean;
+  updateFocusRing(elementId: string): void;
+  hideFocusRing(): void;
+}
+
+/**
+ * App Lifecycle Interface
+ * Manages application lifecycle and state persistence
+ */
+export interface IAppLifecycle {
+  // Initialization
+  initialize(): Promise<void>;
+  shutdown(): Promise<void>;
+
+  // State Persistence
+  saveState(): Promise<void>;
+  restoreState(): Promise<PersistentState | null>;
+  clearState(): Promise<void>;
+
+  // Lifecycle Callbacks
+  onPause(callback: () => void | Promise<void>): void;
+  onResume(callback: () => void | Promise<void>): void;
+  onTerminate(callback: () => void | Promise<void>): void;
+
+  // Network
+  isNetworkAvailable(): boolean;
+  checkNetworkStatus(): Promise<boolean>;
+
+  // Memory
+  getMemoryUsage(): { used: number; limit: number; percentage: number };
+  performMemoryCleanup(): void;
+
+  // State
+  getPhase(): AppPhase;
+  getState(): AppLifecycleState;
+  setPhase(phase: AppPhase): void;
+
+  // Error Handling
+  reportError(error: AppError): void;
+  getLastError(): AppError | null;
+
+  // Events
+  on<K extends keyof LifecycleEventMap>(
+    event: K,
+    handler: (payload: LifecycleEventMap[K]) => void
+  ): void;
+}
+
+/**
+ * Error Recovery Interface
+ */
+export interface IErrorRecovery {
+  handleError(error: AppError): ErrorAction[];
+  executeRecovery(action: ErrorAction): Promise<boolean>;
+  createError(code: AppErrorCode, message: string, context?: Record<string, unknown>): AppError;
+}
+
+/**
+ * App Orchestrator Interface
+ * Central coordinator for all modules
+ */
+export interface IAppOrchestrator {
+  // Lifecycle
+  initialize(config: OrchestratorConfig): Promise<void>;
+  start(): Promise<void>;
+  shutdown(): Promise<void>;
+
+  // Status
+  getModuleStatus(): Map<string, ModuleStatus>;
+  isReady(): boolean;
+
+  // Actions
+  switchToChannel(channelId: string): Promise<void>;
+  switchToChannelByNumber(number: number): Promise<void>;
+  openEPG(): void;
+  closeEPG(): void;
+  toggleEPG(): void;
+
+  // Error Handling
+  handleGlobalError(error: AppError, context: string): void;
+  registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
+  getRecoveryActions(errorCode: OrchestratorErrorCode): ErrorRecoveryAction[];
 }

@@ -171,7 +171,7 @@ logger.info('[Navigation] Screen change', {
 logger.info('[EPG] Channel selected', {
   channelId: channel.id,
   channelNumber: channel.number,
-  programTitle: program?.item.title
+  programTitle: program && program.item ? program.item.title : undefined
 });
 ```
 
@@ -193,7 +193,7 @@ class AppLogger implements ILogger {
   private readonly isDebugEnabled: boolean;
   
   constructor(config: { debugEnabled?: boolean } = {}) {
-    this.isDebugEnabled = config.debugEnabled ?? false;
+    this.isDebugEnabled = config.debugEnabled === true;
   }
   
   debug(message: string, data?: Record<string, unknown>): void {
@@ -211,7 +211,7 @@ class AppLogger implements ILogger {
   }
   
   error(message: string, error?: Error, data?: Record<string, unknown>): void {
-    console.error(this.format(message, { ...data, error: error?.message }));
+    console.error(this.format(message, { ...data, error: error ? error.message : undefined }));
     
     // Report to error tracking in production
     if (typeof window !== 'undefined' && (window as any).ErrorReporter) {

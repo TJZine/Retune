@@ -409,7 +409,7 @@ describe('PlexServerDiscovery', () => {
   describe('findFastestConnection', () => {
     it('should prefer local connections', async () => {
       const conn = await discovery.findFastestConnection(serverWithAllTypes);
-      expect(conn?.local).toBe(true);
+      expect(conn && conn.local).toBe(true);
     });
     
     it('should fall back to relay if direct fails', async () => {
@@ -417,7 +417,7 @@ describe('PlexServerDiscovery', () => {
       mockRemoteFail();
       mockRelaySuccess();
       const conn = await discovery.findFastestConnection(server);
-      expect(conn?.relay).toBe(true);
+      expect(conn && conn.relay).toBe(true);
     });
   });
   

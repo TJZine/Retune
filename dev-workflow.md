@@ -50,7 +50,7 @@
 
 ```bash
 # Clone/navigate to project
-cd "c:\Software\LG Plex Live Guide"
+cd /path/to/Retune
 
 # Install dependencies
 npm install
@@ -167,7 +167,7 @@ if (typeof window !== 'undefined' && !window.webOS) {
 | UI Layout | ✅ Full | Use Chrome device toolbar for 1920x1080 |
 | Navigation focus | ✅ Full | Arrow keys work |
 | Plex API calls | ✅ Full | May need CORS proxy for some endpoints |
-| Video playback | ⚠️ Partial | Uses HLS.js, not native webOS player |
+| Video playback | ⚠️ Partial | Browser-only dev may use HLS.js; production webOS build MUST use native HLS (see `spec-pack/decisions/0002-no-hls-js.md`) |
 | App lifecycle | ❌ Mock only | Need emulator for real testing |
 | Remote key codes | ⚠️ Mapped | Keyboard mapped to remote buttons |
 
@@ -435,7 +435,8 @@ function toggleDebugOverlay() {
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
   const [url, options] = args;
-  console.log('[Network]', options?.method || 'GET', url);
+  const method = options && (options as RequestInit).method ? (options as RequestInit).method : 'GET';
+  console.log('[Network]', method, url);
   
   try {
     const response = await originalFetch(...args);

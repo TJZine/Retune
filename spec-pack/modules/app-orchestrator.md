@@ -195,7 +195,7 @@ async start(): Promise<void> {
     // Phase 2: Check authentication
     const savedState = await this.lifecycle.restoreState();
     
-    if (savedState?.plexAuth) {
+    if (savedState && savedState.plexAuth) {
       // Validate existing token
       const isValid = await this.plexAuth.validateToken(
         savedState.plexAuth.token.token
@@ -371,7 +371,7 @@ private async resolveStreamForProgram(program: ScheduledProgram): Promise<Stream
     mediaMetadata: {
       title: program.item.title,
       subtitle: program.item.type === 'episode' ? program.item.fullTitle : undefined,
-      artworkUrl: program.item.thumb ?? undefined,
+      artworkUrl: program.item.thumb || undefined,
       year: program.item.year,
       plexRatingKey: program.item.ratingKey
     },
@@ -655,7 +655,8 @@ describe('AppOrchestrator', () => {
     it('should report module as ready when initialized', async () => {
       await orchestrator.start();
       const status = orchestrator.getModuleStatus();
-      expect(status.get('plexAuth')?.status).toBe('ready');
+      const plexAuthStatus = status.get('plexAuth');
+      expect(plexAuthStatus && plexAuthStatus.status).toBe('ready');
     });
   });
 });

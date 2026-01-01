@@ -13,7 +13,7 @@
  * const msg = getErrorMessage(AppErrorCode.AUTH_EXPIRED);
  */
 
-import { AppErrorCode } from './shared-types';
+import { AppErrorCode } from '../artifact-2-shared-types';
 
 // ============================================
 // USER-FACING ERROR MESSAGES
@@ -75,6 +75,15 @@ export const ERROR_MESSAGES = {
     RETRY: 'Something went wrong. Retrying...',
     CONTACT_SUPPORT: 'If this problem persists, please restart the app.',
   },
+
+  // System / Lifecycle
+  SYSTEM: {
+    INITIALIZATION_FAILED: 'Unable to start the app. Please restart and try again.',
+    PLEX_UNREACHABLE: 'Unable to reach your Plex server. Check your network or change servers.',
+    DATA_CORRUPTION: 'App data appears corrupted. Resetting may be required.',
+    PLAYBACK_FAILED: 'Playback failed. Trying the next program...',
+    OUT_OF_MEMORY: 'The app is low on memory. Closing overlays and reducing cache usage...',
+  },
 } as const;
 
 // ============================================
@@ -103,6 +112,11 @@ const ERROR_CODE_MAP: Record<AppErrorCode, string> = {
   [AppErrorCode.STORAGE_CORRUPTED]: ERROR_MESSAGES.STORAGE.CORRUPTED,
   [AppErrorCode.UI_RENDER_ERROR]: ERROR_MESSAGES.UI.RENDER_ERROR,
   [AppErrorCode.UI_NAVIGATION_BLOCKED]: ERROR_MESSAGES.UI.NAVIGATION_BLOCKED,
+  [AppErrorCode.INITIALIZATION_FAILED]: ERROR_MESSAGES.SYSTEM.INITIALIZATION_FAILED,
+  [AppErrorCode.PLEX_UNREACHABLE]: ERROR_MESSAGES.SYSTEM.PLEX_UNREACHABLE,
+  [AppErrorCode.DATA_CORRUPTION]: ERROR_MESSAGES.SYSTEM.DATA_CORRUPTION,
+  [AppErrorCode.PLAYBACK_FAILED]: ERROR_MESSAGES.SYSTEM.PLAYBACK_FAILED,
+  [AppErrorCode.OUT_OF_MEMORY]: ERROR_MESSAGES.SYSTEM.OUT_OF_MEMORY,
   [AppErrorCode.UNKNOWN]: ERROR_MESSAGES.GENERIC.UNKNOWN,
 };
 
@@ -112,7 +126,8 @@ const ERROR_CODE_MAP: Record<AppErrorCode, string> = {
  * @returns User-facing error message string
  */
 export function getErrorMessage(code: AppErrorCode): string {
-  return ERROR_CODE_MAP[code] ?? ERROR_MESSAGES.GENERIC.UNKNOWN;
+  const message = ERROR_CODE_MAP[code];
+  return message ? message : ERROR_MESSAGES.GENERIC.UNKNOWN;
 }
 
 // ============================================
