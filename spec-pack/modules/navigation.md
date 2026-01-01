@@ -893,6 +893,26 @@ src/modules/navigation/
 - [ ] Add JSDoc comments to all public methods
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Using hardcoded key codes | Copy from web | Use KEY_MAP constant - webOS uses different codes than web browsers |
+| Not handling Magic Remote | D-pad focus works | Magic Remote (pointer mode) requires click handlers and pointer detection |
+| Forgetting focus restoration | Screen changes work | Always save/restore focus state when screens change |
+| Not blocking during transitions | Seems responsive | Input during screen transitions causes flickering and double navigation |
+| Focus outside modal bounds | Modal opens | Trap focus within modal - prevent navigation to background elements |
+| Using native focus() method | Seems natural | Use custom focus system - native focus doesn't match TV paradigm |
+| Long-press not debounced | Works in testing | Add 100ms debounce after long-press fires to prevent repeat triggers |
+| Ignoring invisible elements | Focus on hidden | Check visibility in spatial navigation - don't focus on display:none |
+| Not clearing focus on unregister | Memory leak | When component unmounts, call unregisterFocusable to clean up |
+| Channel number timeout too short | 1 second works | 2 seconds is standard - allows typing 3 digits without rushing |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

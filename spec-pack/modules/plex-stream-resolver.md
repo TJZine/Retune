@@ -615,6 +615,26 @@ src/modules/plex/stream/
 - [ ] Add JSDoc comments
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Hardcoding codec support | "These are common" | Check webOS docs, test on device - some codecs may not work |
+| Ignoring mixed content issues | Works locally | webOS HTTPS app may block HTTP - always have fallback strategy |
+| Not reporting progress to Plex | "Optional feature" | Required for "Continue Watching" - report every 10s during playback |
+| Using HLS.js library | Works elsewhere | webOS has native HLS - use video.src directly, saves memory |
+| Forgetting session cleanup | Leak sessions | Always call endSession() on playback stop or error |
+| Not handling HEVC/H.265 | Focus on H.264 | webOS supports HEVC - include in direct play check |
+| Ignoring subtitle burn-in | Text tracks work | PGS/ASS subtitles need Plex to burn-in - use `subtitles=burn` |
+| Hardcoding transcode bitrate | 8000 is default | Respect `request.maxBitrate`, default only if not provided |
+| Not including client params | Seem optional | X-Plex-Platform/Device/Product are required for Plex to optimize |
+| Synchronous session ID generation | Seems simpler | Generate UUID synchronously, but session creation is async |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

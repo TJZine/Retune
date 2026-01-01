@@ -517,7 +517,24 @@ src/modules/plex/discovery/
 - [ ] Implement server selection and persistence
 - [ ] Write unit tests
 - [ ] Add JSDoc comments
-- [ ] Verify against acceptance criteria
+
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Not handling mixed content (HTTP/HTTPS) | Assume all works | webOS HTTPS apps block HTTP - prefer HTTPS, fallback to relay |
+| Testing connections sequentially | Seems simpler | Test in parallel with Promise.all for faster discovery |
+| Ignoring relay connections entirely | "Bandwidth limited" | Relay is better than no connection - always try as last resort |
+| Not re-testing on restore | Assume connection still works | Network conditions change - always verify stored connection |
+| Using hardcoded timeouts | 5000ms seems fine | Make timeout configurable, 5s is reasonable default |
+| Storing full server object in localStorage | Simpler persistence | Store only serverId, re-fetch details on startup |
+| Not emitting events on connection change | Forget event pattern | Always emit `serverChange` and `connectionChange` for state sync |
+| Mutating connection.latencyMs in place | Convenient | Avoid side effects in testConnection - return new object or just latency |
+
+---
 
 ## Acceptance Criteria
 

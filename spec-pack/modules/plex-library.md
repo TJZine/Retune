@@ -604,6 +604,26 @@ src/modules/plex/library/
 - [ ] Add JSDoc comments
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Fetching all pages eagerly | Want complete data | Implement lazy pagination - only fetch when caller needs more |
+| Ignoring pagination headers | Response seems complete | Check `totalSize` and fetch until all pages retrieved |
+| Caching library contents indefinitely | Avoid API calls | Cache with TTL (5 min), invalidate on library refresh events |
+| Not handling 401 gracefully | Unexpected auth failure | Emit `authExpired` event, let orchestrator handle re-auth |
+| Exposing raw Plex response | Simpler implementation | Always parse to typed interfaces - hide API details |
+| Blocking on large libraries | Fetch everything first | Use streaming/pagination, don't load 10K items into memory |
+| Hardcoding page size | 100 works | Make configurable via `LibraryQueryOptions.limit` |
+| Missing null checks on optional fields | Trust API response | Use explicit checks: `if (data.summary !== undefined && data.summary !== null)` |
+| Image URLs without auth token | Forget authentication | Always append `X-Plex-Token` to image URLs |
+| Fetching seasons/episodes per-request | Complete data | Use `getShowEpisodes()` with parallel season fetches |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

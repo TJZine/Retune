@@ -1004,6 +1004,26 @@ src/modules/ui/epg/
 - [ ] Add JSDoc comments to all public methods
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Creating DOM elements for every cell | Simple to implement | Use element pooling (EPGVirtualizer) - max 200 elements in DOM |
+| Forgetting to recycle elements | Pool seems complex | Recycle on scroll - return elements to pool, don't destroy |
+| Not throttling scroll renders | Smooth feels better | Limit renders to 30/sec during rapid scroll - use requestAnimationFrame |
+| Focus ring too small | Works on monitor | Design for 10-foot viewing - minimum 4px border, high contrast |
+| Updating time indicator in real-time | Accuracy matters | Update once per minute - video is paused anyway when EPG is open |
+| Not handling zero-duration programs | Trust scheduler data | Filter out items with 0ms duration - they break grid layout |
+| Moving focus during scroll animation | Immediate response | Lock focus until scroll completes - prevents janky behavior |
+| Not wrapping cell content | Full title fits | Use text-overflow: ellipsis - long titles break layout |
+| Direct DOM manipulation in render loop | Fast and simple | Batch DOM writes, minimize reflows - read all, then write all |
+| Not clipping programs at day boundaries | Spans are edge case | Handle midnight-crossing programs - clip or span based on config |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

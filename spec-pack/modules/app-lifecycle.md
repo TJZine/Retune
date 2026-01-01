@@ -612,6 +612,26 @@ src/modules/lifecycle/
 - [ ] Add JSDoc comments
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Synchronous localStorage operations | Seems simpler | Wrap in try/catch, handle quota exceeded - can block UI thread |
+| Missing visibility listener cleanup | Works in dev | Remove listeners in destroy() - prevents memory leaks |
+| Invalid phase transitions | Logic error | Validate against state machine - throw on illegal transitions |
+| Swallowing errors | App "works" | Always log via reportError() - silent failures are debugging nightmares |
+| Not versioning stored state | Works initially | Add version field - enables migrations without data loss |
+| Blocking on pause callbacks | Want complete save | Set timeout on callbacks (5s max) - don't hang on backgrounding |
+| Assuming navigator.onLine is accurate | It's a boolean | Do periodic actual network tests - onLine can be stale |
+| Not handling webOSRelaunch | Only test cold start | Handle relaunch event - app may be relaunched while running |
+| Ignoring memory API availability | Works in modern browsers | Check `performance.memory` exists - not available in all webOS versions |
+| Saving state on every change | Comprehensive | Debounce saves (500ms) - too frequent writes hit quota and are slow |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

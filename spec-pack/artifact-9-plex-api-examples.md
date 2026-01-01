@@ -642,3 +642,97 @@ Use query parameters to paginate:
 
 - `X-Plex-Container-Start`: Starting offset (0-indexed)
 - `X-Plex-Container-Size`: Number of items per page (default: 100)
+
+---
+
+## Parsing Utilities (SUGGEST-002)
+
+> **Common Pitfalls**: Plex API responses have inconsistent field presence. Use these helpers.
+
+### Safe Field Access
+
+```typescript
+/**
+ * Safely extract media items from response, handling empty/missing arrays.
+ */
+function extractMetadata(response: PlexResponse): PlexMetadataItem[] {
+  const container = response.MediaContainer;
+  if (!container) return [];
+  
+  // Metadata can be undefined, null, or missing entirely
+  const metadata = container.Metadata;
+  if (!metadata) return [];
+  if (!Array.isArray(metadata)) return [metadata]; // Single item case
+  
+  return metadata;
+}
+
+/**
+ * Parse duration - Plex returns ms, but sometimes seconds.
+ */
+function parseDuration(value: number | undefined, assumeMs: boolean = true): number {
+  if (value === undefined || value === null) return 0;
+  // Heuristic: if value > 1000000000, assume it's ms already
+  // If value < 100000, likely seconds
+  if (!assumeMs && value < 100000) {
+    return value * 1000;
+  }
+  return value;
+}
+
+/**
+ * Build image URL with token injection.
+ */
+function buildImageUrl(
+  serverUri: string,
+  imagePath: string | null | undefined,
+  token: string,
+  width?: number,
+  height?: number
+): string | null {
+  if (!imagePath) return null;
+  
+  const params = new URLSearchParams({
+    'X-Plex-Token': token,
+  });
+  if (width) params.append('width', width.toString());
+  if (height) params.append('height', height.toString());
+  
+  // Handle absolute vs relative paths
+  const path = imagePath.startsWith('/') ? imagePath : '/' + imagePath;
+  return `${serverUri}${path}?${params}`;
+}
+```
+
+### Type Guards
+
+```typescript
+function isMovieItem(item: PlexMetadataItem): item is PlexMovieItem {
+  return item.type === 'movie';
+}
+
+function isEpisodeItem(item: PlexMetadataItem): item is PlexEpisodeItem {
+  return item.type === 'episode';
+}
+
+function hasMedia(item: PlexMetadataItem): boolean {
+  return Array.isArray(item.Media) && item.Media.length > 0;
+}
+```
+
+### Error Response Detection
+
+```typescript
+interface PlexErrorResponse {
+  MediaContainer?: {
+    identifier?: string;
+  };
+  errors?: Array<{ code: number; message: string }>;
+}
+
+function isErrorResponse(response: unknown): response is PlexErrorResponse {
+  if (typeof response !== 'object' || response === null) return false;
+  return 'errors' in response || 
+    (response as PlexErrorResponse).MediaContainer?.identifier === 'com.plexapp.system';
+}
+```

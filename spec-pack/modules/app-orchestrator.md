@@ -738,6 +738,26 @@ src/
 - [ ] Add JSDoc comments
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Initializing modules in wrong order | Parallel seems faster | Follow phase order - later modules depend on earlier ones |
+| Holding DOM references | Convenient access | Never reference DOM directly - delegate to Navigation/EPG/UI modules |
+| Hardcoding error recovery actions | Works for testing | Use `getRecoveryActions()` - makes error UI data-driven |
+| Not wiring lifecycle callbacks | Events seem to work | Wire onPause/onResume - video must pause when app backgrounds |
+| Swallowing stream resolution errors | Don't want to crash | Log, then skip to next - silent failures break debugging |
+| Not saving state after channel switch | Seems minor | Always save - user expects to resume on same channel |
+| Blocking startup on non-critical modules | All modules matter | EPG/settings can fail without blocking playback |
+| Direct module-to-module calls | Seems more natural | Use events for loose coupling - enables testing and future changes |
+| Not handling missing channel gracefully | Assume data is valid | Log error, show message, don't throw - user can create channels |
+| Coupling orchestrator to specific screens | Screens are known | Use Navigation module for all screen changes - keeps orchestrator clean |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:

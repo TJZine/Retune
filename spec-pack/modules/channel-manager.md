@@ -759,6 +759,26 @@ src/modules/scheduler/channel-manager/
 - [ ] Add JSDoc comments
 - [ ] Verify against acceptance criteria
 
+## Common Pitfalls
+
+> [!CAUTION]
+> **AI implementers: Avoid these common mistakes**
+
+| Pitfall | Why It Happens | Correct Approach |
+| :--- | :--- | :--- |
+| Storing full media items in localStorage | Simpler data model | Store only ratingKey + minimal cached metadata - full data is huge |
+| Not handling localStorage quota | Works in dev | Implement quota exceeded handling with cache pruning |
+| Blocking UI during content resolution | Await seems natural | Use async resolution, show loading state, don't block navigation |
+| Allowing duplicate channel numbers | Easy oversight | Validate in createChannel, throw error if duplicate |
+| Caching content forever | Avoid API calls | 1 hour TTL, force refresh on library refresh events |
+| Not validating import JSON | Trust user input | Validate schema version, required fields, source types before import |
+| Using Math.random() for shuffle seed | Quick implementation | Use Date.now() for seed - must be deterministic and persistable |
+| Forgetting to emit events | Internal state works | Other modules depend on events - always emit after state changes |
+| Not filtering out zero-duration items | Trust Plex data | Some items have 0 duration - filter them out in resolution |
+| Resolving content on every getChannel call | Complete data | Only resolve on explicit request or when cache is stale |
+
+---
+
 ## Acceptance Criteria
 
 This module is COMPLETE when:
