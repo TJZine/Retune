@@ -8,9 +8,9 @@ This document provides context handoff information for AI coding agents implemen
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | artifact-2-shared-types.ts | L50-122 |
+| Interface | artifact-2-shared-types.ts | `TypedEventEmitter` class |
 | Requirements | artifact-7-implementation-prompts.md | Prompt 1 |
 
 ### Active Assumptions
@@ -46,10 +46,10 @@ git checkout -- src/utils/EventEmitter.ts
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/plex-auth.md | L38-86 |
-| Types | artifact-2-shared-types.ts | L262-334 |
+| Interface | modules/plex-auth.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `PLEX AUTHENTICATION` section |
 | Prompt | artifact-7-implementation-prompts.md | Prompt 2 |
 
 ### Active Assumptions
@@ -86,10 +86,10 @@ git checkout -- src/modules/plex/auth/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/plex-server-discovery.md | Full file |
-| Types | artifact-2-shared-types.ts | L336-383 |
+| Interface | modules/plex-server-discovery.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `PLEX SERVER & CONNECTION` section |
 
 ### Active Assumptions
 
@@ -125,10 +125,10 @@ git checkout -- src/modules/plex/discovery/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/plex-library.md | Full file |
-| Types | artifact-2-shared-types.ts | L385-625 |
+| Interface | modules/plex-library.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `PLEX LIBRARY & MEDIA` section |
 
 ### Active Assumptions
 
@@ -165,10 +165,10 @@ git checkout -- src/modules/plex/library/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/plex-stream-resolver.md | Full file |
-| Types | artifact-2-shared-types.ts | L648-717 |
+| Interface | modules/plex-stream-resolver.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `STREAM RESOLUTION` section |
 
 ### Active Assumptions
 
@@ -205,10 +205,10 @@ git checkout -- src/modules/plex/stream/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/channel-manager.md | Full file |
-| Types | artifact-2-shared-types.ts | L750-1018 |
+| Interface | modules/channel-manager.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `CHANNEL CONFIGURATION` section |
 
 ### Active Assumptions
 
@@ -245,11 +245,11 @@ git checkout -- src/modules/scheduler/channel-manager/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/channel-scheduler.md | L23-71 |
-| Algorithm | modules/channel-scheduler.md | L155-195 |
-| Types | artifact-2-shared-types.ts | L1020-1125 |
+| Interface | modules/channel-scheduler.md | `Public Interface` |
+| Algorithm | modules/channel-scheduler.md | `Schedule Calculation Algorithm` |
+| Types | artifact-2-shared-types.ts | `SCHEDULE` section |
 | Prompt | artifact-7-implementation-prompts.md | Prompt 3 |
 
 ### Active Assumptions
@@ -288,10 +288,10 @@ git checkout -- src/modules/scheduler/scheduler/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/video-player.md | Full file |
-| Types | artifact-2-shared-types.ts | L1127-1305 |
+| Interface | modules/video-player.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `VIDEO PLAYER` section |
 | Prompt | artifact-7-implementation-prompts.md | Prompt 4 |
 
 ### Active Assumptions
@@ -329,11 +329,11 @@ git checkout -- src/modules/player/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/navigation.md | Full file |
-| Key codes | modules/navigation.md | KEY_MAP section |
-| Types | artifact-2-shared-types.ts | L1307-1426 |
+| Interface | modules/navigation.md | `Public Interface` |
+| Key codes | modules/navigation.md | `KEY_MAP` section |
+| Types | artifact-2-shared-types.ts | `NAVIGATION` section |
 | Prompt | artifact-7-implementation-prompts.md | Prompt 5 |
 
 ### Active Assumptions
@@ -372,10 +372,10 @@ git checkout -- src/modules/navigation/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/epg-ui.md | Full file |
-| Types | artifact-2-shared-types.ts | L1428-1534 |
+| Interface | modules/epg-ui.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `EPG (ELECTRONIC PROGRAM GUIDE)` section |
 | Prompt | artifact-7-implementation-prompts.md | Prompt 6 |
 
 ### Active Assumptions
@@ -413,10 +413,10 @@ git checkout -- src/modules/ui/epg/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/app-lifecycle.md | Full file |
-| Types | artifact-2-shared-types.ts | L1536-1680 |
+| Interface | modules/app-lifecycle.md | `Public Interface` |
+| Types | artifact-2-shared-types.ts | `APP LIFECYCLE` section |
 
 ### Active Assumptions
 
@@ -453,10 +453,10 @@ git checkout -- src/modules/lifecycle/
 
 ### SSOT References
 
-| Concept | File | Lines |
+| Concept | File | Section |
 | :--- | :--- | :--- |
-| Interface | modules/app-orchestrator.md | Full file |
-| Dependencies | artifact-1-dependency-graph.json | Lines 229-263 |
+| Interface | modules/app-orchestrator.md | `Public Interface` |
+| Dependencies | artifact-1-dependency-graph.json | `app-orchestrator` node |
 
 ### Active Assumptions
 

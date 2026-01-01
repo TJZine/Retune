@@ -137,6 +137,21 @@ interface ChannelManagerState {
 - **Persistence**: `localStorage` with key `retune_channels`
 - **Content Cache**: In-memory only (reconstructed on launch)
 
+## Memory Budget
+
+| Resource | Budget | Notes |
+|----------|--------|-------|
+| Channel configs | 500KB | ~100 channels max, ~5KB each with metadata |
+| Resolved content cache | 5MB | Item references only, not full media data |
+| Import buffer | 1MB | Temporary during import, freed after |
+| **Total** | **~6.5MB** | Well within 300MB app budget |
+
+**Eviction Strategy**:
+
+- Content caches older than 1 hour are evicted on memory pressure
+- Oldest resolved content evicted first (LRU)
+- If `localStorage` quota exceeded, prune non-essential caches
+
 ### Error Handling (CRITICAL)
 
 All content resolution and persistence operations must handle errors gracefully with appropriate recovery strategies.

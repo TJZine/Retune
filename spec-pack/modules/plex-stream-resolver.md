@@ -48,7 +48,41 @@ export interface IPlexStreamResolver {
   
   // Transcode Options
   getTranscodeUrl(itemKey: string, options: HlsOptions): string;
+  
+  // Events
+  on(event: 'sessionStart', handler: (session: { sessionId: string; itemKey: string }) => void): void;
+  on(event: 'sessionEnd', handler: (session: { sessionId: string; itemKey: string; positionMs: number }) => void): void;
+  on(event: 'error', handler: (error: StreamResolverError) => void): void;
 }
+
+/**
+ * Stream Resolver Error Codes
+ */
+type StreamResolverErrorCode =
+  | 'ITEM_NOT_FOUND'           // 404 - Item doesn't exist in Plex
+  | 'SERVER_BUSY'              // 503 - Transcoder overloaded
+  | 'UNSUPPORTED_CODEC'        // Decision returned incompatible codec
+  | 'NETWORK_TIMEOUT'          // Request timed out
+  | 'SESSION_EXPIRED'          // 401 - Token expired
+  | 'MIXED_CONTENT_BLOCKED'    // HTTP blocked by HTTPS app
+  | 'TRANSCODE_FAILED';        // Server failed to start transcoding
+
+interface StreamResolverError {
+  code: StreamResolverErrorCode;
+  message: string;
+  recoverable: boolean;
+  retryAfterMs?: number;
+}
+
+/**
+ * Retry Budget Configuration
+ */
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  retryDelayMs: [1000, 2000, 4000],  // Exponential backoff
+  timeoutMs: 10000,                   // Per-request timeout
+  retryableCodes: ['SERVER_BUSY', 'NETWORK_TIMEOUT'] as StreamResolverErrorCode[],
+} as const;
 ```
 
 ## Required Exports

@@ -194,6 +194,15 @@ interface IPlexAuth {
 4. getAuthHeaders() includes X-Plex-Token when authenticated
 5. Emit 'authChange' event when credentials change
 
+### P2: Timing Budgets
+
+| Operation | Maximum Duration | Notes |
+|-----------|------------------|-------|
+| Token validation | 100ms | Validate locally first, then server check |
+| PIN request | 5s | Network request timeout |
+| PIN polling | 1s interval | Poll for 5 minutes max |
+| Server connection test | 5s per connection | Test fastest first |
+
 ### P2: Error Handling
 
 - Wrap fetch in try/catch

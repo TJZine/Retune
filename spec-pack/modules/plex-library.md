@@ -383,9 +383,21 @@ private parseMediaItem(data: any): PlexMediaItem {
 }
 ```
 
+## Memory Budget
+
+| Resource | Budget | Notes |
+|----------|--------|-------|
+| Library cache | 2MB | 5-minute TTL, LRU eviction |
+| Pagination buffer | 1MB | Streaming, not storing entire library |
+| Image URL cache | 50KB | URL strings only, not image data |
+| **Total** | **~3MB** | |
+
 ## Events Emitted
 
-None (pure data access module)
+| Event Name | Payload Type | When Emitted |
+|------------|--------------|---------------|
+| `authExpired` | `void` | When API returns 401 Unauthorized |
+| `libraryRefreshed` | `{ libraryId: string }` | After library refresh completes |
 
 ## Events Consumed
 
@@ -414,15 +426,47 @@ describe('PlexLibrary', () => {
   describe('getLibraryItems', () => {
     it('should handle pagination transparently', async () => {
       // Mock 250 items across 3 pages
+      mockFetchPages([100, 100, 50]);
       const items = await library.getLibraryItems('1');
       expect(items).toHaveLength(250);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+    
+    it('should handle empty library', async () => {
+      mockFetch('/library/sections/1/all', { MediaContainer: { Metadata: [] } });
+      const items = await library.getLibraryItems('1');
+      expect(items).toHaveLength(0);
+      expect(items).toEqual([]);
+    });
+    
+    it('should handle single-page result', async () => {
+      mockFetch('/library/sections/1/all', { 
+        MediaContainer: { 
+          Metadata: [mockItem], 
+          totalSize: 1 
+        } 
+      });
+      const items = await library.getLibraryItems('1');
+      expect(items).toHaveLength(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should handle exact page boundary', async () => {
+      // Exactly 100 items = 1 page, no extra request
+      mockFetchPages([100]);
+      const items = await library.getLibraryItems('1');
+      expect(items).toHaveLength(100);
+      // Should NOT make a second request to check for more
     });
     
     it('should apply filters', async () => {
       await library.getLibraryItems('1', { 
         filter: { year: 2020 } 
       });
-      // Verify filter param in request
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('year=2020'),
+        expect.any(Object)
+      );
     });
   });
   
