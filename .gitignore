@@ -1,0 +1,124 @@
+# ============================================
+# Retune - webOS Plex Virtual Channels App
+# ============================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.ipk
+*.wgt
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Package manager
+.npm
+.yarn/
+.pnpm-store/
+
+# Caches
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.cache
+.turbo/
+.next/
+.nuxt/
+
+# AI/Code analysis tool caches
+.codanna/
+.fastembed_cache/
+.mcp_sequential_thinking/
+
+# webOS specific
+.webos/
+webos-installer/
+*.ares-*
+ares-package-cache/
+
+# Documentation build
+docs/_build/
+.docusaurus/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Test artifacts
+e2e-results/
+playwright-report/
+test-results/
+
+# Generated files (keep in version control only if needed)
+# Uncomment if you want to ignore generated files:
+# src/types/generated/
+
+# Debug
+*.pem
+*.p12
+
+# Local development
+.local/
+*.local.ts
+*.local.js
+
+# Storybook
+storybook-static/
+
+# Miscellaneous
+*.pid
+*.seed
+*.pid.lock
