@@ -6,7 +6,7 @@
 - **Path**: `src/modules/scheduler/channel-manager/`
 - **Primary File**: `ChannelManager.ts`
 - **Test File**: `ChannelManager.test.ts`
-- **Dependencies**: `plex-library`
+- **Dependencies**: plex-library
 - **Complexity**: high
 - **Estimated LoC**: 600
 
@@ -158,17 +158,17 @@ All content resolution and persistence operations must handle errors gracefully 
 
 #### Error Types and Recovery Matrix
 
-| Error Scenario | Error Code | Recoverable | User Message | Recovery Strategy |
-| -------------- | ---------- | ----------- | ------------ | ----------------- |
-| Channel not found | `CHANNEL_NOT_FOUND` | No | "Channel not found" | Return null, no action |
-| Plex server offline | `NETWORK_ERROR` | Yes | "Cannot connect to Plex server" | Use cached content if available, queue retry |
-| Library deleted in Plex | `CONTENT_UNAVAILABLE` | Partial | "Some content is no longer available" | Filter out missing items, log warning, continue with remaining |
-| Collection deleted | `CONTENT_UNAVAILABLE` | Partial | "Collection not found" | Mark channel as stale, notify user |
-| No content after filters | `CHANNEL_EMPTY` | No | "No playable content matches your filters" | Notify user, suggest adjusting filters |
-| Storage quota exceeded | `STORAGE_FULL` | Yes | "Storage full, clearing old data" | Prune old content caches, retry save |
-| Invalid import JSON | `IMPORT_INVALID` | No | "Import file is invalid" | Return ImportResult with errors array |
-| Filter field missing | `FILTER_ERROR` | Partial | "Filter could not be applied" | Skip invalid filter, apply remaining |
-| Shuffle seed invalid | `CONFIG_ERROR` | Yes | (Silent) | Generate new seed from Date.now() |
+| Error Scenario | AppErrorCode | Recoverable | User Message | Recovery Strategy |
+| -------------- | ------------ | ----------- | ------------ | ----------------- |
+| Channel not found | AppErrorCode.CONTENT_UNAVAILABLE | No | "Channel not found" | Return null, no action |
+| Plex server offline | AppErrorCode.NETWORK_TIMEOUT | Yes | "Cannot connect to Plex server" | Use cached content if available, queue retry |
+| Library deleted in Plex | AppErrorCode.CONTENT_UNAVAILABLE | Partial | "Some content is no longer available" | Filter out missing items, log warning, continue with remaining |
+| Collection deleted | AppErrorCode.CONTENT_UNAVAILABLE | Partial | "Collection not found" | Mark channel as stale, notify user |
+| No content after filters | AppErrorCode.SCHEDULER_EMPTY_CHANNEL | No | "No playable content matches your filters" | Notify user, suggest adjusting filters |
+| Storage quota exceeded | AppErrorCode.STORAGE_QUOTA_EXCEEDED | Yes | "Storage full, clearing old data" | Prune old content caches, retry save |
+| Invalid import JSON | AppErrorCode.DATA_CORRUPTION | No | "Import file is invalid" | Return ImportResult with errors array |
+| Filter field missing | AppErrorCode.UNKNOWN | Partial | "Filter could not be applied" | Skip invalid filter, apply remaining |
+| Shuffle seed invalid | AppErrorCode.UNKNOWN | Yes | (Silent) | Generate new seed from Date.now() |
 
 #### Error Handling Implementation
 
@@ -184,7 +184,7 @@ async resolveChannelContent(
   
   // Error: Channel not found
   if (!channel) {
-    throw new ChannelError('CHANNEL_NOT_FOUND', `Channel ${channelId} not found`);
+    throw new ChannelError(AppErrorCode.CHANNEL_NOT_FOUND, `Channel ${channelId} not found`);
   }
   
   // Check cache first (unless force refresh)
@@ -208,7 +208,7 @@ async resolveChannelContent(
     const validItems = items.filter(item => item && item.durationMs > 0);
     
     if (validItems.length === 0) {
-      throw new ChannelError('CHANNEL_EMPTY', 'No playable content found after filtering');
+      throw new ChannelError(AppErrorCode.SCHEDULER_EMPTY_CHANNEL, 'No playable content found after filtering');
     }
     
     // Build and cache result
@@ -240,13 +240,19 @@ private handleResolutionError(
   const cached = this.state.resolvedContent.get(channelId);
   
   if (error instanceof ChannelError) {
-    // CHANNEL_EMPTY has no fallback
-    if (error.code === 'CHANNEL_EMPTY') {
+    // SCHEDULER_EMPTY_CHANNEL has no fallback
+    if (error.code === AppErrorCode.SCHEDULER_EMPTY_CHANNEL) {
       throw error;
     }
     
-    // NETWORK_ERROR - use cache if available
-    if (error.code === 'NETWORK_ERROR' && cached) {
+    // Network errors - use cache if available
+    const isNetworkError =
+      error.code === AppErrorCode.NETWORK_TIMEOUT ||
+      error.code === AppErrorCode.NETWORK_OFFLINE ||
+      error.code === AppErrorCode.SERVER_UNREACHABLE ||
+      error.code === AppErrorCode.NETWORK_UNAVAILABLE;
+
+    if (isNetworkError && cached) {
       console.warn(`Using cached content for ${channelId} due to network error`);
       this.emit('contentCacheFallback', { channelId, reason: error.code });
       return {
@@ -257,7 +263,7 @@ private handleResolutionError(
     }
     
     // CONTENT_UNAVAILABLE - partial recovery
-    if (error.code === 'CONTENT_UNAVAILABLE' && cached) {
+    if (error.code === AppErrorCode.CONTENT_UNAVAILABLE && cached) {
       console.warn(`Content unavailable for ${channelId}, using stale cache`);
       return {
         ...cached,
@@ -351,15 +357,15 @@ async saveChannels(): Promise<void> {
 /**
  * Check if error is storage quota exceeded
  */
-private isQuotaExceeded(error: unknown): boolean {
-  return (
-    error instanceof DOMException &&
-    (error.code === 22 || // Legacy
-     error.code === 1014 || // Firefox
-     error.name === 'QuotaExceededError' ||
-     error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
-  );
-}
+	private isQuotaExceeded(error: unknown): boolean {
+	  return (
+	    error instanceof DOMException &&
+	    (error.code === 22 || // Legacy
+	     error.code === 1014 || // Firefox
+	     error.name === 'QuotaExceededError' ||
+	     error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+	  );
+	}
 
 /**
  * Remove cached content to free storage space

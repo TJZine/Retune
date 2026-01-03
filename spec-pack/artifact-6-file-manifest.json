@@ -152,6 +152,12 @@
       "description": "Typed event emitter utility"
     },
     {
+      "path": "src/utils/__tests__/EventEmitter.test.ts",
+      "module": "event-emitter",
+      "type": "test",
+      "description": "Unit tests for event emitter utility"
+    },
+    {
       "path": "src/utils/result.ts",
       "module": "shared",
       "type": "utility",
@@ -428,6 +434,12 @@
       "module": "epg-ui",
       "type": "test",
       "description": "Unit tests for EPG"
+    },
+    {
+      "path": "src/modules/ui/epg/__tests__/EPGVirtualizer.test.ts",
+      "module": "epg-ui",
+      "type": "test",
+      "description": "Unit tests for EPG virtualization helpers"
     },
     
     {

@@ -59,7 +59,7 @@ Copy the template below and fill in the bracketed values:
 | Document | Location | Purpose |
 | :--- | :--- | :--- |
 | Implementation Prompt | [`artifact-7-implementation-prompts.md#prompt-[N]`](../spec-pack/artifact-7-implementation-prompts.md) | Complete implementation spec |
-| Context Handoff | [`artifact-9-context-handoff.md#module-[name]`](../spec-pack/artifact-9-context-handoff.md) | Scope, assumptions, verification |
+| Context Handoff | `spec-pack/context-handoff/<module-id>.md` | Scope, assumptions, verification |
 | Shared Types | [`artifact-2-shared-types.ts`](../spec-pack/artifact-2-shared-types.ts) | Type definitions (lines [X]-[Y]) |
 
 ---

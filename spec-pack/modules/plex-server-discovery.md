@@ -6,7 +6,7 @@
 - **Path**: `src/modules/plex/discovery/`
 - **Primary File**: `PlexServerDiscovery.ts`
 - **Test File**: `PlexServerDiscovery.test.ts`
-- **Dependencies**: `plex-auth`
+- **Dependencies**: plex-auth
 - **Complexity**: medium
 - **Estimated LoC**: 280
 
@@ -98,7 +98,7 @@ export type {
 5. **Mixed Content Handling (HTTP/HTTPS)**
 
    > [!WARNING]
-   > WebOS apps served over HTTPS may block HTTP requests due to browser security policies.
+   > WebOS apps served over HTTPS can block HTTP requests due to browser security policies.
 
    ```typescript
    interface MixedContentConfig {
@@ -115,11 +115,9 @@ export type {
    const DEFAULT_MIXED_CONTENT_CONFIG: MixedContentConfig = {
      preferHttps: true,
      tryHttpsUpgrade: true,
-     allowLocalHttp: true,  // LAN connections may not have certs
+    allowLocalHttp: true,  // LAN connections can lack certs
      logWarnings: true
    };
-   ```typescript
-   interface MixedContentConfig {
    selectConnection(connections: PlexConnection[]): PlexConnection | null {
      // 1. Prefer HTTPS connections
      const httpsConns = connections.filter(c => c.uri.startsWith('https://'));
@@ -158,10 +156,10 @@ export type {
 
 **webOS-Specific Considerations**:
 
-- webOS 3.x+ apps typically run in a secure context
-- Local HTTP may be blocked; test during development
-- Plex servers with valid certs (via plex.direct) should work over HTTPS
-- For LAN-only servers without certs, user may need to configure app permissions
+- webOS 3.x+ apps run in a secure context (enforced by platform)
+- Local HTTP connections are blocked by browser security policy unless explicitly allowed
+- Plex servers with valid certs (via plex.direct) work over HTTPS
+- For LAN-only servers without certs, user must configure app permissions
 
 ### MUST NOT:
 
@@ -529,7 +527,7 @@ src/modules/plex/discovery/
 | Testing connections sequentially | Seems simpler | Test in parallel with Promise.all for faster discovery |
 | Ignoring relay connections entirely | "Bandwidth limited" | Relay is better than no connection - always try as last resort |
 | Not re-testing on restore | Assume connection still works | Network conditions change - always verify stored connection |
-| Using hardcoded timeouts | 5000ms seems fine | Make timeout configurable, 5s is reasonable default |
+| Using hardcoded timeouts | 5000ms seems fine | Make timeout configurable; default to 5000ms |
 | Storing full server object in localStorage | Simpler persistence | Store only serverId, re-fetch details on startup |
 | Not emitting events on connection change | Forget event pattern | Always emit `serverChange` and `connectionChange` for state sync |
 | Mutating connection.latencyMs in place | Convenient | Avoid side effects in testConnection - return new object or just latency |

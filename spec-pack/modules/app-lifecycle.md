@@ -6,7 +6,7 @@
 - **Path**: `src/modules/lifecycle/`
 - **Primary File**: `AppLifecycle.ts`
 - **Test File**: `AppLifecycle.test.ts`
-- **Dependencies**: None (foundational module)
+- **Dependencies**: none
 - **Complexity**: medium
 - **Estimated LoC**: 400
 
@@ -626,7 +626,7 @@ src/modules/lifecycle/
 | Not versioning stored state | Works initially | Add version field - enables migrations without data loss |
 | Blocking on pause callbacks | Want complete save | Set timeout on callbacks (5s max) - don't hang on backgrounding |
 | Assuming navigator.onLine is accurate | It's a boolean | Do periodic actual network tests - onLine can be stale |
-| Not handling webOSRelaunch | Only test cold start | Handle relaunch event - app may be relaunched while running |
+| Not handling webOSRelaunch | Only test cold start | Handle relaunch event - app can be relaunched while running |
 | Ignoring memory API availability | Works in modern browsers | Check `performance.memory` exists - not available in all webOS versions |
 | Saving state on every change | Comprehensive | Debounce saves (500ms) - too frequent writes hit quota and are slow |
 

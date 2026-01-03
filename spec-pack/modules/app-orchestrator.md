@@ -6,7 +6,7 @@
 - **Path**: `src/`
 - **Primary File**: `Orchestrator.ts`
 - **Test File**: `Orchestrator.test.ts`
-- **Dependencies**: All other modules
+- **Dependencies**: event-emitter, app-lifecycle, navigation, plex-auth, plex-server-discovery, plex-stream-resolver, plex-library, channel-manager, channel-scheduler, video-player, epg-ui
 - **Complexity**: medium
 - **Estimated LoC**: 350
 
@@ -61,48 +61,33 @@ export interface IAppOrchestrator {
    * Get recovery actions for a specific error type.
    * Used by error UI to display appropriate buttons.
    */
-  getRecoveryActions(errorCode: OrchestratorErrorCode): ErrorRecoveryAction[];
+  getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
 }
 
 /**
- * All error types the orchestrator must handle with specific recovery strategies.
- * Each error type maps to predefined recovery actions.
+ * Error recovery mapping uses the canonical AppErrorCode enum.
+ * Import from artifact-2-shared-types.ts.
+ * 
+ * Recovery strategy per error code:
+ * - AUTH_REQUIRED/AUTH_EXPIRED/AUTH_INVALID → show auth screen
+ * - AUTH_RATE_LIMITED → wait and retry
+ * - NETWORK_OFFLINE → show retry, wait for reconnect
+ * - NETWORK_TIMEOUT → retry with backoff
+ * - SERVER_UNREACHABLE → offer server selection
+ * - SERVER_SSL_ERROR → warn user, offer proceed
+ * - PLAYBACK_SOURCE_NOT_FOUND → skip to next item
+ * - PLAYBACK_DECODE_ERROR → try transcode, then skip
+ * - TRANSCODE_FAILED → skip item
+ * - SCHEDULER_EMPTY_CHANNEL → prompt configuration
+ * - CONTENT_UNAVAILABLE → refresh library, skip
+ * - LIBRARY_UNAVAILABLE → prompt reconfiguration
+ * - STORAGE_QUOTA_EXCEEDED → cleanup, notify user
+ * - STORAGE_CORRUPTED → clear and restart
+ * - MODULE_INIT_FAILED → retry or degrade
+ * - MODULE_CRASH → restart module
+ * - INITIALIZATION_FAILED → retry or exit
+ * - UNRECOVERABLE → exit app
  */
-type OrchestratorErrorCode =
-  // Authentication Errors
-  | 'AUTH_REQUIRED'        // No stored credentials → show auth screen
-  | 'AUTH_EXPIRED'         // Token expired → re-validate or re-auth
-  | 'AUTH_INVALID'         // Token rejected → clear credentials, show auth
-  | 'AUTH_RATE_LIMITED'    // Too many attempts → wait and retry
-  
-  // Network Errors
-  | 'NETWORK_OFFLINE'      // No connectivity → show retry, wait for reconnect
-  | 'NETWORK_TIMEOUT'      // Request timeout → retry with backoff
-  | 'SERVER_UNREACHABLE'   // Plex server offline → offer server selection
-  | 'SERVER_SSL_ERROR'     // Certificate issue → warn user, offer proceed
-  
-  // Playback Errors
-  | 'STREAM_NOT_FOUND'     // 404 on stream → skip to next item
-  | 'STREAM_DECODE_ERROR'  // Codec issue → try transcode, then skip
-  | 'STREAM_NETWORK_ERROR' // Mid-playback disconnect → retry, then skip
-  | 'TRANSCODE_FAILED'     // Server can't transcode → skip item
-  
-  // Content Errors  
-  | 'CHANNEL_EMPTY'        // No content in channel → prompt configuration
-  | 'CONTENT_UNAVAILABLE'  // Plex item deleted → refresh library, skip
-  | 'LIBRARY_UNAVAILABLE'  // Library deleted → prompt reconfiguration
-  
-  // Storage Errors
-  | 'STORAGE_QUOTA'        // localStorage full → cleanup, notify user
-  | 'STORAGE_CORRUPTED'    // Invalid JSON → clear and restart
-  
-  // Module Errors
-  | 'MODULE_INIT_FAILED'   // Module didn't start → retry or degrade
-  | 'MODULE_CRASH'         // Runtime error → restart module
-  
-  // Critical Errors
-  | 'INITIALIZATION_FAILED' // App can't start → retry or exit
-  | 'UNRECOVERABLE';        // Fatal error → exit app
 
 /**
  * Recovery action definition for error handling UI
@@ -560,17 +545,17 @@ describe('AppOrchestrator', () => {
     });
     
     it('should advance scheduler on video ended', () => {
-      videoPlayer.emit('ended');
+      videoPlayer.emit("ended");
       expect(scheduler.skipToNext).toHaveBeenCalled();
     });
     
     it('should skip on unrecoverable video error', () => {
-      videoPlayer.emit('error', { recoverable: false, code: 'DECODE_ERROR' });
+      videoPlayer.emit('error', { recoverable: false, code: AppErrorCode.PLAYBACK_DECODE_ERROR });
       expect(scheduler.skipToNext).toHaveBeenCalled();
     });
     
     it('should NOT skip on recoverable video error', () => {
-      videoPlayer.emit('error', { recoverable: true, code: 'NETWORK_ERROR' });
+      videoPlayer.emit('error', { recoverable: true, code: AppErrorCode.NETWORK_TIMEOUT });
       expect(scheduler.skipToNext).not.toHaveBeenCalled();
     });
     
@@ -598,13 +583,13 @@ describe('AppOrchestrator', () => {
     });
     
     it('should pause playback on app pause', () => {
-      lifecycle.emit('pause');
+      lifecycle.emit("pause");
       expect(videoPlayer.pause).toHaveBeenCalled();
       expect(scheduler.stopSyncTimer).toHaveBeenCalled();
     });
     
     it('should resume playback on app resume', () => {
-      lifecycle.emit('resume');
+      lifecycle.emit("resume");
       expect(scheduler.syncToCurrentTime).toHaveBeenCalled();
       expect(videoPlayer.play).toHaveBeenCalled();
     });

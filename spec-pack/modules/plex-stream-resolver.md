@@ -6,7 +6,7 @@
 - **Path**: `src/modules/plex/stream/`
 - **Primary File**: `PlexStreamResolver.ts`
 - **Test File**: `PlexStreamResolver.test.ts`
-- **Dependencies**: `plex-auth`, `plex-server-discovery`
+- **Dependencies**: plex-auth, plex-server-discovery
 - **Complexity**: medium
 - **Estimated LoC**: 320
 
@@ -56,19 +56,19 @@ export interface IPlexStreamResolver {
 }
 
 /**
- * Stream Resolver Error Codes
+ * Stream Resolver uses AppErrorCode from artifact-2-shared-types.ts.
+ * Relevant codes:
+ * - AppErrorCode.PLAYBACK_SOURCE_NOT_FOUND - 404, item doesn't exist
+ * - AppErrorCode.SERVER_UNREACHABLE - 503, transcoder overloaded
+ * - AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED - incompatible codec
+ * - AppErrorCode.NETWORK_TIMEOUT - request timed out
+ * - AppErrorCode.AUTH_EXPIRED - 401, token expired
+ * - AppErrorCode.MIXED_CONTENT_BLOCKED - HTTP blocked by HTTPS app
+ * - AppErrorCode.TRANSCODE_FAILED - server failed to start transcoding
  */
-type StreamResolverErrorCode =
-  | 'ITEM_NOT_FOUND'           // 404 - Item doesn't exist in Plex
-  | 'SERVER_BUSY'              // 503 - Transcoder overloaded
-  | 'UNSUPPORTED_CODEC'        // Decision returned incompatible codec
-  | 'NETWORK_TIMEOUT'          // Request timed out
-  | 'SESSION_EXPIRED'          // 401 - Token expired
-  | 'MIXED_CONTENT_BLOCKED'    // HTTP blocked by HTTPS app
-  | 'TRANSCODE_FAILED';        // Server failed to start transcoding
 
 interface StreamResolverError {
-  code: StreamResolverErrorCode;
+  code: AppErrorCode;
   message: string;
   recoverable: boolean;
   retryAfterMs?: number;
@@ -81,7 +81,10 @@ const RETRY_CONFIG = {
   maxRetries: 3,
   retryDelayMs: [1000, 2000, 4000],  // Exponential backoff
   timeoutMs: 10000,                   // Per-request timeout
-  retryableCodes: ['SERVER_BUSY', 'NETWORK_TIMEOUT'] as StreamResolverErrorCode[],
+  retryableCodes: [
+    AppErrorCode.SERVER_UNREACHABLE,
+    AppErrorCode.NETWORK_TIMEOUT
+  ] as AppErrorCode[],
 } as const;
 ```
 
@@ -179,11 +182,26 @@ export function getMimeType(protocol: 'hls' | 'dash' | 'direct' | 'http'): strin
 
 ### Mixed Content Handling (CRITICAL for webOS):
 
-webOS apps served over HTTPS may encounter issues accessing local Plex servers over HTTP (mixed content blocking). This must be handled explicitly:
+webOS apps served over HTTPS can encounter issues accessing local Plex servers over HTTP (mixed content blocking). This must be handled explicitly:
 
 ```typescript
 /**
- * Resolves playback URL with mixed content mitigation
+ * Resolves playback URL with mixed content mitigation.
+ * 
+ * **MAJOR-001 FIX: Mixed Content Decision Tree**
+ * 
+ * ```mermaid
+ * flowchart TD
+ *     A[buildPlaybackUrl called] --> B{App protocol HTTPS?}
+ *     B -->|No| J[Return direct URL]
+ *     B -->|Yes| C{Server URI HTTP?}
+ *     C -->|No| J
+ *     C -->|Yes| D{HTTPS connection available?}
+ *     D -->|Yes| E[Use HTTPS connection]
+ *     D -->|No| F{Relay connection available?}
+ *     F -->|Yes| G[Use relay with warning]
+ *     F -->|No| H[Throw MIXED_CONTENT_BLOCKED]
+ * ```
  */
 buildPlaybackUrl(partKey: string, serverUri: string): string {
   const url = new URL(partKey, serverUri);
@@ -203,8 +221,12 @@ buildPlaybackUrl(partKey: string, serverUri: string): string {
       return new URL(partKey, relayConnection.uri).toString();
     }
     
-    // Strategy 3: Log warning and proceed (webOS may allow it)
-    console.warn('Mixed content detected - playback may fail:', url.href);
+    // Strategy 3: FAIL - no fallback available (MAJOR-001: removed prior "allow it" ambiguity)
+    throw {
+      code: AppErrorCode.MIXED_CONTENT_BLOCKED,
+      message: 'Cannot access HTTP server from HTTPS app - no fallback available',
+      recoverable: false
+    } as StreamResolverError;
   }
   
   const user = this.auth.getCurrentUser();
@@ -388,7 +410,7 @@ async updateProgress(
   });
   
   await fetch(`${url}?${params}`, {
-    method: 'POST',
+    method: "POST",
     headers: this.auth.getAuthHeaders()
   });
   
@@ -622,8 +644,8 @@ src/modules/plex/stream/
 
 | Pitfall | Why It Happens | Correct Approach |
 | :--- | :--- | :--- |
-| Hardcoding codec support | "These are common" | Check webOS docs, test on device - some codecs may not work |
-| Ignoring mixed content issues | Works locally | webOS HTTPS app may block HTTP - always have fallback strategy |
+| Hardcoding codec support | "These are common" | Use the webOS Codec Support Table below - it is authoritative |
+| Ignoring mixed content issues | Works locally | webOS HTTPS app WILL block HTTP - always use fallback strategy |
 | Not reporting progress to Plex | "Optional feature" | Required for "Continue Watching" - report every 10s during playback |
 | Using HLS.js library | Works elsewhere | webOS has native HLS - use video.src directly, saves memory |
 | Forgetting session cleanup | Leak sessions | Always call endSession() on playback stop or error |
@@ -632,6 +654,26 @@ src/modules/plex/stream/
 | Hardcoding transcode bitrate | 8000 is default | Respect `request.maxBitrate`, default only if not provided |
 | Not including client params | Seem optional | X-Plex-Platform/Device/Product are required for Plex to optimize |
 | Synchronous session ID generation | Seems simpler | Generate UUID synchronously, but session creation is async |
+
+### MAJOR-002 FIX: webOS Codec Support Table (Authoritative)
+
+This table is the authoritative reference for codec decisions. Do NOT defer to external documentation.
+
+| Container | Video Codec | Audio Codec | Direct Play | Notes |
+|-----------|-------------|-------------|-------------|-------|
+| MP4 | H.264 (AVC) | AAC | ✅ Yes | Universal support |
+| MP4 | H.265 (HEVC) | AAC | ✅ Yes | webOS 3.0+ |
+| MKV | H.264 (AVC) | AAC | ✅ Yes | Universal support |
+| MKV | H.265 (HEVC) | AAC | ✅ Yes | webOS 3.0+ |
+| MKV | H.264 | AC3/EAC3 | ✅ Yes | Dolby Digital |
+| MKV | H.264 | DTS | ❌ No | Must transcode audio |
+| AVI | Any | Any | ❌ No | Legacy format |
+| WMV | Any | Any | ❌ No | Not supported |
+| TS | H.264 | AAC/AC3 | ✅ Yes | HLS segments |
+| MP4 | VP9 | Opus | ❌ No | WebM codec |
+| Any | AV1 | Any | ❌ No | Too new |
+| Any | MPEG-2 | Any | ❌ No | Legacy codec |
+| Any | MPEG-4 Part 2 | Any | ❌ No | Legacy codec |
 
 ---
 

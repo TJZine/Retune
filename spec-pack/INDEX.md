@@ -76,6 +76,7 @@ These artifacts extend the spec pack with additional context but are not require
 | S-6 | Logging Patterns | [artifact-16-logging-patterns.md](./artifact-16-logging-patterns.md) | Structured logging guidelines |
 | S-7 | Plex API Examples | [artifact-9-plex-api-examples.md](./artifact-9-plex-api-examples.md) | Real Plex API request/response examples |
 | S-8 | Decisions Log | [decisions/](./decisions/) | Architectural decision records |
+| S-9 | Event Flow Map | [artifact-17-event-flow-map.md](./artifact-17-event-flow-map.md) | Event → emitter → consumer mapping (SUGGEST-004) |
 
 ---
 
@@ -93,4 +94,5 @@ These artifacts extend the spec pack with additional context but are not require
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
+| 1.0.2 | 2026-01-03 | Phase 0 hard-gate compliance fixes (error taxonomy + prompt self-sufficiency) |
 | 1.0.0 | 2026-01-01 | Initial remediation - artifact map created, numbering normalized |

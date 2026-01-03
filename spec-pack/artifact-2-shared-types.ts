@@ -11,7 +11,26 @@
 
 /**
  * Result type for operations that can fail.
- * Use this pattern for error handling instead of throwing exceptions.
+ * 
+ * **Usage Policy (MINOR-003 Clarification)**:
+ * - **Use Result<T,E>** for expected failure modes (network errors, validation failures,
+ *   resource not found) where the caller is expected to handle the error explicitly.
+ * - **Throw exceptions** only for programming errors (invalid arguments, illegal state)
+ *   that indicate bugs rather than expected operational failures.
+ * - **Module public interfaces** should prefer Result<T,E> for async operations.
+ * - **Internal helpers** may throw for simplicity if the caller wraps in try/catch.
+ * 
+ * @example
+ * ```typescript
+ * // Good: Expected failure, use Result
+ * async function fetchUser(id: string): Promise<Result<User, AppError>> { ... }
+ * 
+ * // Good: Programming error, throw
+ * function parseConfig(json: string): Config {
+ *   if (!json) throw new Error('Config JSON is required');
+ *   ...
+ * }
+ * ```
  */
 export type Result<T, E = Error> =
   | { success: true; data: T }
@@ -110,11 +129,13 @@ export enum AppErrorCode {
   AUTH_EXPIRED = 'AUTH_EXPIRED',
   AUTH_INVALID = 'AUTH_INVALID',
   AUTH_FAILED = 'AUTH_FAILED',
+  AUTH_RATE_LIMITED = 'AUTH_RATE_LIMITED',
 
   // Network Errors (2xx)  
   NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
   NETWORK_OFFLINE = 'NETWORK_OFFLINE',
   SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
+  SERVER_SSL_ERROR = 'SERVER_SSL_ERROR',
   MIXED_CONTENT_BLOCKED = 'MIXED_CONTENT_BLOCKED',
 
   // Playback Errors (3xx)
@@ -122,10 +143,13 @@ export enum AppErrorCode {
   PLAYBACK_FORMAT_UNSUPPORTED = 'PLAYBACK_FORMAT_UNSUPPORTED',
   PLAYBACK_DRM_ERROR = 'PLAYBACK_DRM_ERROR',
   PLAYBACK_SOURCE_NOT_FOUND = 'PLAYBACK_SOURCE_NOT_FOUND',
+  TRANSCODE_FAILED = 'TRANSCODE_FAILED',
 
-  // Scheduler Errors (4xx)
+  // Content Errors (4xx)
   SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
   SCHEDULER_INVALID_TIME = 'SCHEDULER_INVALID_TIME',
+  CONTENT_UNAVAILABLE = 'CONTENT_UNAVAILABLE',
+  LIBRARY_UNAVAILABLE = 'LIBRARY_UNAVAILABLE',
 
   // Storage Errors (5xx)
   STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
@@ -135,12 +159,41 @@ export enum AppErrorCode {
   UI_RENDER_ERROR = 'UI_RENDER_ERROR',
   UI_NAVIGATION_BLOCKED = 'UI_NAVIGATION_BLOCKED',
 
-  // System / Lifecycle Errors (7xx)
+  // System / Lifecycle / Module Errors (7xx)
   INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
   PLEX_UNREACHABLE = 'PLEX_UNREACHABLE',
   DATA_CORRUPTION = 'DATA_CORRUPTION',
   PLAYBACK_FAILED = 'PLAYBACK_FAILED',
   OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+  MODULE_INIT_FAILED = 'MODULE_INIT_FAILED',
+  MODULE_CRASH = 'MODULE_CRASH',
+  UNRECOVERABLE = 'UNRECOVERABLE',
+
+  // Additional Network/API Errors (8xx) - Canonicalized from v2 review
+  NETWORK_UNAVAILABLE = 'NETWORK_UNAVAILABLE',
+  PARSE_ERROR = 'PARSE_ERROR',
+  SERVER_ERROR = 'SERVER_ERROR',
+  SERVER_UNAUTHORIZED = 'SERVER_UNAUTHORIZED',
+  RATE_LIMITED = 'RATE_LIMITED',
+  RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
+  EMPTY_RESPONSE = 'EMPTY_RESPONSE',
+
+  // Playback/Stream Errors (9xx) - Canonicalized from v2 review
+  CODEC_UNSUPPORTED = 'CODEC_UNSUPPORTED',
+  TRACK_NOT_FOUND = 'TRACK_NOT_FOUND',
+  TRACK_SWITCH_FAILED = 'TRACK_SWITCH_FAILED',
+  TRACK_SWITCH_TIMEOUT = 'TRACK_SWITCH_TIMEOUT',
+  RENDER_ERROR = 'RENDER_ERROR',
+
+  // Channel/Content Errors (10xx) - Canonicalized from v2 review
+  CHANNEL_NOT_FOUND = 'CHANNEL_NOT_FOUND',
+  EMPTY_CHANNEL = 'EMPTY_CHANNEL',
+  ITEM_NOT_FOUND = 'ITEM_NOT_FOUND',
+
+  // Navigation/UI Errors (11xx) - Canonicalized from v2 review
+  NAV_BOUNDARY = 'NAV_BOUNDARY',
+  SCROLL_TIMEOUT = 'SCROLL_TIMEOUT',
+  POOL_EXHAUSTED = 'POOL_EXHAUSTED',
 
   // Generic
   UNKNOWN = 'UNKNOWN',
@@ -690,22 +743,11 @@ export interface HlsOptions {
 }
 
 /**
- * Plex Stream Resolver error codes (module-level)
- */
-export type StreamResolverErrorCode =
-  | 'ITEM_NOT_FOUND'
-  | 'SERVER_BUSY'
-  | 'UNSUPPORTED_CODEC'
-  | 'NETWORK_TIMEOUT'
-  | 'SESSION_EXPIRED'
-  | 'MIXED_CONTENT_BLOCKED'
-  | 'TRANSCODE_FAILED';
-
-/**
  * Stream resolver error structure
+ * Uses canonical AppErrorCode for BLOCK-001 compliance
  */
 export interface StreamResolverError {
-  code: StreamResolverErrorCode;
+  code: AppErrorCode;
   message: string;
   recoverable: boolean;
   retryAfterMs?: number;
@@ -716,25 +758,11 @@ export interface StreamResolverError {
 // ============================================
 
 /**
- * Plex API error codes
- */
-export type PlexErrorCode =
-  | 'AUTH_REQUIRED'
-  | 'AUTH_INVALID'
-  | 'SERVER_UNREACHABLE'
-  | 'SERVER_UNAUTHORIZED'
-  | 'RESOURCE_NOT_FOUND'
-  | 'RATE_LIMITED'
-  | 'NETWORK_ERROR'
-  | 'PARSE_ERROR'
-  | 'UNKNOWN';
-
-/**
  * Plex API error structure
  */
 export interface PlexApiError {
   /** Error code for programmatic handling */
-  code: PlexErrorCode;
+  code: AppErrorCode;
   /** Human-readable error message */
   message: string;
   /** HTTP status code if applicable */
@@ -1267,22 +1295,11 @@ export interface PlaybackState {
 }
 
 /**
- * Playback error codes
- */
-export type PlaybackErrorCode =
-  | 'NETWORK_ERROR'
-  | 'DECODE_ERROR'
-  | 'FORMAT_UNSUPPORTED'
-  | 'DRM_ERROR'
-  | 'SOURCE_NOT_FOUND'
-  | 'UNKNOWN';
-
-/**
  * Playback error info
  */
 export interface PlaybackError {
   /** Error code */
-  code: PlaybackErrorCode;
+  code: AppErrorCode;
   /** Human-readable message */
   message: string;
   /** Whether recovery might succeed */
@@ -1557,22 +1574,6 @@ export type ConnectionStatus =
   | 'unreachable';
 
 /**
- * @deprecated Use AppErrorCode instead.
- *
- * Legacy lifecycle error taxonomy retained only to support older drafts/docs.
- * Do not use this in new specs or implementations.
- */
-export type AppErrorType =
-  | 'INITIALIZATION_FAILED'
-  | 'AUTH_EXPIRED'
-  | 'NETWORK_UNAVAILABLE'
-  | 'PLEX_UNREACHABLE'
-  | 'DATA_CORRUPTION'
-  | 'PLAYBACK_FAILED'
-  | 'OUT_OF_MEMORY'
-  | 'UNKNOWN';
-
-/**
  * Extended application error for lifecycle/UI surfaces.
  *
  * Best practice: keep a single canonical taxonomy (`AppErrorCode`) and
@@ -1686,43 +1687,6 @@ export interface OrchestratorConfig {
   navConfig: NavigationConfig;
   epgConfig: EPGConfig;
 }
-
-/**
- * Orchestrator error codes (high-level orchestration failures)
- *
- * NOTE: This is a separate taxonomy from AppErrorCode and is used only by the
- * orchestrator UI/recovery layer. Prefer mapping module errors to AppErrorCode
- * where possible.
- */
-export type OrchestratorErrorCode =
-  // Authentication Errors
-  | 'AUTH_REQUIRED'
-  | 'AUTH_EXPIRED'
-  | 'AUTH_INVALID'
-  | 'AUTH_RATE_LIMITED'
-  // Network Errors
-  | 'NETWORK_OFFLINE'
-  | 'NETWORK_TIMEOUT'
-  | 'SERVER_UNREACHABLE'
-  | 'SERVER_SSL_ERROR'
-  // Playback Errors
-  | 'STREAM_NOT_FOUND'
-  | 'STREAM_DECODE_ERROR'
-  | 'STREAM_NETWORK_ERROR'
-  | 'TRANSCODE_FAILED'
-  // Content Errors
-  | 'CHANNEL_EMPTY'
-  | 'CONTENT_UNAVAILABLE'
-  | 'LIBRARY_UNAVAILABLE'
-  // Storage Errors
-  | 'STORAGE_QUOTA'
-  | 'STORAGE_CORRUPTED'
-  // Module Errors
-  | 'MODULE_INIT_FAILED'
-  | 'MODULE_CRASH'
-  // Critical Errors
-  | 'INITIALIZATION_FAILED'
-  | 'UNRECOVERABLE';
 
 /**
  * Recovery action definition for error handling UI
@@ -2312,5 +2276,5 @@ export interface IAppOrchestrator {
   // Error Handling
   handleGlobalError(error: AppError, context: string): void;
   registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
-  getRecoveryActions(errorCode: OrchestratorErrorCode): ErrorRecoveryAction[];
+  getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
 }

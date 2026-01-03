@@ -74,7 +74,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 1,
-      "estimatedLoC": 350
+      "estimatedLoC": 350,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "app-lifecycle": {
       "status": "pending",
@@ -86,7 +92,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 1,
-      "estimatedLoC": 400
+      "estimatedLoC": 400,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "navigation": {
       "status": "pending",
@@ -98,7 +110,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 2,
-      "estimatedLoC": 520
+      "estimatedLoC": 520,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "plex-server-discovery": {
       "status": "pending",
@@ -110,7 +128,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 2,
-      "estimatedLoC": 280
+      "estimatedLoC": 280,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "plex-library": {
       "status": "pending",
@@ -123,7 +147,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 3,
-      "estimatedLoC": 500
+      "estimatedLoC": 500,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "plex-stream-resolver": {
       "status": "pending",
@@ -136,7 +166,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 3,
-      "estimatedLoC": 320
+      "estimatedLoC": 320,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "channel-manager": {
       "status": "pending",
@@ -148,7 +184,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 4,
-      "estimatedLoC": 600
+      "estimatedLoC": 600,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "channel-scheduler": {
       "status": "pending",
@@ -160,7 +202,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 5,
-      "estimatedLoC": 550
+      "estimatedLoC": 550,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "video-player": {
       "status": "pending",
@@ -172,7 +220,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 4,
-      "estimatedLoC": 480
+      "estimatedLoC": 480,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "epg-ui": {
       "status": "pending",
@@ -186,7 +240,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 6,
-      "estimatedLoC": 700
+      "estimatedLoC": 700,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     },
     "app-orchestrator": {
       "status": "pending",
@@ -205,7 +265,13 @@
       "reviewedBy": null,
       "verificationPassed": null,
       "priority": 7,
-      "estimatedLoC": 350
+      "estimatedLoC": 350,
+      "attempts": 0,
+      "sessionId": null,
+      "orchestrationDoc": null,
+      "blockedReason": null,
+      "startedAt": null,
+      "completedAt": null
     }
   },
   "updateProtocol": {

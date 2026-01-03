@@ -173,7 +173,7 @@ Use template from `prompts/templates/orchestration-document.md`:
 > `spec-pack/artifact-7-implementation-prompts.md#prompt-[N]`
 >
 > Context handoff is at:
-> `spec-pack/artifact-9-context-handoff.md#module-[name]`
+> `spec-pack/context-handoff/<module-id>.md`
 
 ## Session Context
 [Previous attempt results, blockers cleared, spec updates]

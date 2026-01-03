@@ -245,7 +245,7 @@ describe('Integration: Playback Error Recovery', () => {
     // Simulate network error
     mockNetwork.disconnect();
     videoPlayer._emitError({
-      code: 'NETWORK_ERROR',
+      code: AppErrorCode.NETWORK_OFFLINE,
       retryable: true,
     });
     
@@ -269,7 +269,7 @@ describe('Integration: Playback Error Recovery', () => {
     
     // Emit unrecoverable error
     videoPlayer._emitError({
-      code: 'PLAYBACK_DECODE_ERROR',
+      code: AppErrorCode.PLAYBACK_DECODE_ERROR,
       retryable: false,
     });
     

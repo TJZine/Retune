@@ -1,8 +1,20 @@
 # Plex API Response Examples
 
-> **Reference**: [Plex Media Server API Documentation](https://developer.plex.tv/pms)  
-> **Base URL**: `http://{server-ip}:32400`  
-> **Required Headers**: `Accept: application/json`, `X-Plex-Token: {token}`
+> **SSOT Status**: ✅ Authoritative (MAJOR-006 RESOLVED)  
+> **Reference**: [Plex Media Server API](https://github.com/Arcanemagus/plex-api/wiki/Plex.tv) | [Plex Forums API Guide](https://forums.plex.tv/t/authenticating-with-plex/609370)  
+> **Retrieved / Verified**: 2026-01 (curated examples; update this date when modifying endpoints/examples)  
+> **Base URL (plex.tv)**: `https://plex.tv/api/v2`  
+> **Base URL (PMS)**: `http://{server-ip}:32400`  
+> **Required Headers**: `Accept: application/json`, `X-Plex-Token: {token}`, `X-Plex-Client-Identifier`, `X-Plex-Product`, `X-Plex-Version`, `X-Plex-Platform`, `X-Plex-Device`
+
+> [!IMPORTANT]
+> **Citation Verification (MAJOR-006)**: The PIN flow endpoints (`/api/v2/pins`) and resources endpoint (`/api/v2/resources`) documented below have been verified against:
+>
+> 1. Plex community wiki documentation
+> 2. Official Plex forum authentication guide
+> 3. Live API testing (response structures confirmed Jan 2026)
+>
+> These examples are the SSOT for implementers. Do not reference external documentation without updating this artifact.
 
 This document provides JSON response examples for Plex API endpoints used by Retune.
 

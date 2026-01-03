@@ -5,7 +5,7 @@
 | Concept | SSOT File | How to locate (from repo root) |
 | :--- | :--- | :--- |
 | Interface | [artifact-2-shared-types.ts](../artifact-2-shared-types.ts) | `rg -n \"^export interface IPlexStreamResolver\\b\" spec-pack/artifact-2-shared-types.ts` |
-| Types | [artifact-2-shared-types.ts](../artifact-2-shared-types.ts) | `rg -n \"^export interface Stream(Decision|Request|Descriptor)\\b|^export type StreamResolverErrorCode\\b\" spec-pack/artifact-2-shared-types.ts` |
+| Types | [artifact-2-shared-types.ts](../artifact-2-shared-types.ts) | `rg -n \"^export interface Stream(Decision|Request|Descriptor)\\b\" spec-pack/artifact-2-shared-types.ts` |
 | Module Spec | [modules/plex-stream-resolver.md](../modules/plex-stream-resolver.md) | Open the file (single-module SSOT) |
 | Implementation Prompt | [artifact-7-implementation-prompts.md](../artifact-7-implementation-prompts.md) | `rg -n \"^## Prompt 10 \\(V2\\): Plex Stream Resolver Module\\b\" spec-pack/artifact-7-implementation-prompts.md` |
 

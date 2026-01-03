@@ -24,6 +24,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Spec Pack Lints
+        run: |
+          ./scripts/lint-error-taxonomy.sh
+          ./scripts/lint-prompt-sufficiency.sh
+
   type-check:
     runs-on: ubuntu-latest
     steps:

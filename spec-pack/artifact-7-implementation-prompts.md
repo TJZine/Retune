@@ -3,7 +3,138 @@
 These prompts are self-contained instructions for AI coding agents to implement individual modules. Each prompt contains everything needed to implement the module without external dependencies.
 
 > [!IMPORTANT]
-> **TypeScript Configuration**: All modules must compile with strict TypeScript settings. See `tsconfig.template.json` for compiler options. **Target: ES2017** (Chromium 68 compatibility). **Do NOT use optional chaining (`?.`) or nullish coalescing (`??`)** — these require ES2020 and will not work on webOS 4.0+.
+> **TypeScript Configuration**: All modules must compile with strict TypeScript settings. **Target: ES2017** (Chromium 68 compatibility). **Do NOT use optional chaining (`?.`) or nullish coalescing (`??`)** — these require ES2020 and will not work on webOS 4.0+.
+>
+> **Required tsconfig.json settings (BLOCK-002: Inlined for AI self-sufficiency)**:
+>
+> ```json
+> {
+>   "compilerOptions": {
+>     "target": "ES2017",
+>     "lib": ["ES2017", "DOM", "DOM.Iterable"],
+>     "module": "ESNext",
+>     "moduleResolution": "bundler",
+>     "strict": true,
+>     "noImplicitAny": true,
+>     "strictNullChecks": true,
+>     "strictFunctionTypes": true,
+>     "strictBindCallApply": true,
+>     "strictPropertyInitialization": true,
+>     "noImplicitThis": true,
+>     "useUnknownInCatchVariables": true,
+>     "alwaysStrict": true,
+>     "noUnusedLocals": true,
+>     "noUnusedParameters": true,
+>     "exactOptionalPropertyTypes": true,
+>     "noImplicitReturns": true,
+>     "noFallthroughCasesInSwitch": true,
+>     "noUncheckedIndexedAccess": true,
+>     "noImplicitOverride": true,
+>     "esModuleInterop": true,
+>     "forceConsistentCasingInFileNames": true,
+>     "declaration": true,
+>     "sourceMap": true,
+>     "outDir": "./dist",
+>     "rootDir": "./src",
+>     "types": ["webos-typings"]
+>   }
+> }
+> ```
+
+> **Canonical Error Types (INLINED for prompt self-sufficiency)**
+>
+> ```typescript
+> export enum AppErrorCode {
+>   AUTH_REQUIRED = 'AUTH_REQUIRED',
+>   AUTH_EXPIRED = 'AUTH_EXPIRED',
+>   AUTH_INVALID = 'AUTH_INVALID',
+>   AUTH_FAILED = 'AUTH_FAILED',
+>   AUTH_RATE_LIMITED = 'AUTH_RATE_LIMITED',
+>
+>   NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
+>   NETWORK_OFFLINE = 'NETWORK_OFFLINE',
+>   NETWORK_UNAVAILABLE = 'NETWORK_UNAVAILABLE',
+>   SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
+>   SERVER_SSL_ERROR = 'SERVER_SSL_ERROR',
+>   MIXED_CONTENT_BLOCKED = 'MIXED_CONTENT_BLOCKED',
+>   PARSE_ERROR = 'PARSE_ERROR',
+>   SERVER_ERROR = 'SERVER_ERROR',
+>   SERVER_UNAUTHORIZED = 'SERVER_UNAUTHORIZED',
+>   RATE_LIMITED = 'RATE_LIMITED',
+>   RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
+>   EMPTY_RESPONSE = 'EMPTY_RESPONSE',
+>
+>   PLAYBACK_DECODE_ERROR = 'PLAYBACK_DECODE_ERROR',
+>   PLAYBACK_FORMAT_UNSUPPORTED = 'PLAYBACK_FORMAT_UNSUPPORTED',
+>   PLAYBACK_DRM_ERROR = 'PLAYBACK_DRM_ERROR',
+>   PLAYBACK_SOURCE_NOT_FOUND = 'PLAYBACK_SOURCE_NOT_FOUND',
+>   PLAYBACK_FAILED = 'PLAYBACK_FAILED',
+>   TRANSCODE_FAILED = 'TRANSCODE_FAILED',
+>   CODEC_UNSUPPORTED = 'CODEC_UNSUPPORTED',
+>   TRACK_NOT_FOUND = 'TRACK_NOT_FOUND',
+>   TRACK_SWITCH_FAILED = 'TRACK_SWITCH_FAILED',
+>   TRACK_SWITCH_TIMEOUT = 'TRACK_SWITCH_TIMEOUT',
+>   RENDER_ERROR = 'RENDER_ERROR',
+>
+>   SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
+>   SCHEDULER_INVALID_TIME = 'SCHEDULER_INVALID_TIME',
+>
+>   CONTENT_UNAVAILABLE = 'CONTENT_UNAVAILABLE',
+>   LIBRARY_UNAVAILABLE = 'LIBRARY_UNAVAILABLE',
+>   CHANNEL_NOT_FOUND = 'CHANNEL_NOT_FOUND',
+>   EMPTY_CHANNEL = 'EMPTY_CHANNEL',
+>   ITEM_NOT_FOUND = 'ITEM_NOT_FOUND',
+>
+>   STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
+>   STORAGE_CORRUPTED = 'STORAGE_CORRUPTED',
+>
+>   UI_RENDER_ERROR = 'UI_RENDER_ERROR',
+>   UI_NAVIGATION_BLOCKED = 'UI_NAVIGATION_BLOCKED',
+>   NAV_BOUNDARY = 'NAV_BOUNDARY',
+>   SCROLL_TIMEOUT = 'SCROLL_TIMEOUT',
+>   POOL_EXHAUSTED = 'POOL_EXHAUSTED',
+>
+>   INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
+>   PLEX_UNREACHABLE = 'PLEX_UNREACHABLE',
+>   DATA_CORRUPTION = 'DATA_CORRUPTION',
+>   OUT_OF_MEMORY = 'OUT_OF_MEMORY',
+>   MODULE_INIT_FAILED = 'MODULE_INIT_FAILED',
+>   MODULE_CRASH = 'MODULE_CRASH',
+>   UNRECOVERABLE = 'UNRECOVERABLE',
+>
+>   UNKNOWN = 'UNKNOWN',
+> }
+>
+> export interface AppError {
+>   code: AppErrorCode;
+>   message: string;
+>   recoverable: boolean;
+>   context?: Record<string, unknown>;
+> }
+> ```
+
+> [!NOTE]
+> **Verification Commands (BLOCK-002: Required for each prompt)**
+> After implementing any prompt, run these commands to verify:
+>
+> ```bash
+> # Type check
+> npx tsc --noEmit
+> 
+> # Lint
+> npm run lint
+> 
+> # Unit tests
+> npm test -- --testPathPattern="<module-name>"
+> ```
+>
+> Each prompt MUST pass all three before marking complete.
+
+> [!WARNING]
+> **MAJOR-005: Test Assertions Required**
+> Test specifications in prompts show skeleton `it('...');` syntax for brevity.
+> **Implementation MUST include actual assertions** — not just empty test bodies.
+> Each test case must have at least one `expect()` call validating behavior.
 
 ---
 
@@ -17,6 +148,7 @@ Implement a typed EventEmitter class that provides pub/sub functionality with Ty
 
 ### P1: Files to Create
 - src/utils/EventEmitter.ts
+- src/utils/__tests__/EventEmitter.test.ts
 
 ### P1: Requirements
 
@@ -92,6 +224,72 @@ emitter.emit('tick'); // void payload
 - JSDoc comments on all public methods
 - Export statement for the class
 
+### P1: Test Specifications
+```typescript
+describe('EventEmitter', () => {
+  it('invokes subscribed handlers on emit', () => {
+    type Events = { ping: { value: number } };
+    const emitter = new EventEmitter<Events>();
+
+    const handler = jest.fn();
+    emitter.on("ping", handler);
+
+    emitter.emit("ping", { value: 1 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({ value: 1 });
+  });
+
+  it('supports once() handlers', () => {
+    type Events = { tick: void };
+    const emitter = new EventEmitter<Events>();
+
+    const handler = jest.fn();
+    emitter.once("tick", handler);
+
+    emitter.emit("tick");
+    emitter.emit("tick");
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates handler errors and continues', () => {
+    type Events = { ping: void };
+    const emitter = new EventEmitter<Events>();
+
+    const badHandler = jest.fn(() => { throw new Error('boom'); });
+    const goodHandler = jest.fn();
+    emitter.on("ping", badHandler);
+    emitter.on("ping", goodHandler);
+
+    expect(() => emitter.emit("ping")).not.toThrow();
+    expect(badHandler).toHaveBeenCalledTimes(1);
+    expect(goodHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('removeAllListeners(event) removes handlers for that event only', () => {
+    type Events = { a: void; b: void };
+    const emitter = new EventEmitter<Events>();
+
+    const a = jest.fn();
+    const b = jest.fn();
+    emitter.on("a", a);
+    emitter.on("b", b);
+
+    emitter.removeAllListeners("a");
+    emitter.emit("a");
+    emitter.emit("b");
+    expect(a).not.toHaveBeenCalled();
+    expect(b).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+### P1: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="EventEmitter"
+```
+
 ````
 
 ---
@@ -105,10 +303,13 @@ You are implementing the Plex Authentication module for Retune, a webOS TV appli
 Implement PIN-based OAuth authentication with plex.tv, including token storage and validation.
 
 ### P2: Files to Create
-- src/modules/plex/auth/index.ts (exports)
-- src/modules/plex/auth/PlexAuth.ts (main class)
-- src/modules/plex/auth/interfaces.ts (IPlexAuth)
-- src/modules/plex/auth/constants.ts
+Base Directory: src/modules
+
+- plex/auth/index.ts (exports)
+- plex/auth/PlexAuth.ts (main class)
+- plex/auth/interfaces.ts (IPlexAuth)
+- plex/auth/constants.ts
+- plex/auth/__tests__/PlexAuth.test.ts
 
 ### P2: Type Definitions (use these exactly)
 
@@ -207,7 +408,7 @@ interface IPlexAuth {
 
 - Wrap fetch in try/catch
 - On 401/403, return false from validateToken
-- On network error, throw with code 'NETWORK_ERROR'
+- On fetch failure (network / DNS / offline), throw with code `AppErrorCode.SERVER_UNREACHABLE`
 
 ### P2: User-Facing Error Messages (INLINED)
 
@@ -233,6 +434,75 @@ Complete implementation of all files with:
 - JSDoc comments
 - No TypeScript errors
 
+### P2: Test Specifications
+```typescript
+describe('PlexAuth', () => {
+  const mockConfig: PlexAuthConfig = {
+    clientIdentifier: 'cid',
+    product: 'Retune',
+    version: '1.0.0',
+    platform: 'webOS',
+    platformVersion: '4.0',
+    device: 'lgtv',
+    deviceName: 'Living Room TV',
+  };
+
+  function mockFetchJson(json: unknown, status: number = 200): void {
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: () => null },
+      json: async () => json,
+      text: async () => JSON.stringify(json),
+    });
+  }
+
+  it('requestPin returns a 4-character code and stores pendingPin', async () => {
+    const auth = new PlexAuth(mockConfig);
+    mockFetchJson({ id: 1, code: 'A1b2', expiresAt: '2026-01-01T00:00:00Z', authToken: null, clientIdentifier: mockConfig.clientIdentifier });
+
+    const pin = await auth.requestPin();
+    expect(pin.code).toMatch(/^[A-Za-z0-9]{4}$/);
+    expect(pin.code).toHaveLength(4);
+  });
+
+  it('validateToken returns false on 401', async () => {
+    const auth = new PlexAuth(mockConfig);
+    mockFetchJson({ error: 'unauthorized' }, 401);
+    const ok = await auth.validateToken('bad');
+    expect(ok).toBe(false);
+  });
+
+  it('getAuthHeaders includes X-Plex-Token when authenticated', async () => {
+    const auth = new PlexAuth(mockConfig);
+    await auth.storeCredentials({ token: { token: 't', userId: 'u', username: 'n', email: 'e', thumb: '', expiresAt: null, issuedAt: new Date() }, selectedServerId: null, selectedServerUri: null });
+    const headers = auth.getAuthHeaders();
+    expect(headers['X-Plex-Token']).toBe('t');
+    expect(headers['Accept']).toBe('application/json');
+  });
+
+  it('emits authChange when credentials are stored and cleared', async () => {
+    const auth = new PlexAuth(mockConfig);
+    const handler = jest.fn();
+    auth.on('authChange', handler);
+
+    await auth.storeCredentials({ token: { token: 't', userId: 'u', username: 'n', email: 'e', thumb: '', expiresAt: null, issuedAt: new Date() }, selectedServerId: null, selectedServerUri: null });
+    await auth.clearCredentials();
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenNthCalledWith(1, true);
+    expect(handler).toHaveBeenNthCalledWith(2, false);
+  });
+});
+```
+
+### P2: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="plex/auth"
+```
+
 ````
 
 ---
@@ -246,11 +516,14 @@ You are implementing the Channel Scheduler module for Retune, a webOS TV applica
 Implement deterministic schedule generation for virtual TV channels. Given a channel's content and the current time, calculate exactly which content should be playing and at what offset.
 
 ### P3: Files to Create
-- src/modules/scheduler/scheduler/index.ts
-- src/modules/scheduler/scheduler/ChannelScheduler.ts
-- src/modules/scheduler/scheduler/ScheduleCalculator.ts  
-- src/modules/scheduler/scheduler/ShuffleGenerator.ts
-- src/modules/scheduler/scheduler/interfaces.ts
+Base Directory: src/modules
+
+- scheduler/scheduler/index.ts
+- scheduler/scheduler/ChannelScheduler.ts
+- scheduler/scheduler/ScheduleCalculator.ts  
+- scheduler/scheduler/ShuffleGenerator.ts
+- scheduler/scheduler/interfaces.ts
+- scheduler/scheduler/__tests__/ChannelScheduler.test.ts
 
 ### P3: Type Definitions (use exactly)
 
@@ -385,6 +658,61 @@ Complete implementation with:
 - JSDoc comments
 ```
 
+### P3: Test Specifications
+```typescript
+describe('ChannelScheduler', () => {
+  const content: ResolvedContentItem[] = [
+    { ratingKey: 'a', type: 'movie', title: 'A', fullTitle: 'A', durationMs: 10000, thumb: null, year: 2020, scheduledIndex: 0 },
+    { ratingKey: 'b', type: 'movie', title: 'B', fullTitle: 'B', durationMs: 20000, thumb: null, year: 2021, scheduledIndex: 1 },
+  ];
+
+  it('deterministically resolves current program and offset for a fixed anchor time', () => {
+    const anchorTime = 1000000;
+    const config: ScheduleConfig = { channelId: 'c1', anchorTime, content, playbackMode: 'sequential', shuffleSeed: 1, loopSchedule: true };
+    const scheduler = new ChannelScheduler(config);
+
+    // 5s after anchor, still in item A, offset 5s
+    const now = anchorTime + 5000;
+    const current = scheduler.getCurrentProgram(now);
+    expect(current.item.ratingKey).toBe('a');
+    expect(current.elapsedMs).toBe(5000);
+    expect(current.remainingMs).toBe(5000);
+  });
+
+  it('wraps across the loop boundary without gaps', () => {
+    const anchorTime = 1000000;
+    const config: ScheduleConfig = { channelId: 'c1', anchorTime, content, playbackMode: 'sequential', shuffleSeed: 1, loopSchedule: true };
+    const scheduler = new ChannelScheduler(config);
+
+    // Total loop duration is 30s; 35s after anchor wraps to item A at 5s
+    const now = anchorTime + 35000;
+    const current = scheduler.getCurrentProgram(now);
+    expect(current.item.ratingKey).toBe('a');
+    expect(current.elapsedMs).toBe(5000);
+  });
+
+  it('shuffle mode produces the same order given the same seed', () => {
+    const anchorTime = 1000000;
+    const config1: ScheduleConfig = { channelId: 'c1', anchorTime, content, playbackMode: 'shuffle', shuffleSeed: 42, loopSchedule: true };
+    const config2: ScheduleConfig = { channelId: 'c1', anchorTime, content, playbackMode: 'shuffle', shuffleSeed: 42, loopSchedule: true };
+
+    const s1 = new ChannelScheduler(config1);
+    const s2 = new ChannelScheduler(config2);
+    expect(s1.getScheduleWindow(anchorTime, anchorTime + 60000).programs.map(p => p.item.ratingKey))
+      .toEqual(s2.getScheduleWindow(anchorTime, anchorTime + 60000).programs.map(p => p.item.ratingKey));
+  });
+});
+```
+
+### P3: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="ChannelScheduler"
+```
+
+````
+
 ---
 
 ## Prompt 4: Video Player Module (Priority 4)
@@ -396,10 +724,13 @@ You are implementing the Video Player module for Retune, a webOS TV application.
 Create an abstraction over the HTML5 video element optimized for webOS, handling HLS streams, subtitle tracks, error recovery, and suspension prevention.
 
 ### P4: Files to Create
-- src/modules/player/index.ts
-- src/modules/player/VideoPlayer.ts
-- src/modules/player/SubtitleManager.ts
-- src/modules/player/interfaces.ts
+Base Directory: src/modules
+
+- player/index.ts
+- player/VideoPlayer.ts
+- player/SubtitleManager.ts
+- player/interfaces.ts
+- player/__tests__/VideoPlayer.test.ts
 
 ### P4: Type Definitions
 
@@ -439,6 +770,11 @@ interface PlaybackState {
   activeSubtitleId: string | null;
   activeAudioId: string | null;
   errorInfo: PlaybackError | null;
+}
+
+interface PlaybackError extends AppError {
+  retryCount: number;
+  retryAfterMs?: number;
 }
 ```
 
@@ -525,6 +861,18 @@ Map video element events to player events:
 - ended → emit 'ended', status: 'ended'
 - error → handle based on MediaError.code
 
+### P4: Required Helper (for deterministic tests)
+
+Export this helper from `player/VideoPlayer.ts` and use it in the media `error` event handler:
+
+```typescript
+export function mapMediaErrorCodeToPlaybackError(
+  mediaErrorCode: number,
+  retryCount: number,
+  retryAttempts: number
+): PlaybackError
+```
+
 ### P4: Deliverable
 
 Complete implementation with:
@@ -534,7 +882,48 @@ Complete implementation with:
 - Error retry with backoff
 - Event emission via EventEmitter
 - JSDoc comments
+
+### P4: Test Specifications
+```typescript
+import { mapMediaErrorCodeToPlaybackError } from '../VideoPlayer';
+
+describe('mapMediaErrorCodeToPlaybackError', () => {
+  it('maps MEDIA_ERR_NETWORK (2) to NETWORK_TIMEOUT and is recoverable until retries exhausted', () => {
+    const e0 = mapMediaErrorCodeToPlaybackError(2, 0, 3);
+    const e2 = mapMediaErrorCodeToPlaybackError(2, 2, 3);
+    const e3 = mapMediaErrorCodeToPlaybackError(2, 3, 3);
+
+    expect(e0.code).toBe(AppErrorCode.NETWORK_TIMEOUT);
+    expect(e0.recoverable).toBe(true);
+    expect(e2.recoverable).toBe(true);
+
+    expect(e3.code).toBe(AppErrorCode.NETWORK_TIMEOUT);
+    expect(e3.recoverable).toBe(false);
+    expect(e3.retryCount).toBe(3);
+  });
+
+  it('maps MEDIA_ERR_DECODE (3) to PLAYBACK_DECODE_ERROR and recoverable=false', () => {
+    const e = mapMediaErrorCodeToPlaybackError(3, 0, 3);
+    expect(e.code).toBe(AppErrorCode.PLAYBACK_DECODE_ERROR);
+    expect(e.recoverable).toBe(false);
+  });
+
+  it('maps MEDIA_ERR_SRC_NOT_SUPPORTED (4) to PLAYBACK_FORMAT_UNSUPPORTED', () => {
+    const e = mapMediaErrorCodeToPlaybackError(4, 0, 3);
+    expect(e.code).toBe(AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED);
+    expect(e.recoverable).toBe(false);
+  });
+});
 ```
+
+### P4: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="VideoPlayer"
+```
+
+````
 
 ---
 
@@ -547,12 +936,14 @@ You are implementing the Navigation & Remote Control module for Retune, a webOS 
 Handle LG remote control input, manage focus across the application, and coordinate screen transitions.
 
 ### P5: Files to Create
-- src/modules/navigation/index.ts
-- src/modules/navigation/NavigationManager.ts
-- src/modules/navigation/FocusManager.ts
-- src/modules/navigation/RemoteHandler.ts
-- src/modules/navigation/interfaces.ts
-- src/modules/navigation/constants.ts
+Base Directory: src/modules
+
+- navigation/index.ts
+- navigation/NavigationManager.ts
+- navigation/FocusManager.ts
+- navigation/RemoteHandler.ts
+- navigation/interfaces.ts
+- navigation/constants.ts
 
 ### P5: Type Definitions
 ```typescript
@@ -912,6 +1303,13 @@ Complete implementation with:
 - Event emission for keyPress, screenChange, focusChange, pointerModeChange
 - Focus memory per screen with save/restore
 - JSDoc comments on all public methods
+
+### P5: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="navigation"
+```
 ````
 
 ---
@@ -925,12 +1323,15 @@ You are implementing the EPG (Electronic Program Guide) UI module for Retune, a 
 Create a virtualized program grid displaying channels (vertical) and time (horizontal) that performs well on limited TV hardware.
 
 ### P6: Files to Create
-- src/modules/ui/epg/index.ts
-- src/modules/ui/epg/EPGComponent.ts
-- src/modules/ui/epg/EPGVirtualizer.ts
-- src/modules/ui/epg/EPGInfoPanel.ts
-- src/modules/ui/epg/interfaces.ts
-- src/modules/ui/epg/styles.css
+Base Directory: src/modules
+
+- ui/epg/index.ts
+- ui/epg/EPGComponent.ts
+- ui/epg/EPGVirtualizer.ts
+- ui/epg/EPGInfoPanel.ts
+- ui/epg/interfaces.ts
+- ui/epg/styles.css
+- ui/epg/__tests__/EPGVirtualizer.test.ts
 
 ### P6: Dependencies (you will receive these)
 - IChannelScheduler.getScheduleWindow(startTime, endTime)
@@ -1174,12 +1575,45 @@ Complete implementation with:
 - Event emission
 - All CSS styles
 
+### P6: Test Specifications
+```typescript
+import { positionCell } from '../EPGVirtualizer';
+
+describe('EPGVirtualizer helpers', () => {
+  it('positionCell computes left/width deterministically from program times', () => {
+    const program: ScheduledProgram = {
+      item: { ratingKey: '1', type: 'movie', title: 'A', durationMs: 1800000, thumb: null },
+      scheduledStartTime: 60000,
+      scheduledEndTime: 120000,
+      elapsedMs: 0,
+      remainingMs: 0,
+      scheduleIndex: 0,
+      loopNumber: 0,
+      streamDescriptor: null
+    };
+
+    const gridStartTime = 0;
+    const cell = positionCell(program, gridStartTime);
+    expect(cell.left).toBeGreaterThanOrEqual(0);
+    expect(cell.width).toBeGreaterThan(0);
+    expect(cell.program.item.ratingKey).toBe('1');
+  });
+});
+```
+
+### P6: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="epg"
+```
+
 ````
 
 ---
 
 > [!NOTE]
-> **Deprecated Prompts Removed**: Prompts 7-11 (the original versions) were deprecated and superseded by V2 versions below. They have been removed from this document to reduce confusion. See `spec-pack/decisions/0005-spec-remediation.md` for the rationale behind the V2 rewrites.
+> **Legacy Prompts Removed**: Prompts 7-11 (the original versions) were superseded by V2 versions below and removed from this document to reduce confusion. The V2 rewrites address self-sufficiency and test assertion requirements.
 
 ---
 
@@ -1192,12 +1626,14 @@ You are implementing the Plex Server Discovery module for Retune, a webOS TV app
 Discover and manage Plex Media Servers accessible to the authenticated user, testing connections to find the fastest route.
 
 ### P8-V2: Files to Create
-- src/modules/plex/discovery/index.ts
-- src/modules/plex/discovery/PlexServerDiscovery.ts
-- src/modules/plex/discovery/interfaces.ts
-- src/modules/plex/discovery/types.ts
-- src/modules/plex/discovery/constants.ts
-- src/modules/plex/discovery/__tests__/PlexServerDiscovery.test.ts
+Base Directory: src/modules
+
+- plex/discovery/index.ts
+- plex/discovery/PlexServerDiscovery.ts
+- plex/discovery/interfaces.ts
+- plex/discovery/types.ts
+- plex/discovery/constants.ts
+- plex/discovery/__tests__/PlexServerDiscovery.test.ts
 
 ### P8-V2: Type Definitions
 
@@ -1263,35 +1699,116 @@ interface IPlexServerDiscovery {
 ```typescript
 describe('PlexServerDiscovery', () => {
   describe('discoverServers', () => {
-    it('should fetch servers from plex.tv API');
-    it('should parse server connections correctly');
-    it('should handle empty server list');
-    it('should handle network errors gracefully');
+    it('should fetch servers from plex.tv API', async () => {
+      const mockServers = [{ id: 'srv1', name: 'Test Server', connections: [] }];
+      mockFetch({ json: () => Promise.resolve(mockServers) });
+      const result = await discovery.discoverServers();
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/resources'));
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('srv1');
+    });
+    it('should parse server connections correctly', async () => {
+      const mockServers = [{ id: 'srv1', connections: [{ uri: 'http://test:32400', local: true }] }];
+      mockFetch({ json: () => Promise.resolve(mockServers) });
+      const result = await discovery.discoverServers();
+      expect(result[0].connections[0].uri).toBe('http://test:32400');
+      expect(result[0].connections[0].local).toBe(true);
+    });
+    it('should handle empty server list', async () => {
+      mockFetch({ json: () => Promise.resolve([]) });
+      const result = await discovery.discoverServers();
+      expect(result).toEqual([]);
+    });
+    it('should handle network errors gracefully', async () => {
+      mockFetch({ ok: false, status: 500 });
+      await expect(discovery.discoverServers()).rejects.toThrow();
+    });
   });
   
   describe('testConnection', () => {
-    it('should return latency for working connection');
-    it('should return null for failed connection');
-    it('should timeout after 5 seconds');
+    it('should return latency for working connection', async () => {
+      mockFetch({ json: () => Promise.resolve({ machineIdentifier: 'test' }) });
+      const lat = await discovery.testConnection(mockServer, mockConnection);
+      expect(typeof lat).toBe('number');
+      expect(lat).toBeGreaterThanOrEqual(0);
+    });
+    it('should return null for failed connection', async () => {
+      mockFetch({ ok: false, status: 502 });
+      const lat = await discovery.testConnection(mockServer, mockConnection);
+      expect(lat).toBeNull();
+    });
+    it('should timeout after 5 seconds', async () => {
+      jest.useFakeTimers();
+      mockFetch(new Promise(() => {})); // never resolves
+      const promise = discovery.testConnection(mockServer, mockConnection);
+      jest.advanceTimersByTime(5001);
+      const lat = await promise;
+      expect(lat).toBeNull();
+    });
   });
   
   describe('findFastestConnection', () => {
-    it('should prefer local over remote connections');
-    it('should prefer remote over relay connections');
-    it('should fall back to relay when others fail');
-    it('should return null when all connections fail');
+    it('should prefer local over remote connections', async () => {
+      mockServer.connections = [{ local: false, uri: 'remote' }, { local: true, uri: 'local' }];
+      mockFetch({ json: () => Promise.resolve({}) });
+      const conn = await discovery.findFastestConnection(mockServer);
+      expect(conn.uri).toBe('local');
+    });
+    it('should prefer remote over relay connections', async () => {
+      mockServer.connections = [{ relay: true, uri: 'relay' }, { local: false, relay: false, uri: 'remote' }];
+      mockFetch({ json: () => Promise.resolve({}) });
+      const conn = await discovery.findFastestConnection(mockServer);
+      expect(conn.uri).toBe('remote');
+    });
+    it('should fall back to relay when others fail', async () => {
+      mockServer.connections = [{ local: true, uri: 'local' }, { relay: true, uri: 'relay' }];
+      mockFetch.mockImplementation((url) => url.includes('local') ? Promise.reject() : Promise.resolve({ json: () => ({}) }));
+      const conn = await discovery.findFastestConnection(mockServer);
+      expect(conn.uri).toBe('relay');
+    });
+    it('should return null when all connections fail', async () => {
+      mockServer.connections = [{ uri: 'a' }, { uri: 'b' }];
+      mockFetch.mockRejectedValue(new Error('fail'));
+      const conn = await discovery.findFastestConnection(mockServer);
+      expect(conn).toBeNull();
+    });
   });
   
   describe('selectServer', () => {
-    it('should persist selection to localStorage');
-    it('should emit serverChange event');
-    it('should emit connectionChange event');
-    it('should return false for unknown server ID');
+    it('should persist selection to localStorage', async () => {
+      await discovery.selectServer('srv1');
+      expect(localStorage.setItem).toHaveBeenCalledWith('retune_selected_server', 'srv1');
+    });
+    it('should emit serverChange event', async () => {
+      const handler = jest.fn();
+      discovery.on('serverChange', handler);
+      await discovery.selectServer('srv1');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 'srv1' }));
+    });
+    it('should emit connectionChange event', async () => {
+      const handler = jest.fn();
+      discovery.on('connectionChange', handler);
+      await discovery.selectServer('srv1');
+      expect(handler).toHaveBeenCalledWith(expect.any(String));
+    });
+    it('should return false for unknown server ID', async () => {
+      const result = await discovery.selectServer('unknown');
+      expect(result).toBe(false);
+    });
   });
   
   describe('initialization', () => {
-    it('should restore selected server from localStorage');
-    it('should re-test connection on restore');
+    it('should restore selected server from localStorage', async () => {
+      localStorage.getItem.mockReturnValue('srv1');
+      await discovery.initialize();
+      expect(discovery.getSelectedServer().id).toBe('srv1');
+    });
+    it('should re-test connection on restore', async () => {
+      localStorage.getItem.mockReturnValue('srv1');
+      const testSpy = jest.spyOn(discovery, 'testConnection');
+      await discovery.initialize();
+      expect(testSpy).toHaveBeenCalled();
+    });
   });
 });
 ```
@@ -1303,6 +1820,13 @@ describe('PlexServerDiscovery', () => {
 
 ### P8-V2: Deliverable
 Complete implementation with full test coverage and JSDoc comments.
+
+### P8-V2: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="plex/discovery"
+```
 
 ````
 
@@ -1317,11 +1841,13 @@ You are implementing the Plex Library module for Retune, a webOS TV application.
 Browse media libraries on a Plex server, fetch content metadata, and provide search functionality.
 
 ### P9-V2: Files to Create
-- src/modules/plex/library/index.ts
-- src/modules/plex/library/PlexLibrary.ts
-- src/modules/plex/library/interfaces.ts
-- src/modules/plex/library/types.ts
-- src/modules/plex/library/__tests__/PlexLibrary.test.ts
+Base Directory: src/modules
+
+- plex/library/index.ts
+- plex/library/PlexLibrary.ts
+- plex/library/interfaces.ts
+- plex/library/types.ts
+- plex/library/__tests__/PlexLibrary.test.ts
 
 ### P9-V2: Type Definitions
 
@@ -1425,33 +1951,65 @@ interface SearchOptions {
 ```typescript
 describe('PlexLibrary', () => {
   describe('getLibraries', () => {
-    it('should fetch libraries from server');
-    it('should filter non-video libraries');
-    it('should cache results');
+    it('should fetch libraries from server', async () => {
+      mockFetch({ MediaContainer: { Directory: [{ key: '1', title: 'Movies', type: 'movie' }] } });
+      const result = await library.getLibraries();
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/library/sections'));
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Movies');
+    });
+    it('should filter non-video libraries', async () => {
+      mockFetch({ MediaContainer: { Directory: [
+        { key: '1', title: 'Movies', type: 'movie' },
+        { key: '2', title: 'Music', type: 'artist' },
+        { key: '3', title: 'Photos', type: 'photo' }
+      ] } });
+      const result = await library.getLibraries();
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('movie');
+    });
+    it('should cache results', async () => {
+      mockFetch({ MediaContainer: { Directory: [] } });
+      await library.getLibraries();
+      await library.getLibraries();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
   });
   
   describe('getLibraryItems', () => {
-    it('should fetch all items with pagination');
-    it('should apply sort options');
-    it('should apply filter options');
+    it('should fetch all items with pagination', async () => {
+      mockFetch({ MediaContainer: { Metadata: Array(50).fill(mockItem), totalSize: 50 } });
+      const result = await library.getLibraryItems('1');
+      expect(result).toHaveLength(50);
+    });
+    it('should apply sort options', async () => {
+      mockFetch({ MediaContainer: { Metadata: [] } });
+      await library.getLibraryItems('1', { sort: 'addedAt:desc' });
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('sort=addedAt%3Adesc'));
+    });
+    it('should apply filter options', async () => {
+      mockFetch({ MediaContainer: { Metadata: [] } });
+      await library.getLibraryItems('1', { filter: { year: 2023 } });
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('year=2023'));
+    });
     // Pagination edge cases (MINOR-002)
-    it('should handle empty library (0 items)', () => {
+    it('should handle empty library (0 items)', async () => {
       mockFetch({ MediaContainer: { Metadata: [] } });
       const result = await library.getLibraryItems('1');
       expect(result).toEqual([]);
     });
-    it('should handle single item library', () => {
+    it('should handle single item library', async () => {
       mockFetch({ MediaContainer: { Metadata: [mockItem] } });
       const result = await library.getLibraryItems('1');
       expect(result.length).toBe(1);
     });
-    it('should handle last page with fewer items', () => {
+    it('should handle last page with fewer items', async () => {
       // When limit=50 but only 23 items remain
       mockFetch({ MediaContainer: { Metadata: Array(23).fill(mockItem), totalSize: 73 } });
       const result = await library.getLibraryItems('1', { offset: 50, limit: 50 });
       expect(result.length).toBe(23);
     });
-    it('should handle exact page boundary', () => {
+    it('should handle exact page boundary', async () => {
       // When totalSize is exactly divisible by limit
       mockFetch({ MediaContainer: { Metadata: Array(50).fill(mockItem), totalSize: 100 } });
       const result = await library.getLibraryItems('1', { offset: 50, limit: 50 });
@@ -1460,27 +2018,76 @@ describe('PlexLibrary', () => {
   });
   
   describe('getImageUrl', () => {
-    it('should include X-Plex-Token');
-    it('should apply width/height transforms');
+    it('should include X-Plex-Token', () => {
+      const url = library.getImageUrl('/library/metadata/123/thumb');
+      expect(url).toContain('X-Plex-Token=');
+    });
+    it('should apply width/height transforms', () => {
+      const url = library.getImageUrl('/library/metadata/123/thumb', 300, 200);
+      expect(url).toContain('width=300');
+      expect(url).toContain('height=200');
+    });
   });
   
   describe('search', () => {
-    it('should search across libraries');
-    it('should filter by type');
-    it('should debounce rapid calls');
-    it('should emit searchComplete event');
+    it('should search across libraries', async () => {
+      mockFetch({ MediaContainer: { Metadata: [mockItem] } });
+      const result = await library.search('Batman');
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/hubs/search'));
+      expect(result.length).toBeGreaterThanOrEqual(0);
+    });
+    it('should filter by type', async () => {
+      mockFetch({ MediaContainer: { Metadata: [] } });
+      await library.search('Star Wars', { types: ['movie'] });
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('type=1'));
+    });
+    it('should debounce rapid calls', async () => {
+      jest.useFakeTimers();
+      library.search('a');
+      library.search('ab');
+      library.search('abc');
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('query=abc'));
+    });
+    it('should emit searchComplete event', async () => {
+      const handler = jest.fn();
+      library.on('searchComplete', handler);
+      mockFetch({ MediaContainer: { Metadata: [mockItem] } });
+      await library.search('test');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ query: 'test' }));
+    });
   });
   
   describe('error handling', () => {
-    it('should handle 401 gracefully');
-    it('should handle 404 gracefully');
-    it('should handle network errors');
+    it('should handle 401 gracefully', async () => {
+      mockFetch({ ok: false, status: 401 });
+      const result = await library.getLibraries();
+      expect(result).toEqual([]);
+    });
+    it('should handle 404 gracefully', async () => {
+      mockFetch({ ok: false, status: 404 });
+      const item = await library.getItem('nonexistent');
+      expect(item).toBeNull();
+    });
+    it('should handle network errors', async () => {
+      mockFetch.mockRejectedValue(new Error('Network failed'));
+      await expect(library.getLibraries()).rejects.toThrow();
+    });
   });
 });
 ```
 
 ### P9-V2: Deliverable
 Complete implementation with event emitters, error handling, and tests.
+
+### P9-V2: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="plex/library"
+```
 
 ````
 
@@ -1495,11 +2102,13 @@ You are implementing the Plex Stream Resolver module for Retune, a webOS TV appl
 Resolve playable stream URLs from Plex media items, handle transcode decisions, and manage playback sessions with progress reporting.
 
 ### P10-V2: Files to Create
-- src/modules/plex/stream/index.ts
-- src/modules/plex/stream/PlexStreamResolver.ts
-- src/modules/plex/stream/SessionManager.ts
-- src/modules/plex/stream/interfaces.ts
-- src/modules/plex/stream/__tests__/PlexStreamResolver.test.ts
+Base Directory: src/modules
+
+- plex/stream/index.ts
+- plex/stream/PlexStreamResolver.ts
+- plex/stream/SessionManager.ts
+- plex/stream/interfaces.ts
+- plex/stream/__tests__/PlexStreamResolver.test.ts
 
 ### P10-V2: Type Definitions (use exactly)
 
@@ -1702,7 +2311,7 @@ async reportProgress(
   });
   
   await this.fetch(`${this.serverUri}/:/timeline?${params}`, {
-    method: 'POST',
+    method: "POST",
     headers: this.auth.getAuthHeaders(),
   });
   
@@ -1768,7 +2377,7 @@ async endSession(
 ): Promise<void> {
   // Report final position
   await this.fetch(`${this.serverUri}/:/timeline`, {
-    method: 'POST',
+    method: "POST",
     body: new URLSearchParams({
       ratingKey: itemKey,
       key: `/library/metadata/${itemKey}`,
@@ -1804,7 +2413,7 @@ private determineSubtitleDelivery(
     return 'burn';
   }
   
-  // If transcoding, server may embed or burn
+  // If transcoding, server can embed or burn
   if (decision.transcodeDecision === 'transcode') {
     return decision.subtitleDecision === 'burn' ? 'burn' : 'embed';
   }
@@ -1814,7 +2423,7 @@ private determineSubtitleDelivery(
     return 'sidecar';
   }
   
-  // ASS/SSA may need burn for styling
+  // ASS/SSA subtitles require burn-in to preserve styling
   if (track.format === 'ass') {
     return 'burn';
   }
@@ -1900,7 +2509,7 @@ describe('PlexStreamResolver', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/:/timeline'),
         expect.objectContaining({
-          method: 'POST',
+          method: "POST",
           body: expect.stringContaining('time=60000'),
         })
       );
@@ -1986,6 +2595,13 @@ Complete implementation with:
 - JSDoc comments
 - Unit tests
 
+### P10-V2: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="plex/stream"
+```
+
 ````
 
 ---
@@ -1999,12 +2615,14 @@ You are implementing the Channel Manager module for Retune, a webOS TV applicati
 Manage virtual TV channels, including CRUD operations, content resolution, and channel switching.
 
 ### P11-V2: Files to Create
-- src/modules/scheduler/channel-manager/index.ts
-- src/modules/scheduler/channel-manager/ChannelManager.ts
-- src/modules/scheduler/channel-manager/ContentResolver.ts
-- src/modules/scheduler/channel-manager/interfaces.ts
-- src/modules/scheduler/channel-manager/types.ts
-- src/modules/scheduler/channel-manager/__tests__/ChannelManager.test.ts
+Base Directory: src/modules
+
+- scheduler/channel-manager/index.ts
+- scheduler/channel-manager/ChannelManager.ts
+- scheduler/channel-manager/ContentResolver.ts
+- scheduler/channel-manager/interfaces.ts
+- scheduler/channel-manager/types.ts
+- scheduler/channel-manager/__tests__/ChannelManager.test.ts
 
 ### P11-V2: Type Definitions
 
@@ -2136,39 +2754,120 @@ async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> 
 ```typescript
 describe('ChannelManager', () => {
   describe('CRUD operations', () => {
-    it('should create channel with generated ID and number');
-    it('should update channel and emit event');
-    it('should delete channel and emit event');
-    it('should find channel by number');
+    it('should create channel with generated ID and number', async () => {
+      const channel = await manager.createChannel({ name: 'Test Channel' });
+      expect(channel.id).toMatch(/^[a-f0-9-]{36}$/);
+      expect(channel.number).toBeGreaterThanOrEqual(1);
+      expect(channel.name).toBe('Test Channel');
+    });
+    it('should update channel and emit event', async () => {
+      const handler = jest.fn();
+      manager.on('channelUpdated', handler);
+      const updated = await manager.updateChannel('ch1', { name: 'Updated' });
+      expect(updated.name).toBe('Updated');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ name: 'Updated' }));
+    });
+    it('should delete channel and emit event', async () => {
+      const handler = jest.fn();
+      manager.on('channelDeleted', handler);
+      await manager.deleteChannel('ch1');
+      expect(manager.getChannel('ch1')).toBeNull();
+      expect(handler).toHaveBeenCalledWith('ch1');
+    });
+    it('should find channel by number', () => {
+      const ch = manager.getChannelByNumber(5);
+      expect(ch).not.toBeNull();
+      expect(ch.number).toBe(5);
+    });
   });
   
   describe('content resolution', () => {
-    it('should resolve library content source');
-    it('should resolve collection content source');
-    it('should resolve show content source');
-    it('should resolve manual content source');
-    it('should cache resolved content for 30 minutes');
-    it('should handle library deleted gracefully');
+    it('should resolve library content source', async () => {
+      mockLibrary.getLibraryItems.mockResolvedValue([mockItem1, mockItem2]);
+      const result = await manager.resolveChannelContent('ch1');
+      expect(result.items).toHaveLength(2);
+      expect(result.channelId).toBe('ch1');
+    });
+    it('should resolve collection content source', async () => {
+      mockLibrary.getCollectionItems.mockResolvedValue([mockItem1]);
+      const result = await manager.resolveChannelContent('ch-collection');
+      expect(result.items).toHaveLength(1);
+    });
+    it('should resolve show content source', async () => {
+      mockLibrary.getShowEpisodes.mockResolvedValue([mockEp1, mockEp2, mockEp3]);
+      const result = await manager.resolveChannelContent('ch-show');
+      expect(result.items).toHaveLength(3);
+    });
+    it('should resolve manual content source', async () => {
+      mockLibrary.getItem.mockImplementation(async (key) => ({ ratingKey: key }));
+      const result = await manager.resolveChannelContent('ch-manual');
+      expect(result.items.length).toBeGreaterThan(0);
+    });
+    it('should cache resolved content for 30 minutes', async () => {
+      await manager.resolveChannelContent('ch1');
+      await manager.resolveChannelContent('ch1');
+      expect(mockLibrary.getLibraryItems).toHaveBeenCalledTimes(1);
+    });
+    it('should handle library deleted gracefully', async () => {
+      mockLibrary.getLibraryItems.mockRejectedValue(new Error('404'));
+      const result = await manager.resolveChannelContent('ch1');
+      expect(result.items).toEqual([]);
+    });
   });
   
   describe('channel switching', () => {
-    it('should switch to channel by ID');
-    it('should switch to channel by number');
-    it('should emit channelSwitch event');
-    it('should persist current channel');
+    it('should switch to channel by ID', () => {
+      manager.setCurrentChannel('ch2');
+      expect(manager.getCurrentChannel().id).toBe('ch2');
+    });
+    it('should switch to channel by number', () => {
+      manager.setCurrentChannel(manager.getChannelByNumber(3).id);
+      expect(manager.getCurrentChannel().number).toBe(3);
+    });
+    it('should emit channelSwitch event', () => {
+      const handler = jest.fn();
+      manager.on('channelSwitch', handler);
+      manager.setCurrentChannel('ch1');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ channel: expect.any(Object) }));
+    });
+    it('should persist current channel', () => {
+      manager.setCurrentChannel('ch1');
+      expect(localStorage.setItem).toHaveBeenCalledWith('retune_current_channel', 'ch1');
+    });
   });
   
   describe('persistence', () => {
-    it('should save channels to localStorage');
-    it('should restore channels on init');
-    it('should export channels as JSON');
-    it('should import channels from JSON');
+    it('should save channels to localStorage', async () => {
+      await manager.saveChannels();
+      expect(localStorage.setItem).toHaveBeenCalledWith('retune_channels', expect.any(String));
+    });
+    it('should restore channels on init', async () => {
+      localStorage.getItem.mockReturnValue(JSON.stringify([mockChannel1]));
+      await manager.loadChannels();
+      expect(manager.getAllChannels()).toHaveLength(1);
+    });
+    it('should export channels as JSON', () => {
+      const json = manager.exportChannels();
+      expect(JSON.parse(json)).toBeInstanceOf(Array);
+    });
+    it('should import channels from JSON', async () => {
+      const result = await manager.importChannels('[{"name":"Imported"}]');
+      expect(result.imported).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
   });
 });
 ```
 
 ### P11-V2: Deliverable
 Complete implementation with content resolution for all source types.
+
+### P11-V2: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="channel-manager"
+```
 
 ````
 
@@ -2182,43 +2881,138 @@ You are implementing the Application Lifecycle module for Retune, a webOS TV app
 ### P12: Task
 Implement lifecycle hooks, persistence, network/memory monitoring, and error recovery glue so the app can run for long sessions and survive background/foreground transitions.
 
-### P12: SSOT (Do not drift)
-- Interfaces + types: `spec-pack/artifact-2-shared-types.ts` (`IAppLifecycle`, `IErrorRecovery`, `AppPhase`, `PersistentState`, `LifecycleEventMap`)
-- Module spec: `spec-pack/modules/app-lifecycle.md`
-- Platform constraints: `spec-pack/artifact-12-platform-constraints.md`
-- Config/constants: `spec-pack/artifact-5-config.ts`
-
 ### P12: Files to Create
-- src/modules/lifecycle/index.ts
-- src/modules/lifecycle/AppLifecycle.ts
-- src/modules/lifecycle/ErrorRecovery.ts
-- src/modules/lifecycle/StateManager.ts
-- src/modules/lifecycle/interfaces.ts
-- src/modules/lifecycle/types.ts
-- src/modules/lifecycle/__tests__/AppLifecycle.test.ts
-- src/modules/lifecycle/__tests__/ErrorRecovery.test.ts
-- src/modules/lifecycle/__tests__/StateManager.test.ts
+Base Directory: src/modules
 
-### P12: Interface to Implement (canonical)
-Implement `IAppLifecycle` and `IErrorRecovery` exactly as defined in `spec-pack/artifact-2-shared-types.ts`.
+- lifecycle/index.ts
+- lifecycle/AppLifecycle.ts
+- lifecycle/ErrorRecovery.ts
+- lifecycle/StateManager.ts
+- lifecycle/interfaces.ts
+- lifecycle/types.ts
+- lifecycle/__tests__/AppLifecycle.test.ts
+- lifecycle/__tests__/ErrorRecovery.test.ts
+- lifecycle/__tests__/StateManager.test.ts
+
+### P12: Type Definitions (INLINED for self-sufficiency)
+
+```typescript
+// App phases
+export type AppPhase = 'initializing' | 'authenticating' | 'loading_data' | 'ready' | 'backgrounded' | 'resuming' | 'error' | 'terminating';
+
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'unreachable';
+
+// Persistent state saved to localStorage
+export interface PersistentState {
+  version: number;
+  plexAuth: PlexAuthData | null;
+  channelConfigs: ChannelConfig[];
+  currentChannelIndex: number;
+  userPreferences: UserPreferences;
+  lastUpdated: number;
+}
+
+// Lifecycle event map
+export interface LifecycleEventMap {
+  phaseChange: { from: AppPhase; to: AppPhase };
+  visibilityChange: { isVisible: boolean };
+  networkChange: { isAvailable: boolean };
+  plexConnectionChange: { status: ConnectionStatus };
+  error: LifecycleAppError;
+  stateRestored: PersistentState;
+  beforeTerminate: void;
+}
+
+// IAppLifecycle interface
+export interface IAppLifecycle {
+  initialize(): Promise<void>;
+  shutdown(): Promise<void>;
+  saveState(): Promise<void>;
+  restoreState(): Promise<PersistentState | null>;
+  clearState(): Promise<void>;
+  onPause(callback: () => void | Promise<void>): void;
+  onResume(callback: () => void | Promise<void>): void;
+  onTerminate(callback: () => void | Promise<void>): void;
+  isNetworkAvailable(): boolean;
+  checkNetworkStatus(): Promise<boolean>;
+  getMemoryUsage(): { used: number; limit: number; percentage: number };
+  performMemoryCleanup(): void;
+  getPhase(): AppPhase;
+  getState(): AppLifecycleState;
+  setPhase(phase: AppPhase): void;
+  reportError(error: AppError): void;
+  getLastError(): AppError | null;
+  on<K extends keyof LifecycleEventMap>(event: K, handler: (payload: LifecycleEventMap[K]) => void): void;
+}
+
+// IErrorRecovery interface
+export interface IErrorRecovery {
+  handleError(error: AppError): ErrorAction[];
+  executeRecovery(action: ErrorAction): Promise<boolean>;
+  createError(code: AppErrorCode, message: string, context?: Record<string, unknown>): AppError;
+}
+```
 
 ### P12: Constraints
 - Target Chromium 68: no optional chaining (`?.`) or nullish coalescing (`??`) in shipped code.
 - Persistence MUST handle localStorage quota errors gracefully.
 - All lifecycle event listeners MUST be removed on shutdown.
 
-### P12: Minimum Test Cases
+### P12: Test Specifications
 ```typescript
 describe('AppLifecycle', () => {
-  it('registers and tears down visibility listeners');
-  it('saves and restores PersistentState via StateManager');
-  it('invokes onPause/onResume callbacks on visibility changes');
+  it('registers and tears down visibility listeners', () => {
+    const addSpy = jest.spyOn(document, 'addEventListener');
+    const removeSpy = jest.spyOn(document, 'removeEventListener');
+    lifecycle.initialize();
+    expect(addSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    lifecycle.shutdown();
+    expect(removeSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+  });
+  it('saves and restores PersistentState via StateManager', async () => {
+    await lifecycle.saveState();
+    expect(localStorage.setItem).toHaveBeenCalledWith('retune_state', expect.any(String));
+    localStorage.getItem.mockReturnValue(JSON.stringify({ version: 1 }));
+    const state = await lifecycle.restoreState();
+    expect(state).not.toBeNull();
+    expect(state.version).toBe(1);
+  });
+  it('invokes onPause/onResume callbacks on visibility changes', async () => {
+    const pauseCb = jest.fn();
+    const resumeCb = jest.fn();
+    lifecycle.onPause(pauseCb);
+    lifecycle.onResume(resumeCb);
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(pauseCb).toHaveBeenCalled();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(resumeCb).toHaveBeenCalled();
+  });
 });
 
 describe('ErrorRecovery', () => {
-  it('maps AppErrorCode to recovery actions');
-  it('executes recovery actions safely and returns boolean');
+  it('maps AppErrorCode to recovery actions', () => {
+    const actions = recovery.handleError({ code: AppErrorCode.NETWORK_TIMEOUT, message: 'test', recoverable: true });
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions[0]).toHaveProperty('label');
+    expect(actions[0]).toHaveProperty('action');
+  });
+  it('executes recovery actions safely and returns boolean', async () => {
+    const action = { label: 'Retry', action: jest.fn().mockResolvedValue(undefined), isPrimary: true };
+    const result = await recovery.executeRecovery(action);
+    expect(action.action).toHaveBeenCalled();
+    expect(typeof result).toBe('boolean');
+  });
 });
+```
+
+### P12: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="lifecycle"
 ```
 
 ````
@@ -2233,46 +3027,144 @@ You are implementing the Application Orchestrator module for Retune, a webOS TV 
 ### P13: Task
 Coordinate module initialization and inter-module wiring per the integration contracts so the app can start, restore state, and run the core playback loop reliably.
 
-### P13: SSOT (Do not drift)
-- Interfaces + types: `spec-pack/artifact-2-shared-types.ts` (`IAppOrchestrator`, `OrchestratorConfig`, `ModuleStatus`)
-- Module spec: `spec-pack/modules/app-orchestrator.md`
-- Dependency graph: `spec-pack/artifact-1-dependency-graph.json`
-- Integration contracts: `spec-pack/artifact-4-integration-contracts.md`
-- Verification checklist: `spec-pack/artifact-8-verification-checklist.md`
-
 ### P13: Files to Create
 - src/Orchestrator.ts
 - src/index.ts
 - src/App.ts
 - src/__tests__/Orchestrator.test.ts
 
-### P13: Interface to Implement (canonical)
-Implement `IAppOrchestrator` exactly as defined in `spec-pack/artifact-2-shared-types.ts`.
+### P13: Type Definitions (INLINED for self-sufficiency)
+
+```typescript
+// Module health status
+export interface ModuleStatus {
+  id: string;
+  name: string;
+  status: 'pending' | 'initializing' | 'ready' | 'error' | 'disabled';
+  loadTimeMs?: number;
+  error?: AppError;
+  memoryUsageMB?: number;
+}
+
+// Orchestrator configuration
+export interface OrchestratorConfig {
+  plexConfig: PlexAuthConfig;
+  playerConfig: VideoPlayerConfig;
+  navConfig: NavigationConfig;
+  epgConfig: EPGConfig;
+}
+
+// Recovery action for error UI
+export interface ErrorRecoveryAction {
+  label: string;
+  action: () => void;
+  isPrimary: boolean;
+  requiresNetwork: boolean;
+}
+
+// IAppOrchestrator interface - CANONICAL
+export interface IAppOrchestrator {
+  // Lifecycle
+  initialize(config: OrchestratorConfig): Promise<void>;
+  start(): Promise<void>;
+  shutdown(): Promise<void>;
+  
+  // Status
+  getModuleStatus(): Map<string, ModuleStatus>;
+  isReady(): boolean;
+  
+  // Actions
+  switchToChannel(channelId: string): Promise<void>;
+  switchToChannelByNumber(number: number): Promise<void>;
+  openEPG(): void;
+  closeEPG(): void;
+  toggleEPG(): void;
+  
+  // Error Handling
+  handleGlobalError(error: AppError, context: string): void;
+  registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
+  getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
+}
+```
 
 ### P13: Required Behaviors
-1) Initialize modules in dependency order (see `spec-pack/artifact-1-dependency-graph.json` phases).
-2) Wire events per `spec-pack/artifact-4-integration-contracts.md`.
-3) Perform state restore flow using lifecycle persistence before entering steady-state playback.
-4) Centralize global error handling (`handleGlobalError`) and expose recovery actions.
+1. **Initialize modules in dependency order**: Phase 0 (event-emitter), Phase 1 (plex-auth, navigation), Phase 2 (plex-server-discovery), etc.
+2. **Wire events per integration contracts**:
+   - scheduler.programStart → player.loadStream
+   - player.ended → scheduler.skipToNext
+   - player.error (recoverable) → orchestrator.handleGlobalError
+   - navigation.keyPress → route to active screen handler
+3. **State restore flow**: On start, check lifecycle.restoreState(), resume playback if available.
+4. **Centralize error handling**: handleGlobalError maps each AppErrorCode to recovery actions.
 
-### P13: Minimum Test Cases
+### P13: Constraints
+- Target Chromium 68: no `?.` or `??` operators
+- Use dependency injection for all module interfaces
+- All event subscriptions must be tracked and cleaned up on shutdown
+
+### P13: Test Specifications
 ```typescript
 describe('AppOrchestrator', () => {
-  it('initializes modules in correct phase order');
-  it('wires scheduler -> player and player -> scheduler events');
-  it('restores persisted state and resumes playback when available');
-  it('handles module init failures via handleGlobalError');
+  it('initializes modules in correct phase order', async () => {
+    const initOrder: string[] = [];
+    mockEventEmitter.initialize = jest.fn(() => { initOrder.push('event-emitter'); return Promise.resolve(); });
+    mockPlexAuth.initialize = jest.fn(() => { initOrder.push('plex-auth'); return Promise.resolve(); });
+    mockNavigation.initialize = jest.fn(() => { initOrder.push('navigation'); return Promise.resolve(); });
+    mockServerDiscovery.discoverServers = jest.fn(() => { initOrder.push('plex-server-discovery'); return Promise.resolve([]); });
+    
+    await orchestrator.initialize(mockConfig);
+    
+    expect(initOrder.indexOf('event-emitter')).toBeLessThan(initOrder.indexOf('plex-auth'));
+    expect(initOrder.indexOf('plex-auth')).toBeLessThan(initOrder.indexOf('plex-server-discovery'));
+  });
+  
+  it('wires scheduler -> player and player -> scheduler events', async () => {
+    await orchestrator.initialize(mockConfig);
+    
+    // Trigger programStart event
+    const program = { item: { ratingKey: '123' } };
+    mockScheduler.emit('programStart', program);
+    expect(mockStreamResolver.resolveStream).toHaveBeenCalled();
+    expect(mockPlayer.loadStream).toHaveBeenCalled();
+    
+    // Trigger player ended event
+    mockPlayer.emit("ended");
+    expect(mockScheduler.skipToNext).toHaveBeenCalled();
+  });
+  
+  it('restores persisted state and resumes playback when available', async () => {
+    mockLifecycle.restoreState.mockResolvedValue({
+      currentChannelIndex: 2,
+      channelConfigs: [mockChannel1, mockChannel2, mockChannel3]
+    });
+    
+    await orchestrator.initialize(mockConfig);
+    await orchestrator.start();
+    
+    expect(mockScheduler.loadChannel).toHaveBeenCalled();
+    expect(orchestrator.isReady()).toBe(true);
+  });
+  
+  it('handles module init failures via handleGlobalError', async () => {
+    const error = { code: AppErrorCode.MODULE_INIT_FAILED, message: 'Auth failed', recoverable: true };
+    mockPlexAuth.initialize.mockRejectedValue(error);
+    
+    const errorHandler = jest.fn();
+    orchestrator.registerErrorHandler('test', errorHandler);
+    
+    await orchestrator.initialize(mockConfig);
+    
+    expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ code: AppErrorCode.MODULE_INIT_FAILED }));
+  });
 });
 ```
 
-### P13: Implementation Notes
-- Treat `spec-pack/modules/app-orchestrator.md` as the SSOT for sequencing and wiring.
-- Ensure any sample code included in the implementation is Chromium 68 compatible (no `?.` / `??`).
-- Always implement the `IAppOrchestrator` signature from `spec-pack/artifact-2-shared-types.ts` (ignore any legacy snippets elsewhere).
-
-### P13: Mock Requirements
-- All module interfaces should be mockable
-- Use dependency injection for testability
+### P13: Verification Commands
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --testPathPattern="Orchestrator"
+```
 
 ### P13: Deliverable
 Complete Orchestrator with App.ts entry point, full event bindings, and integration tests.

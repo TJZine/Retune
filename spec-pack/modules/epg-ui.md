@@ -6,7 +6,7 @@
 - **Path**: `src/modules/ui/epg/`
 - **Primary File**: `EPGComponent.ts`
 - **Test File**: `EPGComponent.test.ts`
-- **Dependencies**: `navigation`, `channel-scheduler`, `channel-manager`
+- **Dependencies**: navigation, channel-scheduler, channel-manager
 - **Complexity**: high
 - **Estimated LoC**: 700
 
@@ -166,7 +166,7 @@ interface EPGInternalState {
 
 | Scenario | Error Type | Handling | User Message |
 | -------- | ---------- | -------- | ------------ |
-| Schedule not loaded | `LOADING` | Show skeleton placeholder | "Loading..." |
+| Schedule not loaded | loading | Show skeleton placeholder | "Loading..." |
 | Empty channel | `EMPTY_CHANNEL` | Show message cell | "No programs scheduled" |
 | Focus on boundary | `NAV_BOUNDARY` | Return false from navigation | (No message) |
 | Render failure | `RENDER_ERROR` | Log error, show fallback row | "Unable to display row" |

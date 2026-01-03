@@ -6,7 +6,7 @@
 - **Path**: `src/modules/plex/library/`
 - **Primary File**: `PlexLibrary.ts`
 - **Test File**: `PlexLibrary.test.ts`
-- **Dependencies**: `plex-auth`, `plex-server-discovery`
+- **Dependencies**: plex-auth, plex-server-discovery
 - **Complexity**: high
 - **Estimated LoC**: 500
 
@@ -34,6 +34,8 @@ Provides access to Plex media libraries, enabling enumeration of library section
 ```typescript
 /**
  * Plex Library Access Interface
+ * 
+ * MINOR-001 FIX: Method order normalized to match artifact-2-shared-types.ts
  */
 export interface IPlexLibrary {
   // Library Sections
@@ -50,14 +52,14 @@ export interface IPlexLibrary {
   getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]>;
   getShowEpisodes(showKey: string): Promise<PlexMediaItem[]>;
   
+  // Search (before Collections per shared-types)
+  search(query: string, options?: SearchOptions): Promise<PlexMediaItem[]>;
+  
   // Collections/Playlists
   getCollections(libraryId: string): Promise<PlexCollection[]>;
   getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
   getPlaylists(): Promise<PlexPlaylist[]>;
   getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]>;
-  
-  // Search
-  search(query: string, options?: SearchOptions): Promise<PlexMediaItem[]>;
   
   // Image URLs
   getImageUrl(imagePath: string, width?: number, height?: number): string;
@@ -162,8 +164,8 @@ private async fetchWithRetry<T>(
       }
       
       if (response.status === 401) {
-        this.emit('authExpired');
-        throw new PlexLibraryError('AUTH_EXPIRED', 'Authentication expired');
+        this.emit("authExpired");
+        throw new PlexLibraryError(AppErrorCode.AUTH_EXPIRED, 'Authentication expired');
       }
       
       if (response.status === 429) {
@@ -178,7 +180,7 @@ private async fetchWithRetry<T>(
       }
       
       if (!response.ok) {
-        throw new PlexLibraryError('SERVER_ERROR', `HTTP ${response.status}`);
+        throw new PlexLibraryError(AppErrorCode.SERVER_ERROR, `HTTP ${response.status}`);
       }
       
       return await response.json();
@@ -187,7 +189,7 @@ private async fetchWithRetry<T>(
       await this.delay(delays[attempt]);
     }
   }
-  throw new PlexLibraryError('MAX_RETRIES', 'Max retries exceeded');
+  throw new PlexLibraryError(AppErrorCode.SERVER_UNREACHABLE, 'Max retries exceeded');
 }
 ```
 

@@ -4,9 +4,7 @@
   "projectName": "Retune",
   "projectDescription": "webOS application that transforms Plex media libraries into simulated linear television channels",
   "targetPlatform": "webOS 4.0+ (Chromium 68)",
-  
   "_prioritySemantics": "Priority indicates implementation order. Lower numbers = implement first. Priority 1 modules have no dependencies. Same-priority modules can be implemented in parallel.",
-
   "modules": [
     {
       "id": "plex-auth",
@@ -33,13 +31,17 @@
       "name": "Plex Server Discovery",
       "path": "src/modules/plex/discovery",
       "primaryFile": "PlexServerDiscovery.ts",
-      "dependsOn": ["plex-auth"],
+      "dependsOn": [
+        "plex-auth"
+      ],
       "provides": [
         "IPlexServerDiscovery",
         "PlexServer",
         "PlexConnection"
       ],
-      "consumes": ["IPlexAuth"],
+      "consumes": [
+        "IPlexAuth"
+      ],
       "priority": 2,
       "estimatedComplexity": "medium",
       "estimatedLoC": 280,
@@ -51,7 +53,10 @@
       "name": "Plex Library Access",
       "path": "src/modules/plex/library",
       "primaryFile": "PlexLibrary.ts",
-      "dependsOn": ["plex-auth", "plex-server-discovery"],
+      "dependsOn": [
+        "plex-auth",
+        "plex-server-discovery"
+      ],
       "provides": [
         "IPlexLibrary",
         "PlexLibrary",
@@ -61,7 +66,10 @@
         "LibraryQueryOptions",
         "SearchOptions"
       ],
-      "consumes": ["IPlexAuth", "IPlexServerDiscovery"],
+      "consumes": [
+        "IPlexAuth",
+        "IPlexServerDiscovery"
+      ],
       "priority": 3,
       "estimatedComplexity": "high",
       "estimatedLoC": 500,
@@ -73,14 +81,20 @@
       "name": "Plex Stream Resolver",
       "path": "src/modules/plex/stream",
       "primaryFile": "PlexStreamResolver.ts",
-      "dependsOn": ["plex-auth", "plex-server-discovery"],
+      "dependsOn": [
+        "plex-auth",
+        "plex-server-discovery"
+      ],
       "provides": [
         "IPlexStreamResolver",
         "StreamRequest",
         "StreamDecision",
         "HlsOptions"
       ],
-      "consumes": ["IPlexAuth", "IPlexServerDiscovery"],
+      "consumes": [
+        "IPlexAuth",
+        "IPlexServerDiscovery"
+      ],
       "priority": 3,
       "estimatedComplexity": "medium",
       "estimatedLoC": 320,
@@ -92,7 +106,9 @@
       "name": "Channel Configuration Manager",
       "path": "src/modules/scheduler/channel-manager",
       "primaryFile": "ChannelManager.ts",
-      "dependsOn": ["plex-library"],
+      "dependsOn": [
+        "plex-library"
+      ],
       "provides": [
         "IChannelManager",
         "ChannelConfig",
@@ -103,7 +119,9 @@
         "ContentFilter",
         "SortOrder"
       ],
-      "consumes": ["IPlexLibrary"],
+      "consumes": [
+        "IPlexLibrary"
+      ],
       "priority": 4,
       "estimatedComplexity": "high",
       "estimatedLoC": 600,
@@ -115,7 +133,9 @@
       "name": "Channel Scheduler",
       "path": "src/modules/scheduler/scheduler",
       "primaryFile": "ChannelScheduler.ts",
-      "dependsOn": ["channel-manager"],
+      "dependsOn": [
+        "channel-manager"
+      ],
       "provides": [
         "IChannelScheduler",
         "IShuffleGenerator",
@@ -125,7 +145,10 @@
         "SchedulerState",
         "ScheduleIndex"
       ],
-      "consumes": ["IChannelManager", "ResolvedChannelContent"],
+      "consumes": [
+        "IChannelManager",
+        "ResolvedChannelContent"
+      ],
       "priority": 5,
       "estimatedComplexity": "high",
       "estimatedLoC": 550,
@@ -137,7 +160,9 @@
       "name": "Video Player Abstraction",
       "path": "src/modules/player",
       "primaryFile": "VideoPlayer.ts",
-      "dependsOn": ["plex-stream-resolver"],
+      "dependsOn": [
+        "plex-stream-resolver"
+      ],
       "provides": [
         "IVideoPlayer",
         "VideoPlayerConfig",
@@ -149,7 +174,10 @@
         "PlayerStatus",
         "PlaybackError"
       ],
-      "consumes": ["IPlexStreamResolver", "StreamDecision"],
+      "consumes": [
+        "IPlexStreamResolver",
+        "StreamDecision"
+      ],
       "priority": 4,
       "estimatedComplexity": "high",
       "estimatedLoC": 480,
@@ -185,7 +213,11 @@
       "name": "EPG Component",
       "path": "src/modules/ui/epg",
       "primaryFile": "EPGComponent.ts",
-      "dependsOn": ["navigation", "channel-scheduler", "channel-manager"],
+      "dependsOn": [
+        "navigation",
+        "channel-scheduler",
+        "channel-manager"
+      ],
       "provides": [
         "IEPGComponent",
         "IEPGInfoPanel",
@@ -195,7 +227,11 @@
         "EPGChannelRow",
         "EPGProgramCell"
       ],
-      "consumes": ["INavigationManager", "IChannelScheduler", "IChannelManager"],
+      "consumes": [
+        "INavigationManager",
+        "IChannelScheduler",
+        "IChannelManager"
+      ],
       "priority": 6,
       "estimatedComplexity": "high",
       "estimatedLoC": 700,
@@ -233,9 +269,12 @@
       "path": "src",
       "primaryFile": "Orchestrator.ts",
       "dependsOn": [
+        "event-emitter",
         "app-lifecycle",
         "navigation",
         "plex-auth",
+        "plex-server-discovery",
+        "plex-stream-resolver",
         "plex-library",
         "channel-manager",
         "channel-scheduler",
@@ -280,65 +319,92 @@
       "description": "Typed event emitter utility used by all modules for inter-module communication."
     }
   ],
-
   "implementationPhases": [
     {
       "phase": 1,
       "name": "Core Infrastructure",
-      "modules": ["event-emitter", "plex-auth", "app-lifecycle", "navigation"],
+      "modules": [
+        "event-emitter",
+        "plex-auth",
+        "app-lifecycle",
+        "navigation"
+      ],
       "milestone": "Basic app shell with authentication flow and remote control handling. User can sign in with Plex and app responds to remote input.",
       "estimatedDays": 3
     },
     {
       "phase": 2,
       "name": "Plex Integration",
-      "modules": ["plex-server-discovery", "plex-library", "plex-stream-resolver"],
+      "modules": [
+        "plex-server-discovery",
+        "plex-library",
+        "plex-stream-resolver"
+      ],
       "milestone": "Full Plex API integration complete. App can discover servers, browse libraries, and resolve playback URLs.",
       "estimatedDays": 4
     },
     {
       "phase": 3,
       "name": "Core Playback (MVP)",
-      "modules": ["video-player", "channel-manager", "channel-scheduler"],
+      "modules": [
+        "video-player",
+        "channel-manager",
+        "channel-scheduler"
+      ],
       "milestone": "MVP functional. User can create channels, and content plays according to deterministic schedule with channel switching.",
       "estimatedDays": 5
     },
     {
       "phase": 4,
       "name": "Full EPG Experience",
-      "modules": ["epg-ui"],
+      "modules": [
+        "epg-ui"
+      ],
       "milestone": "Complete EPG grid with virtualized rendering, D-pad navigation, and program selection working.",
       "estimatedDays": 4
     },
     {
       "phase": 5,
       "name": "Integration & Polish",
-      "modules": ["app-orchestrator"],
+      "modules": [
+        "app-orchestrator"
+      ],
       "milestone": "All modules integrated and communicating. Error recovery flows implemented. Ready for extended testing.",
       "estimatedDays": 3
     }
   ],
-
   "sharedDependencies": [
     {
       "name": "TypeScript",
-      "version": "5.x",
-      "purpose": "Language"
+      "version": "^5.4.0",
+      "purpose": "Language",
+      "minVersion": "5.4.0",
+      "rationale": "Requires ES decorators and const type parameters"
     },
     {
       "name": "esbuild",
-      "version": "0.19+",
-      "purpose": "Build/bundling"
+      "version": "^0.20.0",
+      "purpose": "Build/bundling",
+      "minVersion": "0.20.0",
+      "rationale": "Improved tree-shaking and TypeScript 5.x support"
     }
   ],
-
   "criticalPaths": [
     {
-      "path": ["plex-auth", "plex-server-discovery", "plex-library", "channel-manager", "channel-scheduler"],
+      "path": [
+        "plex-auth",
+        "plex-server-discovery",
+        "plex-library",
+        "channel-manager",
+        "channel-scheduler"
+      ],
       "description": "Authentication → Library → Scheduling pipeline. Blocking dependency chain for core playback."
     },
     {
-      "path": ["navigation", "epg-ui"],
+      "path": [
+        "navigation",
+        "epg-ui"
+      ],
       "description": "Focus management → EPG rendering. Required for complete UI experience."
     }
   ]

@@ -6,7 +6,7 @@
 - **Path**: `src/modules/navigation/`
 - **Primary File**: `NavigationManager.ts`
 - **Test File**: `NavigationManager.test.ts`
-- **Dependencies**: None (foundational module)
+- **Dependencies**: none
 - **Complexity**: high
 - **Estimated LoC**: 520
 

@@ -560,16 +560,16 @@ Scheduler        Orchestrator        VideoPlayer        PlexResolver
 
 ## Error Propagation Matrix
 
-| Source Module | Error Type | Handler Module | Recovery Action |
-|---------------|------------|----------------|-----------------|
-| PlexAuth | AUTH_EXPIRED | AppOrchestrator | → Show auth screen |
-| PlexServerDiscovery | SERVER_UNREACHABLE | ErrorRecovery | → Try other connections |
-| PlexLibrary | NETWORK_ERROR | ErrorRecovery | → Retry with backoff |
-| ChannelManager | content resolution fail | Scheduler | → Use cached content |
-| Scheduler | empty channel | VideoPlayer | → Show error overlay |
-| VideoPlayer | NETWORK_ERROR | VideoPlayer | → Retry 3x |
-| VideoPlayer | DECODE_ERROR | AppOrchestrator | → Skip to next |
-| VideoPlayer | FORMAT_UNSUPPORTED | PlexStreamResolver | → Request transcode |
+| Source Module | AppErrorCode | Handler Module | Recovery Action |
+|---------------|--------------|----------------|-----------------|
+| PlexAuth | AppErrorCode.AUTH_EXPIRED | AppOrchestrator | → Show auth screen |
+| PlexServerDiscovery | AppErrorCode.SERVER_UNREACHABLE | ErrorRecovery | → Try other connections |
+| PlexLibrary | AppErrorCode.NETWORK_TIMEOUT | ErrorRecovery | → Retry with backoff |
+| ChannelManager | AppErrorCode.CONTENT_UNAVAILABLE | Scheduler | → Use cached content |
+| Scheduler | AppErrorCode.SCHEDULER_EMPTY_CHANNEL | VideoPlayer | → Show error overlay |
+| VideoPlayer | AppErrorCode.NETWORK_TIMEOUT | VideoPlayer | → Retry 3x |
+| VideoPlayer | AppErrorCode.PLAYBACK_DECODE_ERROR | AppOrchestrator | → Skip to next |
+| VideoPlayer | AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED | PlexStreamResolver | → Request transcode |
 | Navigation | (none) | - | - |
 | EPG | (delegates) | Scheduler | - |
 

@@ -140,14 +140,8 @@ if [[ -n "$MODULE_ID" ]]; then
         log_pass "Found $HANDOFF_FILE"
         ((GATES_PASSED++))
     else
-        # Check if context is in artifact-9
-        if grep -q "## Module: ${MODULE_ID}" spec-pack/artifact-9-context-handoff.md 2>/dev/null; then
-            log_pass "Context found in artifact-9-context-handoff.md"
-            ((GATES_PASSED++))
-        else
-            log_fail "No context handoff for '$MODULE_ID'"
-            ((GATES_FAILED++))
-        fi
+        log_fail "No context handoff for '$MODULE_ID'"
+        ((GATES_FAILED++))
     fi
 else
     log_warn "Skipping context check (no module specified)"

@@ -6,7 +6,7 @@
 - **Path**: `src/utils/EventEmitter.ts`
 - **Primary File**: `EventEmitter.ts`
 - **Test File**: `EventEmitter.test.ts`
-- **Dependencies**: None (foundational utility)
+- **Dependencies**: none
 - **Complexity**: low
 - **Estimated LoC**: ~80
 

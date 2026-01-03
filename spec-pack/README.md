@@ -1,7 +1,7 @@
 # Retune Implementation Spec Pack
 
-**Version:** 1.0.0  
-**Generated:** 2026-01-01  
+**Version:** 1.0.2  
+**Generated:** 2026-01-03  
 **Platform:** LG webOS 4.0+ (Chromium 68)
 
 ---
@@ -43,7 +43,7 @@ Canonical artifact map: `INDEX.md`
 | 4 | Integration Contracts | `artifact-4-integration-contracts.md` | Inter-module communication patterns |
 | 5 | Configuration | `artifact-5-config.ts` | Constants, budgets, feature flags |
 | 6 | File Manifest | `artifact-6-file-manifest.json` | Complete list of files to create |
-| 7 | Implementation Prompts | `artifact-7-implementation-prompts.md` | Self-contained AI agent prompts (canonical + deprecated history) |
+| 7 | Implementation Prompts | `artifact-7-implementation-prompts.md` | Self-contained AI agent prompts (legacy prompts removed) |
 | 8 | Verification Checklist | `artifact-8-verification-checklist.md` | Validation checklist |
 | 9 | Context Handoff Protocol | `context-handoff/*.md` | Per-module SSOT pointers for coding agents |
 | 10 | Implementation State Machine | `artifact-10-implementation-state.json` | Cross-session progress tracking |

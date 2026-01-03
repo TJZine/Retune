@@ -6,7 +6,7 @@
 - **Path**: `src/modules/scheduler/scheduler/`
 - **Primary File**: `ChannelScheduler.ts`
 - **Test File**: `ChannelScheduler.test.ts`
-- **Dependencies**: `channel-manager`
+- **Dependencies**: channel-manager
 - **Complexity**: high
 - **Estimated LoC**: 550
 

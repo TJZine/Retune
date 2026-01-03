@@ -14,7 +14,7 @@ The spec pack was reviewed for 100% AI-implementation readiness per `opus_spec_p
 
 1. Artifact numbering collision (artifact-11-error-messages.ts vs Agent Memory Template)
 2. Types-only violation in shared-types.ts
-3. Dual error taxonomy (AppErrorCode vs AppErrorType)
+3. Dual error taxonomy (multiple competing error code sets)
 4. Missing module interfaces in shared types
 5. Missing event-emitter module spec
 6. Monolithic context handoff document
@@ -34,10 +34,7 @@ The spec pack was reviewed for 100% AI-implementation readiness per `opus_spec_p
 
 **Alternatives considered**:
 
-- `AppErrorType` — older, less comprehensive type alias
-- Merge both — would create redundancy and confusion
-
-**Migration**: `AppErrorType` is marked `@deprecated` with guidance to use `AppErrorCode`.
+- Multiple parallel taxonomies — would create redundancy and confusion
 
 ---
 
@@ -122,11 +119,10 @@ The spec pack was reviewed for 100% AI-implementation readiness per `opus_spec_p
 ### Negative
 
 - Minor complexity with two error interfaces (AppError vs LifecycleAppError)
-- Deprecation of AppErrorType may require updates in future module specs
 
 ### Risks
 
-- None identified — all changes are backwards compatible within spec pack
+- None identified — changes are internal to the spec pack
 
 ---
 

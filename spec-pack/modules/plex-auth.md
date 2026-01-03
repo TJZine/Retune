@@ -6,7 +6,7 @@
 - **Path**: `src/modules/plex/auth/`
 - **Primary File**: `PlexAuth.ts`
 - **Test File**: `PlexAuth.test.ts`
-- **Dependencies**: None (foundational module)
+- **Dependencies**: none
 - **Complexity**: medium
 - **Estimated LoC**: 350
 
@@ -14,7 +14,7 @@
 
 > [!TIP]
 > **Official Documentation**: Use Context7 with `/websites/developer_plex_tv_pms` for latest API specs.  
-> **Local Examples**: See `spec-pack/artifact-9-plex-api-examples.md` for JSON response samples.
+> **SSOT Examples (MAJOR-006)**: See [artifact-9-plex-api-examples.md](../artifact-9-plex-api-examples.md) for verified JSON request/response samples. This is the authoritative reference for implementers.
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -23,7 +23,7 @@
 | `GET https://plex.tv/api/v2/user` | Validate token and get user profile |
 
 > [!IMPORTANT]
-> **JWT Authentication (Sept 2025)**: Plex has implemented JWT tokens with 7-day expiry. While the PIN flow remains the same, the returned `authToken` may now be a short-lived JWT. Check official docs if token validation fails unexpectedly—may need to implement token refresh logic.
+> **JWT Authentication (Sept 2025)**: Plex has implemented JWT tokens with 7-day expiry. While the PIN flow remains the same, treat the returned `authToken` as a short-lived JWT and implement re-authentication on expiry (do not assume a long-lived token).
 
 ## Purpose
 
@@ -128,12 +128,12 @@ interface PlexAuthState {
 
 ### Error Handling:
 
-| Error | Code | Recovery |
-|-------|------|----------|
-| Network failure during PIN request | `NETWORK_ERROR` | Retry with backoff |
-| PIN expired | `AUTH_REQUIRED` | Request new PIN |
-| Token invalid | `AUTH_INVALID` | Clear and re-authenticate |
-| Rate limited | `RATE_LIMITED` | Wait and retry |
+| Error | AppErrorCode | Recovery |
+|-------|--------------|----------|
+| Network failure during PIN request | AppErrorCode.NETWORK_TIMEOUT | Retry with backoff |
+| PIN expired | AppErrorCode.AUTH_REQUIRED | Request new PIN |
+| Token invalid | AppErrorCode.AUTH_INVALID | Clear and re-authenticate |
+| Rate limited | AppErrorCode.AUTH_RATE_LIMITED | Wait and retry |
 
 ## Method Specifications
 
@@ -147,8 +147,8 @@ interface PlexAuthState {
 
 **Throws**:
 
-- `PlexApiError` with code `NETWORK_ERROR` on connection failure
-- `PlexApiError` with code `RATE_LIMITED` if too many requests
+- `PlexApiError` with code `AppErrorCode.SERVER_UNREACHABLE` on connection failure
+- `PlexApiError` with code `AppErrorCode.RATE_LIMITED` if too many requests
 
 **Side Effects**:
 
@@ -191,8 +191,8 @@ console.log(`Go to plex.tv/link and enter: ${pin.code}`);
 
 **Throws**:
 
-- `PlexApiError` with code `RESOURCE_NOT_FOUND` if PIN doesn't exist
-- `PlexApiError` with code `NETWORK_ERROR` on connection failure
+- `PlexApiError` with code `AppErrorCode.RESOURCE_NOT_FOUND` if PIN doesn't exist
+- `PlexApiError` with code `AppErrorCode.SERVER_UNREACHABLE` on connection failure
 
 **Side Effects**:
 
@@ -328,9 +328,9 @@ describe('PlexAuth', () => {
       // Verify all X-Plex-* headers are sent
     });
     
-    it('should throw NETWORK_ERROR on connection failure', async () => {
+    it('should throw SERVER_UNREACHABLE on connection failure', async () => {
       // Mock fetch to reject
-      // Expect PlexApiError with code NETWORK_ERROR
+      // Expect PlexApiError with code SERVER_UNREACHABLE
     });
   });
   

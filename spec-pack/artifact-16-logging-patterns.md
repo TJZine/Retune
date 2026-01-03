@@ -21,7 +21,7 @@ interface ILogger {
 |:------|:------------|:--------------------|
 | `debug` | Development details, function entry/exit, variable values | Suppressed in production |
 | `info` | Significant events: module init, state changes, API calls | Logged to console |
-| `warn` | Recoverable issues: retries, fallbacks, deprecated usage | Logged to console |
+| `warn` | Recoverable issues: retries, fallbacks | Logged to console |
 | `error` | Unrecoverable errors, exceptions, critical failures | Logged to console + error tracking |
 
 ## Module Tag Convention

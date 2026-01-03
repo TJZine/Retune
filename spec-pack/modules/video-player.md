@@ -6,7 +6,7 @@
 - **Path**: `src/modules/player/`
 - **Primary File**: `VideoPlayer.ts`
 - **Test File**: `VideoPlayer.test.ts`
-- **Dependencies**: `plex-stream-resolver`
+- **Dependencies**: plex-stream-resolver
 - **Complexity**: high
 - **Estimated LoC**: 480
 
@@ -88,7 +88,7 @@ export type {
   PlaybackState,
   PlayerStatus,
   PlaybackError,
-  PlaybackErrorCode,
+  AppErrorCode,
   TimeRange
 } from './types';
 ```
@@ -115,7 +115,7 @@ export type {
 4. **Error Recovery**
    - Implement retry with exponential backoff for recoverable errors
    - Emit clear error events for unrecoverable errors
-   - Map MediaError codes to PlaybackErrorCode enum
+   - Map MediaError codes to AppErrorCode enum
 
 5. **Keep-Alive Mechanism**
    - Prevent webOS from suspending app during long playback
@@ -157,12 +157,12 @@ interface VideoPlayerInternalState {
 
 ### Error Handling:
 
-| MediaError Code | PlaybackErrorCode | Recoverable | Action |
-|-----------------|-------------------|-------------|--------|
-| MEDIA_ERR_NETWORK (2) | NETWORK_ERROR | Yes | Retry with backoff |
-| MEDIA_ERR_DECODE (3) | DECODE_ERROR | No | Skip to next |
-| MEDIA_ERR_SRC_NOT_SUPPORTED (4) | FORMAT_UNSUPPORTED | No | Request transcode |
-| Unknown | UNKNOWN | No | Report and skip |
+| MediaError Code | AppErrorCode | Recoverable | Action |
+|-----------------|--------------|-------------|--------|
+| MEDIA_ERR_NETWORK (2) | AppErrorCode.NETWORK_TIMEOUT | Yes | Retry with backoff |
+| MEDIA_ERR_DECODE (3) | AppErrorCode.PLAYBACK_DECODE_ERROR | No | Skip to next |
+| MEDIA_ERR_SRC_NOT_SUPPORTED (4) | AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED | No | Request transcode |
+| Unknown | AppErrorCode.UNKNOWN | No | Report and skip |
 
 ## Method Specifications
 
@@ -604,7 +604,7 @@ describe('VideoPlayer', () => {
   });
   
   describe('error handling', () => {
-    it('should retry on NETWORK_ERROR with exponential backoff', async () => {
+    it('should retry on NETWORK_TIMEOUT with exponential backoff', async () => {
       // Trigger MEDIA_ERR_NETWORK
       const retrySpy = jest.spyOn(player as any, '_scheduleRetry');
       triggerError(2); // MEDIA_ERR_NETWORK
@@ -623,7 +623,7 @@ describe('VideoPlayer', () => {
       expect(retrySpy).toHaveBeenCalledWith(4000);
     });
     
-    it('should emit error on DECODE_ERROR (non-recoverable)', () => {
+    it('should emit error on PLAYBACK_DECODE_ERROR (non-recoverable)', () => {
       const errorHandler = jest.fn();
       player.on('error', errorHandler);
       
@@ -632,7 +632,7 @@ describe('VideoPlayer', () => {
       // VERBATIM ASSERTION: Exact structure expected
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          code: 'DECODE_ERROR',
+          code: AppErrorCode.PLAYBACK_DECODE_ERROR,
           recoverable: false
         })
       );
@@ -651,7 +651,7 @@ describe('VideoPlayer', () => {
       // VERBATIM ASSERTION: Must include retryCount
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          code: 'NETWORK_ERROR',
+          code: AppErrorCode.NETWORK_TIMEOUT,
           recoverable: false,
           retryCount: 3
         })
@@ -660,9 +660,9 @@ describe('VideoPlayer', () => {
     
     it('should map MediaError codes correctly', () => {
       const errorCases = [
-        { mediaCode: 2, expected: 'NETWORK_ERROR' },
-        { mediaCode: 3, expected: 'DECODE_ERROR' },
-        { mediaCode: 4, expected: 'FORMAT_UNSUPPORTED' },
+        { mediaCode: 2, expected: AppErrorCode.NETWORK_TIMEOUT },
+        { mediaCode: 3, expected: AppErrorCode.PLAYBACK_DECODE_ERROR },
+        { mediaCode: 4, expected: AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED },
       ];
       
       errorCases.forEach(({ mediaCode, expected }) => {

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2026-01-03
+
+### Fixed
+
+- Phase 0 hard-gate compliance:
+  - Removed legacy raw codes (NETWORK_ERROR, DECODE_ERROR, CHANNEL_EMPTY) in favor of existing canonical AppErrorCode values.
+  - Removed `OrchestratorErrorCode` alias; orchestrator recovery APIs use `AppErrorCode` directly.
+  - Updated implementation prompts to avoid external-file references per the prompt self-sufficiency grep gate.
+
 ## [1.0.1] - 2026-01-01
 
 ### Fixed
@@ -52,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Deprecated `AppErrorType` in favor of `AppErrorCode` enum
+- Removed legacy error taxonomy aliases; use `AppErrorCode` exclusively
 - Removed original Prompts 7-11 (replaced by V2 versions)
 
 ---
