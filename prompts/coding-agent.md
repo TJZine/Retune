@@ -122,7 +122,7 @@ Execute ALL verification commands from context handoff:
 ```bash
 npx tsc --noEmit
 npm run lint
-npm test -- --grep "[ModuleName]"
+npm test -- --testPathPattern="[ModuleName]"
 ```
 
 **All must pass before marking complete.**
@@ -228,7 +228,7 @@ After implementation, provide:
 | :--- | :--- | :--- |
 | `npx tsc --noEmit` | ✅ | No errors |
 | `npm run lint` | ✅ | 0 warnings |
-| `npm test -- --grep "[Module]"` | ✅ | 12/12 passed |
+| `npm test -- --testPathPattern="[Module]"` | ✅ | 12/12 passed |
 
 ## Implementation Notes
 

@@ -32,7 +32,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "VideoPlayer"
+npm test -- --testPathPattern="VideoPlayer"
 ```
 
 ## Rollback Procedure

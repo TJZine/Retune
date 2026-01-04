@@ -31,7 +31,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "PlexLibrary"
+npm test -- --testPathPattern="PlexLibrary"
 ```
 
 ## Rollback Procedure

@@ -57,7 +57,7 @@ npm run lint -- --quiet
 Run module-specific tests:
 
 ```bash
-npm test -- --grep "[ModuleName]" --reporter=json
+npm test -- --testPathPattern="[ModuleName]" --reporter=json
 ```
 
 **Record**:

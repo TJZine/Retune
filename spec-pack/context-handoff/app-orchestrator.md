@@ -31,7 +31,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "Orchestrator"
+npm test -- --testPathPattern="Orchestrator"
 npm run build
 ```
 

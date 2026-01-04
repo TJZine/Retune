@@ -32,7 +32,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "AppLifecycle"
+npm test -- --testPathPattern="AppLifecycle"
 ```
 
 ## Rollback Procedure

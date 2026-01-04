@@ -33,8 +33,8 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "EPGComponent"
-npm test -- --grep "EPGVirtualizer"
+npm test -- --testPathPattern="EPGComponent"
+npm test -- --testPathPattern="EPGVirtualizer"
 ```
 
 ## Rollback Procedure

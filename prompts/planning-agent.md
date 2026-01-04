@@ -89,7 +89,7 @@ For EACH module, create `context-handoff/[module-name].md`:
 ### Verification Commands
 \`\`\`bash
 npx tsc --noEmit
-npm test -- --grep "[ModuleName]"
+npm test -- --testPathPattern="[ModuleName]"
 \`\`\`
 
 ### Rollback Procedure

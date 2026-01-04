@@ -30,7 +30,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "PlexAuth"
+npm test -- --testPathPattern="PlexAuth"
 ```
 
 ## Rollback Procedure

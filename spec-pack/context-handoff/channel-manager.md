@@ -31,7 +31,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "ChannelManager"
+npm test -- --testPathPattern="ChannelManager"
 ```
 
 ## Rollback Procedure

@@ -94,7 +94,7 @@ npx tsc --noEmit
 npm run lint
 
 # Module-specific tests
-npm test -- --grep "[ModuleName]"
+npm test -- --testPathPattern="[ModuleName]"
 ```
 
 **All must pass before marking complete.**

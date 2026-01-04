@@ -33,8 +33,8 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "NavigationManager"
-npm test -- --grep "FocusManager"
+npm test -- --testPathPattern="NavigationManager"
+npm test -- --testPathPattern="FocusManager"
 ```
 
 ## Rollback Procedure

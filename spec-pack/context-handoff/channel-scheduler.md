@@ -32,8 +32,8 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "ChannelScheduler"
-npm test -- --grep "ShuffleGenerator"
+npm test -- --testPathPattern="ChannelScheduler"
+npm test -- --testPathPattern="ShuffleGenerator"
 ```
 
 ## Rollback Procedure

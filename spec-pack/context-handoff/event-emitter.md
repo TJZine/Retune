@@ -28,7 +28,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "EventEmitter"
+npm test -- --testPathPattern="EventEmitter"
 ```
 
 ## Rollback Procedure
