@@ -31,7 +31,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "PlexStreamResolver"
+npm test -- --testPathPattern="PlexStreamResolver"
 ```
 
 ## Rollback Procedure

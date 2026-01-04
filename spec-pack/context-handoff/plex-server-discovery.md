@@ -29,7 +29,7 @@
 
 ```bash
 npx tsc --noEmit
-npm test -- --grep "PlexServerDiscovery"
+npm test -- --testPathPattern="PlexServerDiscovery"
 ```
 
 ## Rollback Procedure
