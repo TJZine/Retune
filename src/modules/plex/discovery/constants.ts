@@ -48,3 +48,18 @@ export const CONNECTION_PRIORITY = {
     /** Local HTTP - lowest priority (may be mixed content blocked) */
     LOCAL_HTTP: 4,
 } as const;
+
+/**
+ * Default mixed content configuration per spec.
+ * WebOS apps over HTTPS may block HTTP requests.
+ */
+export const DEFAULT_MIXED_CONTENT_CONFIG = {
+    /** Prefer HTTPS connections when available */
+    preferHttps: true,
+    /** Attempt HTTP upgrade to HTTPS for local connections */
+    tryHttpsUpgrade: true,
+    /** Allow HTTP for local connections only (LAN connections can lack certs) */
+    allowLocalHttp: true,
+    /** Log mixed content warnings */
+    logWarnings: true,
+} as const;

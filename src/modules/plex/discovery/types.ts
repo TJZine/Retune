@@ -73,6 +73,21 @@ export interface PlexServerDiscoveryState {
 }
 
 /**
+ * Configuration for mixed HTTP/HTTPS content handling.
+ * WebOS apps served over HTTPS can block HTTP requests due to browser security policies.
+ */
+export interface MixedContentConfig {
+    /** Prefer HTTPS connections when available (default: true) */
+    preferHttps: boolean;
+    /** Attempt HTTP upgrade to HTTPS for local connections (default: true) */
+    tryHttpsUpgrade: boolean;
+    /** Allow HTTP for local connections only (default: true) */
+    allowLocalHttp: boolean;
+    /** Log mixed content warnings (default: true) */
+    logWarnings: boolean;
+}
+
+/**
  * Events emitted by PlexServerDiscovery.
  */
 export interface PlexServerDiscoveryEvents extends Record<string, unknown> {

@@ -4,7 +4,6 @@
  * @version 1.0.0
  */
 
-import { IDisposable } from '../../../utils/interfaces';
 import { PlexServer, PlexConnection } from './types';
 
 // ============================================
@@ -121,17 +120,15 @@ export interface IPlexServerDiscovery {
      * Register handler for server change events.
      * @param event - Event name ('serverChange')
      * @param handler - Handler function
-     * @returns Disposable to remove handler
      */
-    on(event: 'serverChange', handler: (server: PlexServer | null) => void): IDisposable;
+    on(event: 'serverChange', handler: (server: PlexServer | null) => void): void;
 
     /**
      * Register handler for connection change events.
      * @param event - Event name ('connectionChange')
      * @param handler - Handler function
-     * @returns Disposable to remove handler
      */
-    on(event: 'connectionChange', handler: (uri: string | null) => void): IDisposable;
+    on(event: 'connectionChange', handler: (uri: string | null) => void): void;
 }
 
 /**

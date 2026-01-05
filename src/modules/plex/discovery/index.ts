@@ -13,5 +13,6 @@ export type {
     PlexServer,
     PlexConnection,
     PlexServerDiscoveryEvents,
+    MixedContentConfig,
 } from './types';
-export { PLEX_DISCOVERY_CONSTANTS, CONNECTION_PRIORITY } from './constants';
+export { PLEX_DISCOVERY_CONSTANTS, CONNECTION_PRIORITY, DEFAULT_MIXED_CONTENT_CONFIG } from './constants';

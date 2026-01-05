@@ -6,8 +6,7 @@
  */
 
 import { EventEmitter } from '../../../utils/EventEmitter';
-import { IDisposable } from '../../../utils/interfaces';
-import { PLEX_DISCOVERY_CONSTANTS, CONNECTION_PRIORITY } from './constants';
+import { PLEX_DISCOVERY_CONSTANTS, DEFAULT_MIXED_CONTENT_CONFIG } from './constants';
 import {
     IPlexServerDiscovery,
     PlexServerDiscoveryConfig,
@@ -19,6 +18,7 @@ import {
     PlexServerDiscoveryEvents,
     PlexApiResource,
     PlexApiConnection,
+    MixedContentConfig,
 } from './types';
 import { AppErrorCode } from '../../lifecycle/types';
 import { PlexApiError } from '../auth/helpers';
@@ -35,6 +35,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     private _state: PlexServerDiscoveryState;
     private _emitter: EventEmitter<PlexServerDiscoveryEvents>;
     private _getAuthHeaders: () => Record<string, string>;
+    private _mixedContentConfig: MixedContentConfig;
 
     /**
      * Create a new PlexServerDiscovery instance.
@@ -43,6 +44,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     constructor(config: PlexServerDiscoveryConfig) {
         this._getAuthHeaders = config.getAuthHeaders;
         this._emitter = new EventEmitter<PlexServerDiscoveryEvents>();
+        this._mixedContentConfig = { ...DEFAULT_MIXED_CONTENT_CONFIG };
         this._state = {
             servers: [],
             selectedServer: null,
@@ -163,46 +165,103 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     /**
      * Find the fastest working connection for a server.
      * Tests connections in priority order: local HTTPS > remote HTTPS > relay > local HTTP.
+     * Implements mixed-content handling per MixedContentConfig.
      * @param server - Server to test connections for
      * @returns Promise resolving to best connection, or null if all fail
      */
     public async findFastestConnection(
         server: PlexServer
     ): Promise<PlexConnection | null> {
-        const sortedConnections = this._sortConnectionsByPriority(server.connections);
-        let bestConnection: PlexConnection | null = null;
-        let bestLatency: number = Infinity;
+        const config = this._mixedContentConfig;
 
-        // Test connections in priority order
-        for (const connection of sortedConnections) {
-            const latency = await this.testConnection(server, connection);
+        // Separate connections by protocol per mixed-content handling requirements
+        const httpsConns = server.connections.filter(c => c.protocol === 'https');
+        const httpConns = server.connections.filter(c => c.protocol === 'http');
 
-            if (latency !== null) {
-                const connectionWithLatency: PlexConnection = {
-                    uri: connection.uri,
-                    protocol: connection.protocol,
-                    address: connection.address,
-                    port: connection.port,
-                    local: connection.local,
-                    relay: connection.relay,
-                    latencyMs: latency,
-                };
+        // If preferHttps is true (default), test HTTPS first
+        if (config.preferHttps) {
+            // Within HTTPS, prioritize: local > remote > relay
+            const localHttps = httpsConns.filter(c => c.local && !c.relay);
+            const remoteHttps = httpsConns.filter(c => !c.local && !c.relay);
+            const relayHttps = httpsConns.filter(c => c.relay);
 
-                // First working connection wins (due to priority sorting)
-                // Only update if significantly faster within same priority tier
-                if (bestConnection === null || latency < bestLatency) {
-                    bestConnection = connectionWithLatency;
-                    bestLatency = latency;
+            // Test HTTPS connections in priority order
+            for (const conn of localHttps) {
+                const latency = await this.testConnection(server, conn);
+                if (latency !== null) {
+                    return this._createConnectionWithLatency(conn, latency);
                 }
+            }
 
-                // For local or HTTPS connections, accept first successful one
-                if (connection.local || connection.protocol === 'https') {
-                    break;
+            for (const conn of remoteHttps) {
+                const latency = await this.testConnection(server, conn);
+                if (latency !== null) {
+                    return this._createConnectionWithLatency(conn, latency);
+                }
+            }
+
+            for (const conn of relayHttps) {
+                const latency = await this.testConnection(server, conn);
+                if (latency !== null) {
+                    return this._createConnectionWithLatency(conn, latency);
                 }
             }
         }
 
-        return bestConnection;
+        // Try HTTPS upgrade for HTTP connections if enabled
+        if (config.tryHttpsUpgrade) {
+            for (const conn of httpConns) {
+                const httpsUri = conn.uri.replace('http://', 'https://');
+                const upgradedConn: PlexConnection = {
+                    uri: httpsUri,
+                    protocol: 'https',
+                    address: conn.address,
+                    port: conn.port,
+                    local: conn.local,
+                    relay: conn.relay,
+                    latencyMs: null,
+                };
+                const latency = await this.testConnection(server, upgradedConn);
+                if (latency !== null) {
+                    return this._createConnectionWithLatency(upgradedConn, latency);
+                }
+            }
+        }
+
+        // Only try HTTP as last resort if allowLocalHttp is true
+        if (config.allowLocalHttp) {
+            const localHttp = httpConns.filter(c => c.local && !c.relay);
+            for (const conn of localHttp) {
+                const latency = await this.testConnection(server, conn);
+                if (latency !== null) {
+                    // Log warning if logWarnings is enabled
+                    if (config.logWarnings) {
+                        console.warn('[Discovery] Using HTTP connection - HTTPS unavailable');
+                    }
+                    return this._createConnectionWithLatency(conn, latency);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a connection object with latency.
+     * @param conn - Original connection
+     * @param latency - Measured latency in ms
+     * @returns Connection with latencyMs set
+     */
+    private _createConnectionWithLatency(conn: PlexConnection, latency: number): PlexConnection {
+        return {
+            uri: conn.uri,
+            protocol: conn.protocol,
+            address: conn.address,
+            port: conn.port,
+            local: conn.local,
+            relay: conn.relay,
+            latencyMs: latency,
+        };
     }
 
     // ============================================
@@ -364,21 +423,20 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * Register handler for server or connection change events.
      * @param event - Event name
      * @param handler - Handler function
-     * @returns Disposable to remove handler
      */
     public on(
         event: 'serverChange',
         handler: (server: PlexServer | null) => void
-    ): IDisposable;
+    ): void;
     public on(
         event: 'connectionChange',
         handler: (uri: string | null) => void
-    ): IDisposable;
+    ): void;
     public on(
         event: 'serverChange' | 'connectionChange',
         handler: ((server: PlexServer | null) => void) | ((uri: string | null) => void)
-    ): IDisposable {
-        return this._emitter.on(event, handler as (payload: unknown) => void);
+    ): void {
+        this._emitter.on(event, handler as (payload: unknown) => void);
     }
 
     // ============================================
@@ -451,28 +509,6 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         return connections;
     }
 
-    /**
-     * Sort connections by priority for testing.
-     * Order: local HTTPS > remote HTTPS > relay > local HTTP
-     */
-    private _sortConnectionsByPriority(connections: PlexConnection[]): PlexConnection[] {
-        const getPriority = (conn: PlexConnection): number => {
-            if (conn.relay) {
-                return CONNECTION_PRIORITY.RELAY;
-            }
-            if (conn.local && conn.protocol === 'https') {
-                return CONNECTION_PRIORITY.LOCAL_HTTPS;
-            }
-            if (!conn.local && conn.protocol === 'https') {
-                return CONNECTION_PRIORITY.REMOTE_HTTPS;
-            }
-            return CONNECTION_PRIORITY.LOCAL_HTTP;
-        };
-
-        return connections.slice().sort(function (a, b) {
-            return getPriority(a) - getPriority(b);
-        });
-    }
 
     /**
      * Find a server by ID in the cached list.
