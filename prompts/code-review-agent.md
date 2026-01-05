@@ -73,16 +73,30 @@ For EACH public method in the interface:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | methodName | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
 
-### Step 5: Code Quality Check
+### Step 5: Code Quality & Logic Checks
+
+**Threshold rules (defaults)**:
+- Function length: **warn** > 80 lines, **fail** > 120 lines (production code only)
+- File length: **warn** > 500 lines, **fail** > 800 lines (production code only)
+- **Tests are exempt** from hard length failures; flag as warnings only if structure is unclear.
 
 | Check | Status | Notes |
 | :--- | :--- | :--- |
-| No TODO/FIXME comments | ✅/❌ | |
+| No TODO/FIXME comments (prod code) | ✅/❌ | |
 | JSDoc on all public methods | ✅/❌ | |
-| Error handling uses Result pattern | ✅/❌ | |
+| Error handling matches spec (no silent catch unless allowed) | ✅/❌ | |
+| No secrets/tokens in logs | ✅/❌ | |
 | No console.log (use logger) | ✅/❌ | |
-| Max function length ≤ 50 lines | ✅/❌ | |
-| Max file length ≤ 300 lines | ✅/❌ | |
+| Max function length (warn > 80, fail > 120; prod only) | ✅/❌ | |
+| Max file length (warn > 500, fail > 800; prod only) | ✅/❌ | |
+| Complexity manageable (flag deep nesting/branching) | ✅/❌ | |
+
+**Logic checks (required)**:
+- State transitions and invariants are correct (auth lifecycle, flags, timestamps).
+- Timeouts, retries, and backoff match spec requirements.
+- External API contract matches spec (headers, body fields, storage keys).
+- Resource cleanup is handled (timers/intervals/subscriptions).
+- Error handling preserves spec behavior (timeout vs. throw, recoverable vs. fatal).
 
 ### Step 6: Integration Smoke Test
 
