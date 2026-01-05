@@ -245,5 +245,56 @@ describe('EventEmitter', () => {
 
             expect(handler).toHaveBeenCalledWith(undefined);
         });
+
+        it('should safely handle handler removal during emit', () => {
+            const emitter = new EventEmitter<{ test: number }>();
+            const calls: string[] = [];
+
+            const handlerA = (): void => {
+                calls.push('A');
+                emitter.off('test', handlerB);
+            };
+            const handlerB = (): void => {
+                calls.push('B');
+            };
+            const handlerC = (): void => {
+                calls.push('C');
+            };
+
+            emitter.on('test', handlerA);
+            emitter.on('test', handlerB);
+            emitter.on('test', handlerC);
+
+            emitter.emit('test', 1);
+
+            // All handlers should be called on first emit (Set iteration snapshot)
+            expect(calls).toContain('A');
+            expect(calls).toContain('C');
+            // handlerB may or may not be called depending on Set iteration order
+        });
+
+        it('should safely handle handler addition during emit', () => {
+            const emitter = new EventEmitter<{ test: number }>();
+            const calls: string[] = [];
+            const lateHandler = (): void => { calls.push('late'); };
+
+            const handlerA = (): void => {
+                calls.push('A');
+                emitter.on('test', lateHandler);
+            };
+
+            emitter.on('test', handlerA);
+            emitter.emit('test', 1);
+
+            // First emit should include 'A'
+            expect(calls).toContain('A');
+
+            calls.length = 0; // Reset for next emit
+            emitter.emit('test', 2);
+
+            // Second emit should include both handlers
+            expect(calls).toContain('A');
+            expect(calls).toContain('late');
+        });
     });
 });

@@ -115,6 +115,17 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
     }
 
     /**
+     * Unregister a long press handler.
+     * @param button - The button to unregister
+     * @param callback - The callback to remove
+     */
+    public unregisterLongPress(button: RemoteButton, callback: () => void): void {
+        this._longPressHandlers = this._longPressHandlers.filter(
+            (h) => !(h.button === button && h.callback === callback)
+        );
+    }
+
+    /**
      * Cancel all pending long press handlers.
      */
     public cancelLongPress(): void {

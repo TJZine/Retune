@@ -3,7 +3,7 @@
 # lint-error-taxonomy.sh (SUGGEST-002)
 # Detects non-canonical error codes in spec pack files
 #
-# Usage: ./scripts/lint-error-taxonomy.sh [--fix-check]
+# Usage: ./scripts/lint-error-taxonomy.sh
 #
 # Exit codes:
 #   0 - All error codes are canonical (AppErrorCode)
@@ -42,11 +42,20 @@ for (const line of shared.split(/\r?\n/)) {
 // Build corpus of spec docs where raw tokens tend to appear
 const files = [];
 const specDir = 'spec-pack/modules';
-for (const f of fs.readdirSync(specDir)) if (f.endsWith('.md')) files.push(path.join(specDir, f));
-files.push('spec-pack/artifact-4-integration-contracts.md', 'spec-pack/artifact-7-implementation-prompts.md');
+if (fs.existsSync(specDir)) {
+  for (const f of fs.readdirSync(specDir)) if (f.endsWith('.md')) files.push(path.join(specDir, f));
+}
+// Only check these files if they exist locally
+const maybeFiles = ['spec-pack/artifact-4-integration-contracts.md', 'spec-pack/artifact-7-implementation-prompts.md'];
+for (const f of maybeFiles) { if (fs.existsSync(f)) files.push(f); }
 const supplementsDir = 'spec-pack/supplements';
 if (fs.existsSync(supplementsDir)) {
   for (const f of fs.readdirSync(supplementsDir)) files.push(path.join(supplementsDir, f));
+}
+
+if (files.length === 0) {
+  console.log('⚠️  No spec-pack files found locally, skipping check');
+  process.exit(0);
 }
 
 const corpus = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');

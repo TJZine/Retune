@@ -58,10 +58,17 @@ echo ""
 # Progress bar
 TOTAL_MODULES=$(jq -r '.modules | length' "$STATE_FILE")
 COMPLETE_MODULES=$(jq -r '[.modules[] | select(.status == "complete")] | length' "$STATE_FILE")
-PROGRESS_PCT=$((COMPLETE_MODULES * 100 / TOTAL_MODULES))
 PROGRESS_BAR_LEN=40
-FILLED=$((PROGRESS_PCT * PROGRESS_BAR_LEN / 100))
-EMPTY=$((PROGRESS_BAR_LEN - FILLED))
+
+if [[ $TOTAL_MODULES -eq 0 ]]; then
+    PROGRESS_PCT=0
+    FILLED=0
+    EMPTY=$PROGRESS_BAR_LEN
+else
+    PROGRESS_PCT=$((COMPLETE_MODULES * 100 / TOTAL_MODULES))
+    FILLED=$((PROGRESS_PCT * PROGRESS_BAR_LEN / 100))
+    EMPTY=$((PROGRESS_BAR_LEN - FILLED))
+fi
 
 echo -n "Overall: ["
 printf "${GREEN}%${FILLED}s${NC}" | tr ' ' '█'
@@ -121,7 +128,7 @@ echo -e "  $(get_icon blocked) Blocked:     $BLOCKED"
 echo ""
 
 # Estimate remaining
-TOTAL_LOC=$(jq '[.modules[] | select(.status != "complete") | .estimatedLoC] | add' "$STATE_FILE")
+TOTAL_LOC=$(jq '[.modules[] | select(.status != "complete") | .estimatedLoC] | add // 0' "$STATE_FILE")
 echo -e "Estimated remaining: ${CYAN}~$TOTAL_LOC${NC} lines of code"
 echo ""
 

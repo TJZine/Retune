@@ -25,11 +25,6 @@ function dispatchKeyEvent(keyCode: number, type: 'keydown' | 'keyup' = 'keydown'
     document.dispatchEvent(event);
 }
 
-// Helper to wait for a specific duration
-function wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 describe('NavigationManager', () => {
     let nav: NavigationManager;
     let config: NavigationConfig;
@@ -532,16 +527,20 @@ describe('NavigationManager', () => {
             });
         });
 
-        it('should commit after timeout', async () => {
+        it('should commit after timeout', () => {
+            jest.useFakeTimers();
+
             const commitHandler = jest.fn();
             nav.on('channelNumberEntered', commitHandler);
 
             dispatchKeyEvent(53); // num5
 
-            // Wait for timeout (2000ms)
-            await wait(2100);
+            // Advance timers past the 2000ms timeout
+            jest.advanceTimersByTime(2100);
 
             expect(commitHandler).toHaveBeenCalledWith({ channelNumber: 5 });
+
+            jest.useRealTimers();
         });
     });
 

@@ -51,6 +51,7 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.AUTH_EXPIRED:
             case AppErrorCode.AUTH_REQUIRED:
             case AppErrorCode.AUTH_INVALID:
+            case AppErrorCode.AUTH_FAILED:
                 return this._createAuthActions();
 
             case AppErrorCode.NETWORK_UNAVAILABLE:
@@ -154,7 +155,11 @@ export class ErrorRecovery implements IErrorRecovery {
             {
                 label: 'Sign In',
                 action: (): void => {
-                    if (this._onSignIn) this._onSignIn();
+                    if (this._onSignIn) {
+                        this._onSignIn();
+                    } else {
+                        console.warn('[ErrorRecovery] onSignIn callback not registered');
+                    }
                 },
                 isPrimary: true,
                 requiresNetwork: true,
@@ -175,7 +180,11 @@ export class ErrorRecovery implements IErrorRecovery {
             {
                 label: 'Retry',
                 action: (): void => {
-                    if (this._onRetry) this._onRetry();
+                    if (this._onRetry) {
+                        this._onRetry();
+                    } else {
+                        console.warn('[ErrorRecovery] onRetry callback not registered');
+                    }
                 },
                 isPrimary: true,
                 requiresNetwork: true,
@@ -267,7 +276,11 @@ export class ErrorRecovery implements IErrorRecovery {
             {
                 label: 'Restart',
                 action: (): void => {
-                    if (this._onRestart) this._onRestart();
+                    if (this._onRestart) {
+                        this._onRestart();
+                    } else {
+                        console.warn('[ErrorRecovery] onRestart callback not registered');
+                    }
                 },
                 isPrimary: true,
                 requiresNetwork: false,

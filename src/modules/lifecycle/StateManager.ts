@@ -50,11 +50,7 @@ export class StateManager implements IStateManager {
                 this._performStorageCleanup();
 
                 // Retry once after cleanup
-                try {
-                    localStorage.setItem(this._storageKey, serialized);
-                } catch (retryError) {
-                    throw retryError;
-                }
+                localStorage.setItem(this._storageKey, serialized);
             } else {
                 throw error;
             }
@@ -102,11 +98,7 @@ export class StateManager implements IStateManager {
      * Clear stored state.
      */
     public async clear(): Promise<void> {
-        try {
-            localStorage.removeItem(this._storageKey);
-        } catch (error) {
-            throw error;
-        }
+        localStorage.removeItem(this._storageKey);
     }
 
     /**
@@ -209,6 +201,20 @@ export class StateManager implements IStateManager {
 
         // Must have lastUpdated timestamp
         if (typeof obj['lastUpdated'] !== 'number') {
+            return false;
+        }
+
+        // Must have required state shape
+        if (!('plexAuth' in obj)) {
+            return false;
+        }
+        if (!Array.isArray(obj['channelConfigs'])) {
+            return false;
+        }
+        if (typeof obj['currentChannelIndex'] !== 'number') {
+            return false;
+        }
+        if (typeof obj['userPreferences'] !== 'object' || obj['userPreferences'] === null) {
             return false;
         }
 

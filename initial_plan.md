@@ -175,7 +175,7 @@ interface PlexAuthConfig {
 
 interface PlexPinRequest {
   id: number;
-  code: string;                 // 4-character PIN for user
+  code: string;                 // PIN code for user (length varies)
   expiresAt: Date;
   authToken: string | null;     // Populated when claimed
   clientIdentifier: string;

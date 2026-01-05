@@ -224,6 +224,24 @@ describe('ErrorRecovery', () => {
             expect(message).toBe('No internet connection');
         });
 
+        it('should return user-friendly message for NETWORK_TIMEOUT', () => {
+            const message = recovery.getUserMessage(AppErrorCode.NETWORK_TIMEOUT);
+            // Falls through to default "An error occurred" message
+            expect(message).toBeTruthy();
+        });
+
+        it('should return user-friendly message for AUTH_REQUIRED', () => {
+            const message = recovery.getUserMessage(AppErrorCode.AUTH_REQUIRED);
+            // Falls through to default "An error occurred" message
+            expect(message).toBeTruthy();
+        });
+
+        it('should return user-friendly message for SERVER_UNREACHABLE', () => {
+            const message = recovery.getUserMessage(AppErrorCode.SERVER_UNREACHABLE);
+            // Falls through to default "An error occurred" message
+            expect(message).toBeTruthy();
+        });
+
         it('should return generic message for unknown error codes', () => {
             const message = recovery.getUserMessage(AppErrorCode.UNKNOWN);
             expect(message).toContain('error');

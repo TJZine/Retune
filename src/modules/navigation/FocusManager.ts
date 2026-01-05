@@ -279,6 +279,8 @@ export class FocusManager implements IFocusManager {
         this._state.currentFocusId = null;
         this._state.focusableElements.clear();
         this._state.focusGroups.clear();
+        // Note: focusMemory and preFocusIdBeforeModal are intentionally preserved
+        // to maintain focus state across screen transitions and modal cycles.
     }
 
     /**

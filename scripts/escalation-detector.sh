@@ -5,8 +5,8 @@
 # be escalated to Phase 1, vs code bugs that should be retried.
 #
 # Usage: 
-#   ./scripts/escalation-detector.sh <log-file>
-#   echo "error output" | ./scripts/escalation-detector.sh -
+#   ./scripts/escalation-detector.sh <log-file> [MODULE_ID]
+#   echo "error output" | ./scripts/escalation-detector.sh - [MODULE_ID]
 #
 # Exit codes:
 #   0 - No escalation needed (code bug or success)
@@ -17,7 +17,6 @@ set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
@@ -27,6 +26,7 @@ log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 
 # Input handling
 INPUT_FILE="${1:--}"
+MODULE_ID="${2:-}"
 if [[ "$INPUT_FILE" == "-" ]]; then
     INPUT=$(cat)
 else

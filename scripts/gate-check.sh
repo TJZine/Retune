@@ -113,12 +113,12 @@ fi
 echo ""
 echo "Gate 4: Shared Types Compilation"
 if [[ -f "src/types/index.ts" ]]; then
-    if npx tsc --noEmit src/types/index.ts 2>/dev/null; then
+    if npx tsc --noEmit --project tsconfig.json 2>/dev/null; then
         log_pass "Shared types compile successfully"
         ((GATES_PASSED++))
     else
         log_fail "Shared types compilation failed"
-        log_info "Run: npx tsc --noEmit src/types/index.ts"
+        log_info "Run: npx tsc --noEmit --project tsconfig.json"
         ((GATES_FAILED++))
     fi
 elif [[ -f "spec-pack/artifact-2-shared-types.ts" ]]; then
@@ -154,10 +154,11 @@ echo ""
 echo "Gate 6: Orchestration Document"
 if [[ -n "$MODULE_ID" ]]; then
     ORCH_PATTERN="orchestration-docs/session-${MODULE_ID}-*.md"
-    ORCH_FILES=$(ls $ORCH_PATTERN 2>/dev/null | tail -1)
+    ORCH_FILES=( $ORCH_PATTERN )
     
-    if [[ -n "$ORCH_FILES" ]]; then
-        log_pass "Found orchestration doc: $ORCH_FILES"
+    if [[ -e "${ORCH_FILES[0]}" ]]; then
+        ORCH_FILE="${ORCH_FILES[-1]}"  # Get last match (most recent)
+        log_pass "Found orchestration doc: $ORCH_FILE"
         ((GATES_PASSED++))
     else
         log_fail "No orchestration document for '$MODULE_ID'"

@@ -14,6 +14,32 @@ import { IDisposable } from '../../../utils/interfaces';
  * Configuration for Plex API client identification.
  * These values are sent with every Plex API request.
  */
+export type PlexAuthMode = 'legacy' | 'jwt';
+
+/**
+ * Public JWK used for JWT-based Plex auth (Ed25519).
+ * Only required for the JWT flow.
+ */
+export interface PlexPublicJwk {
+    kty: 'OKP';
+    crv: 'Ed25519';
+    x: string;
+    alg: 'EdDSA';
+    use?: 'sig';
+    kid?: string;
+}
+
+/**
+ * Device key metadata for JWT-based auth.
+ */
+export interface PlexDeviceKey {
+    kid: string;
+    publicJwk: PlexPublicJwk;
+    /** Base64url-encoded Ed25519 private key (store securely when possible) */
+    privateKey: string;
+    createdAt: Date;
+}
+
 export interface PlexAuthConfig {
     /** Unique app instance ID (UUID v4) - persisted across sessions */
     clientIdentifier: string;
@@ -29,6 +55,8 @@ export interface PlexAuthConfig {
     device: string;
     /** User-friendly device name (e.g., "Living Room TV") */
     deviceName: string;
+    /** Auth flow selection (default: legacy PIN) */
+    authMode?: PlexAuthMode;
 }
 
 // ============================================
@@ -37,12 +65,12 @@ export interface PlexAuthConfig {
 
 /**
  * Represents a PIN request for OAuth flow.
- * User navigates to plex.tv/link and enters the code.
+ * User navigates to the Plex auth app (plex.tv/link or app.plex.tv/auth).
  */
 export interface PlexPinRequest {
     /** Plex-assigned PIN ID for polling */
     id: number;
-    /** 4-character code for user to enter at plex.tv/link */
+    /** PIN code for user to enter (length varies by flow) */
     code: string;
     /** PIN expiration time (typically 5 minutes) */
     expiresAt: Date;
@@ -91,6 +119,8 @@ export interface PlexAuthData {
     selectedServerId: string | null;
     /** Active connection URI for the selected server */
     selectedServerUri: string | null;
+    /** Device key metadata for JWT flow (optional) */
+    deviceKey?: PlexDeviceKey | null;
 }
 
 // ============================================
@@ -146,13 +176,13 @@ export interface IPlexAuth {
 
     /**
      * Initiate Plex OAuth flow by requesting a PIN code.
-     * @returns PIN request containing 4-character code for user display
+     * @returns PIN request containing code for user display (length varies)
      * @throws PlexApiError on connection failure or rate limiting
      */
     requestPin(): Promise<PlexPinRequest>;
 
     /**
-     * Check if user has claimed the PIN at plex.tv/link.
+     * Check if user has claimed the PIN via the Plex auth app.
      * @param pinId - PIN ID from requestPin()
      * @returns Updated PIN request with authToken if claimed
      * @throws PlexApiError if PIN doesn't exist or on connection failure

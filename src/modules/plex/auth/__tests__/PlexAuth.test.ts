@@ -71,7 +71,7 @@ describe('PlexAuth', () => {
     });
 
     describe('requestPin', () => {
-        it('should return a PlexPinRequest with 4-character code', async () => {
+        it('should return a PlexPinRequest with a valid PIN code', async () => {
             const auth = new PlexAuth(mockConfig);
             mockFetchJson({
                 id: 1234567890,
@@ -83,8 +83,8 @@ describe('PlexAuth', () => {
 
             const pin = await auth.requestPin();
 
-            expect(pin.code).toMatch(/^[A-Za-z0-9]{4}$/);
-            expect(pin.code).toHaveLength(4);
+            expect(pin.code).toMatch(/^[A-Za-z0-9]+$/);
+            expect(pin.code.length).toBeGreaterThanOrEqual(4);
             expect(pin.id).toBe(1234567890);
             expect(pin.authToken).toBeNull();
         });
@@ -114,7 +114,7 @@ describe('PlexAuth', () => {
             expect(headers['Accept']).toBe('application/json');
         });
 
-        it('should include X-Plex-Product in request body', async () => {
+        it('should include strong flag in request URL', async () => {
             const auth = new PlexAuth(mockConfig);
             mockFetchJson({
                 id: 1,
@@ -128,11 +128,9 @@ describe('PlexAuth', () => {
 
             const fetchMock = (globalThis as unknown as { fetch: jest.Mock }).fetch;
             const callArgs = fetchMock.mock.calls[0];
-            const options = callArgs[1] as RequestInit;
-            const body = JSON.parse(options.body as string);
+            const url = callArgs[0] as string;
 
-            expect(body['X-Plex-Product']).toBe(mockConfig.product);
-            expect(body['strong']).toBe(true);
+            expect(url).toContain('strong=true');
         });
 
         it('should throw SERVER_UNREACHABLE on connection failure', async () => {
@@ -475,13 +473,21 @@ describe('PlexAuth', () => {
             });
             await auth.requestPin();
 
-            // Then cancel it
-            mockFetchJson({}, 200);
+            // Then cancel it - method should complete without throwing
+            mockFetchJson({}, 204);
             await auth.cancelPin(12345);
 
-            // PIN should be cleared (internal state check not exposed,
-            // but method should complete without error)
-            expect(true).toBe(true);
+            // Verify PIN was cleared - pendingPin is internal, but a new requestPin
+            // should work without conflict
+            mockFetchJson({
+                id: 67890,
+                code: 'WXYZ',
+                expiresAt: '2026-01-15T12:15:00Z',
+                authToken: null,
+                clientIdentifier: mockConfig.clientIdentifier,
+            });
+            const newPin = await auth.requestPin();
+            expect(newPin.id).toBe(67890);
         });
     });
 });

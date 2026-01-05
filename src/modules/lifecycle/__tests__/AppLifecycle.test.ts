@@ -225,7 +225,7 @@ describe('AppLifecycle', () => {
             expect(mockStateManager.save).toHaveBeenCalled();
         });
 
-        it('should include version number in saved state', async () => {
+        it('should include version number in restored or default state', async () => {
             await lifecycle.initialize();
             const savedState = (await lifecycle.restoreState()) || mockStateManager.createDefaultState();
 

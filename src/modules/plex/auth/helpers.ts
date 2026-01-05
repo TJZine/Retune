@@ -40,10 +40,17 @@ export class PlexApiError extends Error {
 
 /**
  * Generate a UUID v4.
+ * Uses crypto.randomUUID() when available (modern browsers, webOS 6.0+),
+ * falls back to Math.random() implementation for older environments.
  * @returns UUID string
  */
 function generateUUID(): string {
-    // Simple UUID v4 implementation for ES2017
+    // Use native crypto.randomUUID if available (modern browsers, webOS 6.0+)
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+
+    // Fallback: Simple UUID v4 implementation for ES2018
     const hex = '0123456789abcdef';
     let uuid = '';
     for (let i = 0; i < 36; i++) {

@@ -119,7 +119,12 @@ test-results/
 agent-memory/
 orchestration-docs/
 prompts/
-spec-pack/
+# 1. Ignore everything inside the folder
+spec-pack/*
+
+# 2. Un-ignore (keep) the specific file
+!spec-pack/artifact-2-shared-types.ts
+
 
 
 # Storybook

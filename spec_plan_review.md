@@ -33,13 +33,13 @@ Execute the following review phases IN ORDER. Do not skip phases.
 
 Run these commands from the repo root and paste results into the review. If any **FAIL**, stop and remediate before proceeding to Phase 1.
 
-### 0.1 Chromium 68 / ES2017 Syntax Guardrails
+### 0.1 Chromium 87 / ES2018 Syntax Guardrails
 
 ```bash
 # FAIL if any results (ES2020 operators)
 rg -n "\\?\\.|\\?\\?" spec-pack --glob "*.ts"
 
-# FAIL if any results (not available in Chromium 68)
+# FAIL if any results (not available in Chromium 87)
 rg -n "AbortSignal\\.timeout" spec-pack
 rg -n "\\.flat\\(" spec-pack
 ```

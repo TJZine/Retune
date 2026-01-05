@@ -26,7 +26,7 @@ export interface INavigationManager {
     // Focus Management
     setFocus(elementId: string): void;
     getFocusedElement(): FocusableElement | null;
-    moveFocus(direction: 'up' | 'down' | 'left' | 'right'): boolean;
+    moveFocus(direction: Direction): boolean;
 
     // Registration
     registerFocusable(element: FocusableElement): void;
@@ -70,7 +70,7 @@ export interface IFocusManager {
     focus(elementId: string): boolean;
     blur(): void;
     getElement(elementId: string): FocusableElement | null;
-    findNeighbor(fromId: string, direction: 'up' | 'down' | 'left' | 'right'): string | null;
+    findNeighbor(fromId: string, direction: Direction): string | null;
     saveFocusState(screenId: string): void;
     restoreFocusState(screenId: string): boolean;
     updateFocusRing(elementId: string): void;
@@ -90,6 +90,11 @@ export type RemoteButton =
     | 'num0' | 'num1' | 'num2' | 'num3' | 'num4'
     | 'num5' | 'num6' | 'num7' | 'num8' | 'num9'
     | 'info' | 'guide';
+
+/**
+ * Navigation direction for focus movement
+ */
+export type Direction = 'up' | 'down' | 'left' | 'right';
 
 /**
  * Processed key event

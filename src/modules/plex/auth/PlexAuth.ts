@@ -68,21 +68,17 @@ export class PlexAuth implements IPlexAuth {
 
     /**
      * Initiate Plex OAuth flow by requesting a PIN code.
-     * @returns PIN request containing 4-character code for user display
+     * @returns PIN request containing code for user display (length varies)
      * @throws {PlexApiError} On connection failure or rate limiting
      */
     public async requestPin(): Promise<PlexPinRequest> {
-        const url = PLEX_AUTH_CONSTANTS.PLEX_TV_BASE_URL + PLEX_AUTH_CONSTANTS.PIN_ENDPOINT;
+        const url = PLEX_AUTH_CONSTANTS.PLEX_TV_BASE_URL +
+            PLEX_AUTH_CONSTANTS.PIN_ENDPOINT + '?strong=true';
         const headers = buildRequestHeaders(this._state.config);
-        const body = {
-            strong: true,
-            'X-Plex-Product': this._state.config.product,
-        };
 
         const response = await fetchWithRetry(url, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(body),
         });
 
         const data = await response.json();
@@ -92,7 +88,7 @@ export class PlexAuth implements IPlexAuth {
     }
 
     /**
-     * Check if user has claimed the PIN at plex.tv/link.
+     * Check if user has claimed the PIN via the Plex auth app.
      * @param pinId - PIN ID from requestPin()
      * @returns Updated PIN request with authToken if claimed
      * @throws {PlexApiError} If PIN doesn't exist or on connection failure
@@ -141,6 +137,10 @@ export class PlexAuth implements IPlexAuth {
             } catch (error) {
                 if (error instanceof PlexApiError && !error.retryable) {
                     throw error;
+                }
+                // Log unexpected non-PlexApiError errors for debugging
+                if (!(error instanceof PlexApiError)) {
+                    console.warn('[PlexAuth] Unexpected error during PIN polling:', error);
                 }
                 // On network error, continue polling
             }
@@ -236,14 +236,7 @@ export class PlexAuth implements IPlexAuth {
             if (!stored) return null;
 
             const parsed: StoredAuthData = JSON.parse(stored);
-            if (parsed.version !== PLEX_AUTH_CONSTANTS.STORAGE_VERSION) return null;
-
-            const data = parsed.data;
-            data.token.issuedAt = new Date(data.token.issuedAt);
-            if (data.token.expiresAt !== null) {
-                data.token.expiresAt = new Date(data.token.expiresAt);
-            }
-            return data;
+            return this._parseStoredAuthData(parsed);
         } catch {
             return null;
         }
@@ -338,18 +331,32 @@ export class PlexAuth implements IPlexAuth {
             if (!stored) return;
 
             const parsed: StoredAuthData = JSON.parse(stored);
-            if (parsed.version !== PLEX_AUTH_CONSTANTS.STORAGE_VERSION) return;
+            const data = this._parseStoredAuthData(parsed);
+            if (!data) return;
 
-            const data = parsed.data;
-            data.token.issuedAt = new Date(data.token.issuedAt);
-            if (data.token.expiresAt !== null) {
-                data.token.expiresAt = new Date(data.token.expiresAt);
-            }
             this._state.currentToken = data.token;
             this._state.isValidated = false;
         } catch {
             // Ignore parse errors
         }
+    }
+
+    /**
+     * Parse stored auth data, converting date strings back to Date objects.
+     * @param parsed - The parsed JSON from storage
+     * @returns PlexAuthData with proper Date objects, or null if invalid
+     */
+    private _parseStoredAuthData(parsed: StoredAuthData): PlexAuthData | null {
+        if (parsed.version !== PLEX_AUTH_CONSTANTS.STORAGE_VERSION) {
+            return null;
+        }
+
+        const data = parsed.data;
+        data.token.issuedAt = new Date(data.token.issuedAt);
+        if (data.token.expiresAt !== null) {
+            data.token.expiresAt = new Date(data.token.expiresAt);
+        }
+        return data;
     }
 
     private _sleep(ms: number): Promise<void> {
