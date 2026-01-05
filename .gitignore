@@ -75,7 +75,9 @@ lerna-debug.log*
 .nuxt/
 
 # AI/Code analysis tool caches
+.codannaignore
 .codanna/
+.fastembed_cache
 .fastembed_cache/
 .mcp_sequential_thinking/
 
@@ -114,6 +116,11 @@ test-results/
 .local/
 *.local.ts
 *.local.js
+agent-memory/
+orchestration-docs/
+prompts/
+spec-pack/
+
 
 # Storybook
 storybook-static/

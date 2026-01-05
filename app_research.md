@@ -84,7 +84,7 @@ The architecture is a client-heavy approach; all scheduling logic and UI renderi
 
 | Layer/Component | Technology Choices | Rationale and Notes |
 | --- | --- | --- |
-| **UI Framework** | Enact (React) or React + Custom | Enact provides TV-optimized components (Sandstone) and is officially supported on webOS 4.0+. Accelerates development of focus management . |
+| **UI Framework** | Enact (React) or React + Custom | Enact provides TV-optimized components (Sandstone) and is officially supported on webOS 6.0+. Accelerates development of focus management . |
 | **State Management** | Redux or Context API | Predictable state container for complex interactions (guide data, player state). Must be optimized for performance . |
 | **Video Playback** | HTML5 `<video>` element | Leverages hardware decoding on TV. Native support for HLS and common codecs. Simpler than external players . |
 | **Plex API Comms** | Fetch/XHR with REST API | No official web SDK exists; direct HTTP calls using Plex API headers (X-Plex-Token, etc.) are required . |

@@ -8,7 +8,7 @@ export default [
             parser: tsParser,
             parserOptions: {
                 project: './tsconfig.eslint.json',
-                ecmaVersion: 2017,
+                ecmaVersion: 2018,
                 sourceType: 'module',
             },
         },

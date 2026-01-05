@@ -44,8 +44,8 @@ describe('RemoteHandler', () => {
             expect(remoteHandler.mapKeyCode(39)).toBe('right');
             expect(remoteHandler.mapKeyCode(403)).toBe('red');
             expect(remoteHandler.mapKeyCode(404)).toBe('green');
-            expect(remoteHandler.mapKeyCode(405)).toBe('blue');
-            expect(remoteHandler.mapKeyCode(406)).toBe('yellow');
+            expect(remoteHandler.mapKeyCode(405)).toBe('yellow');
+            expect(remoteHandler.mapKeyCode(406)).toBe('blue');
         });
 
         it('should map number keys correctly', () => {

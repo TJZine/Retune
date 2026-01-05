@@ -66,6 +66,15 @@ export class StateManager implements IStateManager {
      * @returns Loaded state, or null if not available/invalid
      */
     public async load(): Promise<PersistentState | null> {
+        return this.loadSync();
+    }
+
+    /**
+     * Load state synchronously from localStorage.
+     * Used by _buildCurrentState which cannot be async.
+     * @returns Loaded state, or null if not available/invalid
+     */
+    public loadSync(): PersistentState | null {
         try {
             const serialized = localStorage.getItem(this._storageKey);
             if (serialized === null) {

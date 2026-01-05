@@ -30,11 +30,11 @@ export const KEY_MAP: Map<number, RemoteButton> = new Map([
     [33, 'channelUp'],
     [34, 'channelDown'],
 
-    // Color buttons
+    // Color buttons (per webOS specification: 403=red, 404=green, 405=yellow, 406=blue)
     [403, 'red'],
     [404, 'green'],
-    [405, 'blue'],
-    [406, 'yellow'],
+    [405, 'yellow'],
+    [406, 'blue'],
 
     // Numbers 0-9 (48-57)
     [48, 'num0'],

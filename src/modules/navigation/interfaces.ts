@@ -35,7 +35,7 @@ export interface INavigationManager {
     unregisterFocusGroup(groupId: string): void;
 
     // Modals
-    openModal(modalId: string): void;
+    openModal(modalId: string, focusableIds?: string[]): void;
     closeModal(modalId?: string): void;
     isModalOpen(modalId?: string): boolean;
 
@@ -69,6 +69,7 @@ export interface INavigationManager {
 export interface IFocusManager {
     focus(elementId: string): boolean;
     blur(): void;
+    getElement(elementId: string): FocusableElement | null;
     findNeighbor(fromId: string, direction: 'up' | 'down' | 'left' | 'right'): string | null;
     saveFocusState(screenId: string): void;
     restoreFocusState(screenId: string): boolean;

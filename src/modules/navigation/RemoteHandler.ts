@@ -8,11 +8,7 @@
 
 import { EventEmitter } from '../../utils/EventEmitter';
 import { RemoteButton, KeyEvent } from './interfaces';
-import {
-    KEY_MAP,
-    LONG_PRESS_THRESHOLD_MS,
-    LONG_PRESS_DEBOUNCE_MS,
-} from './constants';
+import { KEY_MAP, LONG_PRESS_THRESHOLD_MS } from './constants';
 
 /**
  * Event map for RemoteHandler internal events.
@@ -223,10 +219,7 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
         });
 
         this.emit('longPress', { button });
-
-        // Add debounce to prevent immediate repeat
-        window.setTimeout(() => {
-            // Debounce complete, ready for next long press
-        }, LONG_PRESS_DEBOUNCE_MS);
+        // Note: Debounce is handled by _isLongPressFired flag which prevents
+        // re-triggering until keyup clears it.
     }
 }

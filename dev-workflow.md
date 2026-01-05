@@ -31,6 +31,12 @@
 | VirtualBox 6.x | Runs webOS emulator | <https://www.virtualbox.org> |
 | VS Code | Code editor | <https://code.visualstudio.com> |
 
+### Minimum Supported Platform
+
+- **Minimum Supported**: webOS 6.0 (2021+ LG B1/C1)
+- **Browser Engine**: Chromium 87
+- **Language Target**: ES2018 (avoid ES2020-only syntax like `?.` and `??`)
+
 ### webOS TV SDK Installation
 
 1. **Download the SDK** from LG Developer Portal
@@ -206,7 +212,7 @@ The emulator runs the **actual webOS environment** in a VM.
 **GUI Method:**
 
 1. Open webOS TV Emulator from Start Menu
-2. Select webOS version (recommend 6.0 for latest features)
+2. Select webOS version (minimum 6.0; use latest available for validation)
 3. Wait for boot (~30-60 seconds)
 
 **CLI Method:**
@@ -545,13 +551,14 @@ In Chrome DevTools:
 3. Take another snapshot
 4. Compare for memory growth
 
-**webOS Memory Limits:**
+**webOS Memory Limits (Legacy Context + Current Baseline):**
 
 | TV Model | Approximate Limit |
 | -------- | ----------------- |
-| 2019+ (webOS 4.5+) | ~300MB |
-| 2017-2018 (webOS 3.5-4.0) | ~200MB |
-| Older | ~150MB |
+| 2021+ (webOS 6.0+) | ~300MB |
+| 2019-2020 (webOS 4.5-5.0) | ~300MB (legacy context) |
+| 2017-2018 (webOS 3.5-4.0) | ~200MB (legacy context) |
+| Older | ~150MB (legacy context) |
 
 ### Render Performance
 

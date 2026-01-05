@@ -96,7 +96,7 @@ This specification defines a webOS application that transforms a user's Plex med
 
 | Category | Requirement |
 |----------|-------------|
-| **Platform** | LG webOS 4.0+ (2018+ LG Smart TVs) |
+| **Platform** | LG webOS 6.0+ (2021+ LG Smart TVs) |
 | **Backend** | Plex Media Server (user-authenticated) |
 | **Playback** | HLS preferred, direct play when possible |
 | **Schedule** | Deterministic, time-based, reproducible |
@@ -2081,7 +2081,7 @@ The Video Player Abstraction provides a unified interface for media playback on 
 
 ```yaml
 Assumptions:
-  - webOS 4.0+ provides HTML5 video element with HLS support
+  - webOS 6.0+ provides HTML5 video element with HLS support
   - Direct play streams from Plex are preferred (no transcoding)
   - Most content will be H.264/AAC in HLS or MP4 containers
   - Subtitle formats: SRT, VTT, PGS (image-based may require Plex burn-in)
@@ -3374,7 +3374,7 @@ async function build() {
     bundle: true,
     minify: process.env.NODE_ENV === 'production',
     sourcemap: process.env.NODE_ENV !== 'production',
-    target: ['es2018'],  // webOS 4.0 Chromium level
+    target: ['es2018'],  // webOS 6.0 Chromium level
     outfile: './dist/js/bundle.js',
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')

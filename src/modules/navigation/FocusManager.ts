@@ -57,6 +57,16 @@ export class FocusManager implements IFocusManager {
     }
 
     /**
+     * Get a registered focusable element by ID.
+     * @param elementId - The element ID to retrieve
+     * @returns The focusable element or null if not found
+     */
+    public getElement(elementId: string): FocusableElement | null {
+        const element = this._state.focusableElements.get(elementId);
+        return element !== undefined ? element : null;
+    }
+
+    /**
      * Register a focusable element.
      * @param element - The focusable element to register
      */

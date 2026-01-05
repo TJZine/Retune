@@ -405,7 +405,7 @@ Implement the following interface in TypeScript:
 
 ## Constraints
 
-- Target: webOS 4.0+ (Chromium 68)
+- Target: webOS 6.0+ (Chromium 87)
 - No external dependencies except: [list]
 - Must handle: [specific edge cases]
 
@@ -460,7 +460,7 @@ A checklist for validating the complete implementation:
 
 ## Platform Verification
 
-- [ ] Runs on webOS 4.0 emulator
+- [ ] Runs on webOS 6.0 emulator
 - [ ] Memory usage under 200MB after 1 hour
 - [ ] No console errors during normal operation
 

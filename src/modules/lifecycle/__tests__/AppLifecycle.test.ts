@@ -21,6 +21,7 @@ describe('AppLifecycle', () => {
         mockStateManager = {
             save: jest.fn().mockResolvedValue(undefined),
             load: jest.fn().mockResolvedValue(null),
+            loadSync: jest.fn().mockReturnValue(null),
             clear: jest.fn().mockResolvedValue(undefined),
             createDefaultState: jest.fn().mockReturnValue({
                 version: 1,

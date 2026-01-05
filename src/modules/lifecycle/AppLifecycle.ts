@@ -326,7 +326,16 @@ export class AppLifecycle implements IAppLifecycle {
      * @param phase - New phase
      */
     public setPhase(phase: AppPhase): void {
-        // Delegate to the async version but don't await (for backward compatibility)
+        // Synchronous validation to catch invalid transitions immediately
+        const validTransitions = VALID_PHASE_TRANSITIONS[this._phase];
+        if (validTransitions && !validTransitions.includes(phase)) {
+            // Log invalid transition attempt for debugging
+            console.warn(
+                `[AppLifecycle] Invalid phase transition: ${this._phase} -> ${phase}`
+            );
+            return;
+        }
+        // Delegate to the async version (now validated)
         this._transitionPhase(phase);
     }
 
@@ -640,6 +649,17 @@ export class AppLifecycle implements IAppLifecycle {
      * Build current state for saving.
      */
     private _buildCurrentState(): PersistentState {
-        return this._stateManager.createDefaultState();
+        // Load existing persisted state as baseline, or create default if none exists
+        const existingState =
+            this._stateManager.loadSync() ?? this._stateManager.createDefaultState();
+
+        // Return state with updated timestamp
+        // Note: Other modules (PlexAuth, ChannelManager) own their respective state.
+        // AppLifecycle persists the baseline; modules should call saveState after
+        // updating their portions via StateManager integration.
+        return {
+            ...existingState,
+            lastUpdated: Date.now(),
+        };
     }
 }

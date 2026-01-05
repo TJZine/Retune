@@ -77,6 +77,7 @@ export class NavigationManager
     private _pointerHideTimer: number | null = null;
     private _keyEventDisposable: IDisposable | null = null;
     private _isInitialized: boolean = false;
+    private _clickHandlers: Map<string, () => void> = new Map();
     private _channelInput: ChannelNumberInput = {
         digits: '',
         timeoutMs: 2000,
@@ -145,6 +146,13 @@ export class NavigationManager
             this._pointerHideTimer = null;
         }
 
+        // Clean up channel input timer
+        if (this._channelInput.timer !== null) {
+            window.clearTimeout(this._channelInput.timer);
+            this._channelInput.timer = null;
+        }
+        this._channelInput.digits = '';
+
         // Remove pointer mode listeners
         document.removeEventListener('mousemove', this._handlePointerMove);
         document.removeEventListener('click', this._handlePointerClick);
@@ -154,6 +162,9 @@ export class NavigationManager
             this._keyEventDisposable.dispose();
             this._keyEventDisposable = null;
         }
+
+        // Clear click handlers map
+        this._clickHandlers.clear();
 
         this._remoteHandler.destroy();
         this._focusManager.clear();
@@ -375,13 +386,15 @@ export class NavigationManager
     public registerFocusable(element: FocusableElement): void {
         this._focusManager.registerFocusable(element);
 
-        // Add click handler for pointer mode
-        element.element.addEventListener('click', () => {
+        // Create and store click handler for cleanup
+        const clickHandler = (): void => {
             this.setFocus(element.id);
             if (element.onSelect) {
                 element.onSelect();
             }
-        });
+        };
+        this._clickHandlers.set(element.id, clickHandler);
+        element.element.addEventListener('click', clickHandler);
     }
 
     /**
@@ -389,6 +402,15 @@ export class NavigationManager
      * @param elementId - The element ID to unregister
      */
     public unregisterFocusable(elementId: string): void {
+        // Remove stored click handler
+        const handler = this._clickHandlers.get(elementId);
+        if (handler) {
+            const element = this._focusManager.getElement(elementId);
+            if (element) {
+                element.element.removeEventListener('click', handler);
+            }
+            this._clickHandlers.delete(elementId);
+        }
         this._focusManager.unregisterFocusable(elementId);
     }
 
@@ -699,6 +721,8 @@ export class NavigationManager
         }
 
         // Root screen Back behavior per spec
+        // Using replaceScreen() to maintain standard navigation flow (input-block checks)
+        // without pushing to history, which is appropriate for root back transitions.
         const screen = this._state.currentScreen;
         switch (screen) {
             case 'player':
@@ -708,16 +732,12 @@ export class NavigationManager
                 break;
             case 'server-select':
                 // Navigate back to auth
-                this._state.screenStack.push(screen);
-                this._state.currentScreen = 'auth';
-                this.emit('screenChange', { from: screen, to: 'auth' });
+                this.replaceScreen('auth');
                 break;
             case 'settings':
             case 'channel-edit':
                 // Navigate to player
-                this._state.screenStack.push(screen);
-                this._state.currentScreen = 'player';
-                this.emit('screenChange', { from: screen, to: 'player' });
+                this.replaceScreen('player');
                 break;
             default:
                 // No action for other root screens

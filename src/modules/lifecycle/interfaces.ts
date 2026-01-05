@@ -183,14 +183,27 @@ export interface IStateManager {
     save(state: PersistentState): Promise<void>;
 
     /**
-     * Load state from localStorage.
+     * Load state from localStorage (async).
      * Applies migrations if needed.
      * @returns Loaded state, or null if not available
      */
     load(): Promise<PersistentState | null>;
 
     /**
+     * Load state synchronously from localStorage.
+     * Used when async is not possible.
+     * @returns Loaded state, or null if not available
+     */
+    loadSync(): PersistentState | null;
+
+    /**
      * Clear stored state.
      */
     clear(): Promise<void>;
+
+    /**
+     * Create a default persistent state.
+     * @returns Default state object
+     */
+    createDefaultState(): PersistentState;
 }

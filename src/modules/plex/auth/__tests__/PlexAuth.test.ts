@@ -60,7 +60,7 @@ describe('PlexAuth', () => {
         product: 'Retune',
         version: '1.0.0',
         platform: 'webOS',
-        platformVersion: '4.0',
+        platformVersion: '6.0',
         device: 'LG Smart TV',
         deviceName: 'Living Room TV',
     };

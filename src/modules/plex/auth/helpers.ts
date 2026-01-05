@@ -7,21 +7,10 @@
 
 import { PLEX_AUTH_CONSTANTS } from './constants';
 import { PlexAuthConfig, PlexAuthToken, PlexPinRequest } from './interfaces';
+import { AppErrorCode } from '../../lifecycle/types';
 
-// ============================================
-// AppErrorCode (from shared types)
-// ============================================
-
-/**
- * App error codes for consistent error handling.
- */
-export enum AppErrorCode {
-    SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
-    RATE_LIMITED = 'RATE_LIMITED',
-    RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
-    AUTH_INVALID = 'AUTH_INVALID',
-    AUTH_REQUIRED = 'AUTH_REQUIRED',
-}
+// Re-export AppErrorCode from canonical source for backward compatibility
+export { AppErrorCode } from '../../lifecycle/types';
 
 /**
  * Error class for Plex API errors.
@@ -194,6 +183,24 @@ export function sleep(ms: number): Promise<void> {
  * @throws PlexApiError for error statuses
  */
 export function handleResponseStatus(response: Response): void {
+    // Authentication errors - not retryable
+    if (response.status === 401) {
+        throw new PlexApiError(
+            AppErrorCode.AUTH_REQUIRED,
+            'Unauthorized: authentication required',
+            401,
+            false
+        );
+    }
+    if (response.status === 403) {
+        throw new PlexApiError(
+            AppErrorCode.AUTH_INVALID,
+            'Forbidden: access denied',
+            403,
+            false
+        );
+    }
+    // Rate limiting - retryable
     if (response.status === 429) {
         throw new PlexApiError(
             AppErrorCode.RATE_LIMITED,
@@ -202,6 +209,7 @@ export function handleResponseStatus(response: Response): void {
             true
         );
     }
+    // Not found - not retryable
     if (response.status === 404) {
         throw new PlexApiError(
             AppErrorCode.RESOURCE_NOT_FOUND,
@@ -210,6 +218,7 @@ export function handleResponseStatus(response: Response): void {
             false
         );
     }
+    // Server errors - retryable
     if (response.status >= 500) {
         throw new PlexApiError(
             AppErrorCode.SERVER_UNREACHABLE,

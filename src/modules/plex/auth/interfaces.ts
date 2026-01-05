@@ -23,7 +23,7 @@ export interface PlexAuthConfig {
     version: string;
     /** Platform identifier - always "webOS" */
     platform: string;
-    /** webOS version (e.g., "4.0", "5.0") */
+    /** webOS version (e.g., "6.0", "23") */
     platformVersion: string;
     /** Device type (e.g., "LG Smart TV") */
     device: string;
