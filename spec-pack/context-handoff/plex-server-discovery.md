@@ -8,6 +8,7 @@
 | Types | [artifact-2-shared-types.ts](../artifact-2-shared-types.ts) | `rg -n \"^export interface Plex(Server|Connection)\\b\" spec-pack/artifact-2-shared-types.ts` |
 | Module Spec | [modules/plex-server-discovery.md](../modules/plex-server-discovery.md) | Open the file (single-module SSOT) |
 | Implementation Prompt | [artifact-7-implementation-prompts.md](../artifact-7-implementation-prompts.md) | `rg -n \"^## Prompt 8 \\(V2\\): Plex Server Discovery Module\\b\" spec-pack/artifact-7-implementation-prompts.md` |
+| Operational Plan | [operational-plan-phase2.md](../operational-plan-phase2.md) | Phase 2 execution sequence and dependencies |
 
 ## Active Assumptions
 

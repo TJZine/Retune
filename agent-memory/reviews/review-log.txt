@@ -6,3 +6,9 @@
 2026-01-05T07:29:07Z | plex-auth | FAILED (Code Bug) | 3
 2026-01-05T07:34:28Z | plex-auth | FAILED (Code Bug) | 2
 2026-01-05T07:36:57Z | plex-auth | PASSED | 0
+2026-01-05T08:51:08Z | app-lifecycle | FAILED (Code Bug) | 5
+2026-01-05T10:12:27Z | app-lifecycle | FAILED (Code Bug) | 1
+2026-01-05T10:35:20Z | app-lifecycle | PASSED | 0
+2026-01-05T10:52:16Z | navigation | FAILED (Code Bug) | 5
+2026-01-05T11:06:56Z | navigation | FAILED (Code Bug) | 2
+2026-01-05T11:19:46Z | navigation | PASSED | 0

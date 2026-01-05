@@ -8,6 +8,7 @@
 | Types | [artifact-2-shared-types.ts](../artifact-2-shared-types.ts) | `rg -n \"^export interface Plex(MediaItem|Library|MediaFile)\\b\" spec-pack/artifact-2-shared-types.ts` |
 | Module Spec | [modules/plex-library.md](../modules/plex-library.md) | Open the file (single-module SSOT) |
 | Implementation Prompt | [artifact-7-implementation-prompts.md](../artifact-7-implementation-prompts.md) | `rg -n \"^## Prompt 9 \\(V2\\): Plex Library Module\\b\" spec-pack/artifact-7-implementation-prompts.md` |
+| Operational Plan | [operational-plan-phase2.md](../operational-plan-phase2.md) | Phase 2 execution sequence and dependencies |
 
 ## Active Assumptions
 
@@ -15,7 +16,7 @@
 2. **Image URLs**: Inject auth token as query parameter
 3. **Response format**: Always request JSON via `Accept: application/json` header
 4. **Rate limiting**: Respect ~100 req/min to plex.tv (informal)
-5. **Memory budget**: ~50MB maximum for library metadata cache
+5. **Memory budget**: ~3MB total (2MB cache + 1MB pagination buffer)
 
 ## Scope Boundaries
 
