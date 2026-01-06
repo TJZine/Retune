@@ -290,10 +290,10 @@ export class PlexAuth implements IPlexAuth {
         const token = this._state.currentToken
             ? this._state.currentToken.token
             : undefined;
-        const headers = buildRequestHeaders(this._state.config, token);
-        headers['X-Plex-Platform-Version'] = this._state.config.platformVersion;
-        headers['X-Plex-Device-Name'] = this._state.config.deviceName;
-        return headers;
+        return buildRequestHeaders(this._state.config, token, {
+            platformVersion: this._state.config.platformVersion,
+            deviceName: this._state.config.deviceName,
+        });
     }
 
     // ========================================
@@ -352,10 +352,23 @@ export class PlexAuth implements IPlexAuth {
         }
 
         const data = parsed.data;
-        data.token.issuedAt = new Date(data.token.issuedAt);
-        if (data.token.expiresAt !== null) {
-            data.token.expiresAt = new Date(data.token.expiresAt);
+
+        // Validate and convert issuedAt
+        const issuedAt = new Date(data.token.issuedAt);
+        if (isNaN(issuedAt.getTime())) {
+            return null;
         }
+        data.token.issuedAt = issuedAt;
+
+        // Validate and convert expiresAt if present
+        if (data.token.expiresAt !== null) {
+            const expiresAt = new Date(data.token.expiresAt);
+            if (isNaN(expiresAt.getTime())) {
+                return null;
+            }
+            data.token.expiresAt = expiresAt;
+        }
+
         return data;
     }
 

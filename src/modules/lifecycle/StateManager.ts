@@ -89,7 +89,11 @@ export class StateManager implements IStateManager {
             }
 
             return migrated as unknown as PersistentState;
-        } catch {
+        } catch (error) {
+            // Log parse errors in development for debugging
+            if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
+                console.warn('[StateManager] Load error:', error);
+            }
             return null;
         }
     }
@@ -166,16 +170,10 @@ export class StateManager implements IStateManager {
 
     /**
      * Perform storage cleanup to free space.
+     * Removes non-critical cached data defined in STORAGE_CONFIG.CLEANUP_KEYS.
      */
     private _performStorageCleanup(): void {
-        // Remove non-critical cached data
-        const nonCriticalKeys = [
-            'retune_focus_memory',
-            'retune_image_cache',
-            'retune_schedule_cache',
-        ];
-
-        for (const key of nonCriticalKeys) {
+        for (const key of STORAGE_CONFIG.CLEANUP_KEYS) {
             try {
                 localStorage.removeItem(key);
             } catch {

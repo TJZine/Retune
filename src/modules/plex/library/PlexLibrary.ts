@@ -1,0 +1,731 @@
+/**
+ * @fileoverview Plex Library implementation.
+ * Handles library browsing, content retrieval, and image URL generation.
+ * @module modules/plex/library/PlexLibrary
+ * @version 1.0.0
+ */
+
+import { EventEmitter } from '../../../utils/EventEmitter';
+import type { IDisposable } from '../../../utils/interfaces';
+import type { IPlexLibrary, PlexLibraryConfig } from './interfaces';
+import type {
+    PlexLibrary as PlexLibraryType,
+    PlexMediaItem,
+    PlexSeason,
+    PlexCollection,
+    PlexPlaylist,
+    LibraryQueryOptions,
+    SearchOptions,
+    PlexLibraryState,
+    PlexLibraryEvents,
+    PlexMediaContainer,
+    RawLibrarySection,
+    RawMediaItem,
+    RawSeason,
+    RawCollection,
+    RawPlaylist,
+} from './types';
+import { AppErrorCode } from './types';
+import {
+    parseLibrarySections,
+    parseMediaItems,
+    parseMediaItem,
+    parseSeasons,
+    parseCollections,
+    parsePlaylists,
+} from './ResponseParser';
+import { PLEX_LIBRARY_CONSTANTS, PLEX_ENDPOINTS, PLEX_MEDIA_TYPES } from './constants';
+
+// ============================================
+// Error Class
+// ============================================
+
+/**
+ * Plex Library error with typed error code.
+ */
+export class PlexLibraryError extends Error {
+    constructor(
+        public readonly code: AppErrorCode,
+        message: string,
+        public readonly httpStatus?: number
+    ) {
+        super(message);
+        this.name = 'PlexLibraryError';
+    }
+}
+
+// Re-export for consumers
+export { AppErrorCode };
+
+// ============================================
+// Main Class
+// ============================================
+
+/**
+ * Plex Library implementation.
+ * Provides access to Plex media libraries and content.
+ * @implements {IPlexLibrary}
+ */
+export class PlexLibrary implements IPlexLibrary {
+    private readonly _config: PlexLibraryConfig;
+    private readonly _emitter: EventEmitter<PlexLibraryEvents>;
+    private readonly _state: PlexLibraryState;
+
+    /**
+     * Create a new PlexLibrary instance.
+     * @param config - Configuration with auth and server URI getters
+     */
+    constructor(config: PlexLibraryConfig) {
+        this._config = config;
+        this._emitter = new EventEmitter<PlexLibraryEvents>();
+        this._state = {
+            libraryCache: new Map(),
+            isRefreshing: false,
+        };
+    }
+
+    // ============================================
+    // Library Sections
+    // ============================================
+
+    /**
+     * Get all libraries.
+     * @returns Promise resolving to list of libraries
+     */
+    async getLibraries(): Promise<PlexLibraryType[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTIONS);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawLibrarySection>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const directories = response.MediaContainer.Directory || [];
+        const libraries = parseLibrarySections(directories);
+
+        // Cache all libraries
+        const now = Date.now();
+        for (const lib of libraries) {
+            this._state.libraryCache.set(lib.id, { library: lib, cachedAt: now });
+        }
+
+        return libraries;
+    }
+
+    /**
+     * Get a specific library by ID.
+     * @param libraryId - Library section ID
+     * @returns Promise resolving to library or null if not found
+     */
+    async getLibrary(libraryId: string): Promise<PlexLibraryType | null> {
+        // Check cache first
+        const cached = this._state.libraryCache.get(libraryId);
+        if (cached && Date.now() - cached.cachedAt < PLEX_LIBRARY_CONSTANTS.CACHE_TTL_MS) {
+            return cached.library;
+        }
+
+        // Fetch all libraries (they come as a batch)
+        const libraries = await this.getLibraries();
+        return libraries.find((lib) => lib.id === libraryId) ?? null;
+    }
+
+    // ============================================
+    // Content Browsing
+    // ============================================
+
+    /**
+     * Get items from a library with optional filtering.
+     * Handles pagination transparently.
+     * @param libraryId - Library section ID
+     * @param options - Optional query options
+     * @returns Promise resolving to list of media items
+     */
+    async getLibraryItems(
+        libraryId: string,
+        options: LibraryQueryOptions = {}
+    ): Promise<PlexMediaItem[]> {
+        const items: PlexMediaItem[] = [];
+        let offset = options.offset ?? 0;
+        const pageSize = options.limit ?? PLEX_LIBRARY_CONSTANTS.DEFAULT_PAGE_SIZE;
+        let hasMore = true;
+
+        while (hasMore) {
+            const params: Record<string, string | number> = {
+                'X-Plex-Container-Start': offset,
+                'X-Plex-Container-Size': pageSize,
+            };
+
+            if (options.sort) {
+                params['sort'] = options.sort;
+            }
+
+            if (options.filter) {
+                Object.assign(params, options.filter);
+            }
+
+            if (options.includeCollections) {
+                params['includeCollections'] = 1;
+            }
+
+            const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
+            const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+            if (!response) {
+                break; // Empty/error response, stop pagination
+            }
+
+            const metadata = response.MediaContainer.Metadata || [];
+            const pageItems = parseMediaItems(metadata);
+
+            items.push(...pageItems);
+            offset += pageItems.length;
+
+            // Stop if we got fewer items than requested (last page)
+            // or if we've reached the user-specified limit
+            hasMore =
+                pageItems.length === pageSize &&
+                (!options.limit || items.length < options.limit);
+        }
+
+        // Trim to exact limit if specified
+        if (options.limit && items.length > options.limit) {
+            return items.slice(0, options.limit);
+        }
+
+        return items;
+    }
+
+    /**
+     * Get a specific media item by rating key.
+     * @param ratingKey - Item's unique rating key
+     * @returns Promise resolving to item or null if not found
+     */
+    async getItem(ratingKey: string): Promise<PlexMediaItem | null> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA(ratingKey));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return null;
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        if (metadata.length === 0) {
+            return null;
+        }
+
+        return parseMediaItem(metadata[0]!);
+    }
+
+    // ============================================
+    // TV Show Hierarchy
+    // ============================================
+
+    /**
+     * Get TV shows within a library.
+     * @param libraryId - Library section ID (must be a show library)
+     * @returns Promise resolving to list of shows
+     */
+    async getShows(libraryId: string): Promise<PlexMediaItem[]> {
+        const params = {
+            type: PLEX_MEDIA_TYPES.SHOW,
+        };
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseMediaItems(metadata);
+    }
+
+    /**
+     * Get seasons for a show.
+     * @param showKey - Show's rating key
+     * @returns Promise resolving to list of seasons
+     */
+    async getShowSeasons(showKey: string): Promise<PlexSeason[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA_CHILDREN(showKey));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawSeason>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseSeasons(metadata);
+    }
+
+    /**
+     * Get episodes for a season.
+     * @param seasonKey - Season's rating key
+     * @returns Promise resolving to list of episodes
+     */
+    async getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA_CHILDREN(seasonKey));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseMediaItems(metadata);
+    }
+
+    /**
+     * Get all episodes for a show (flattened across all seasons).
+     * @param showKey - Show's rating key
+     * @returns Promise resolving to all episodes sorted by season/episode
+     */
+    async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
+        // Get all seasons
+        const seasons = await this.getShowSeasons(showKey);
+
+        // Fetch episodes for each season in parallel
+        const episodePromises = seasons.map((season) =>
+            this.getSeasonEpisodes(season.ratingKey)
+        );
+        const episodeArrays = await Promise.all(episodePromises);
+
+        // Flatten and sort by season/episode number
+        const allEpisodes = episodeArrays.flat();
+        return allEpisodes.sort((a, b) => {
+            const aSeason = typeof a.seasonNumber === 'number' ? a.seasonNumber : 0;
+            const bSeason = typeof b.seasonNumber === 'number' ? b.seasonNumber : 0;
+            const seasonDiff = aSeason - bSeason;
+            if (seasonDiff !== 0) return seasonDiff;
+
+            const aEpisode = typeof a.episodeNumber === 'number' ? a.episodeNumber : 0;
+            const bEpisode = typeof b.episodeNumber === 'number' ? b.episodeNumber : 0;
+            return aEpisode - bEpisode;
+        });
+    }
+
+    // ============================================
+    // Search
+    // ============================================
+
+    /**
+     * Search for content across libraries.
+     * @param query - Search query string
+     * @param options - Optional search options
+     * @returns Promise resolving to matching items
+     */
+    async search(query: string, options: SearchOptions = {}): Promise<PlexMediaItem[]> {
+        const params: Record<string, string | number> = {
+            query,
+        };
+
+        if (options.libraryId) {
+            params['sectionId'] = options.libraryId;
+        }
+
+        if (options.limit) {
+            params['limit'] = options.limit;
+        }
+
+        const url = this._buildUrl(PLEX_ENDPOINTS.SEARCH, params);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        // Search results come in "Hubs" - extract items from all hubs
+        const hubs = response.MediaContainer.Hub || [];
+        const items: PlexMediaItem[] = [];
+
+        for (const hub of hubs) {
+            // Filter by types if specified
+            if (options.types && options.types.length > 0) {
+                const hubType = this._mapHubTypeToMediaType(hub.type);
+                if (hubType && !options.types.includes(hubType)) {
+                    continue;
+                }
+            }
+
+            const metadata = (hub as unknown as { Metadata?: RawMediaItem[] }).Metadata || [];
+            items.push(...parseMediaItems(metadata));
+        }
+
+        return items;
+    }
+
+    // ============================================
+    // Collections/Playlists
+    // ============================================
+
+    /**
+     * Get collections in a library.
+     * @param libraryId - Library section ID
+     * @returns Promise resolving to list of collections
+     */
+    async getCollections(libraryId: string): Promise<PlexCollection[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_COLLECTIONS(libraryId));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseCollections(metadata);
+    }
+
+    /**
+     * Get items in a collection.
+     * @param collectionKey - Collection's rating key
+     * @returns Promise resolving to list of items
+     */
+    async getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.COLLECTION_CHILDREN(collectionKey));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseMediaItems(metadata);
+    }
+
+    /**
+     * Get user playlists.
+     * @returns Promise resolving to list of playlists
+     */
+    async getPlaylists(): Promise<PlexPlaylist[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.PLAYLISTS);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawPlaylist>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parsePlaylists(metadata);
+    }
+
+    /**
+     * Get items in a playlist.
+     * @param playlistKey - Playlist's rating key
+     * @returns Promise resolving to list of items
+     */
+    async getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]> {
+        const url = this._buildUrl(PLEX_ENDPOINTS.PLAYLIST_ITEMS(playlistKey));
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+
+        if (!response) {
+            return [];
+        }
+
+        const metadata = response.MediaContainer.Metadata || [];
+        return parseMediaItems(metadata);
+    }
+
+    // ============================================
+    // Image URLs
+    // ============================================
+
+    /**
+     * Generate authenticated URL for Plex images.
+     * @param imagePath - Image path from Plex metadata
+     * @param width - Optional resize width
+     * @param height - Optional resize height (defaults to width)
+     * @returns Full URL with authentication token
+     */
+    getImageUrl(imagePath: string, width?: number, height?: number): string {
+        if (!imagePath) return '';
+
+        const serverUri = this._config.getServerUri();
+        if (!serverUri) return '';
+
+        const token = this._config.getAuthToken() || '';
+        const params = new URLSearchParams({ 'X-Plex-Token': token });
+
+        if (typeof width === 'number' && width > 0) {
+            // Use photo transcoder for resizing
+            const resizeHeight = typeof height === 'number' ? height : width;
+            params.set('width', String(width));
+            params.set('height', String(resizeHeight));
+            params.set('url', imagePath);
+            return `${serverUri}${PLEX_ENDPOINTS.PHOTO_TRANSCODE}?${params.toString()}`;
+        }
+
+        // Direct image URL
+        return `${serverUri}${imagePath}?${params.toString()}`;
+    }
+
+    // ============================================
+    // Refresh
+    // ============================================
+
+    /**
+     * Refresh cached library data.
+     * Invalidates cache and emits libraryRefreshed event.
+     * @param libraryId - Library section ID to refresh
+     */
+    async refreshLibrary(libraryId: string): Promise<void> {
+        // Invalidate cache for this library
+        this._state.libraryCache.delete(libraryId);
+
+        // Re-fetch the library
+        await this.getLibrary(libraryId);
+
+        // Emit refresh event
+        this._emitter.emit('libraryRefreshed', { libraryId });
+    }
+
+    // ============================================
+    // Events
+    // ============================================
+
+    /**
+     * Register an event handler.
+     * @param event - Event name
+     * @param handler - Handler function
+     * @returns Disposable to remove handler
+     */
+    on<K extends keyof PlexLibraryEvents>(
+        event: K,
+        handler: (payload: PlexLibraryEvents[K]) => void
+    ): IDisposable {
+        return this._emitter.on(event, handler);
+    }
+
+    // ============================================
+    // Private Methods
+    // ============================================
+
+    /**
+     * Build a full URL with query parameters.
+     * @param endpoint - API endpoint path
+     * @param params - Optional query parameters
+     * @returns Full URL string
+     */
+    private _buildUrl(endpoint: string, params: Record<string, string | number> = {}): string {
+        const serverUri = this._config.getServerUri();
+        if (!serverUri) {
+            throw new PlexLibraryError(
+                AppErrorCode.SERVER_UNREACHABLE,
+                'No server URI available'
+            );
+        }
+
+        const url = new URL(endpoint, serverUri);
+
+        for (const [key, value] of Object.entries(params)) {
+            url.searchParams.set(key, String(value));
+        }
+
+        return url.toString();
+    }
+
+    /**
+     * Fetch with retry and error handling per spec requirements.
+     * 
+     * Error handling:
+     * - Network timeout: NETWORK_TIMEOUT, retry with exponential backoff (max 3)
+     * - 401 Unauthorized: AUTH_EXPIRED, emit event, no retry
+     * - 404 Not Found: return null, log warning
+     * - 429 Rate Limited: backoff per Retry-After header
+     * - 500+ Server Error: retry once after 2s delay
+     * - Empty response: return null, log warning
+     * - Parse error: return null, log error with response body
+     * - Server unreachable: trigger re-discovery hook
+     * 
+     * @param url - URL to fetch
+     * @param options - Optional fetch options
+     * @returns Parsed JSON response or null for 404/empty/parse errors
+     */
+    private async _fetchWithRetry<T>(
+        url: string,
+        options: RequestInit = {}
+    ): Promise<T | null> {
+        const logger = this._config.logger ?? { warn: console.warn, error: console.error };
+        let timeoutRetries = 0;
+        let serverErrorRetried = false;
+
+        while (true) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(
+                    () => controller.abort(),
+                    PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
+                );
+
+                let response: Response;
+                try {
+                    response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            Accept: 'application/json',
+                            ...this._config.getAuthHeaders(),
+                            ...options.headers,
+                        },
+                        signal: controller.signal,
+                    });
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+
+                // Handle 401 Unauthorized - emit event, no retry
+                if (response.status === 401) {
+                    this._emitter.emit('authExpired', undefined as unknown as void);
+                    throw new PlexLibraryError(
+                        AppErrorCode.AUTH_EXPIRED,
+                        'Authentication expired',
+                        401
+                    );
+                }
+
+                // Handle 429 Rate Limited - backoff per Retry-After
+                if (response.status === 429) {
+                    const retryAfterHeader = response.headers.get('Retry-After');
+                    const retryAfter = retryAfterHeader
+                        ? parseInt(retryAfterHeader, 10)
+                        : PLEX_LIBRARY_CONSTANTS.DEFAULT_RATE_LIMIT_DELAY;
+                    await this._delay(retryAfter * 1000);
+                    continue;
+                }
+
+                // Handle 404 Not Found - return null, log warning
+                if (response.status === 404) {
+                    logger.warn(`[PlexLibrary] 404 Not Found: ${url}`);
+                    return null;
+                }
+
+                // Handle 500+ Server Error - retry once after 2s delay
+                if (response.status >= 500) {
+                    if (!serverErrorRetried) {
+                        serverErrorRetried = true;
+                        logger.warn(`[PlexLibrary] Server error ${response.status}, retrying after 2s...`);
+                        await this._delay(PLEX_LIBRARY_CONSTANTS.SERVER_ERROR_RETRY_DELAY);
+                        continue;
+                    }
+                    throw new PlexLibraryError(
+                        AppErrorCode.SERVER_ERROR,
+                        `HTTP ${response.status}`,
+                        response.status
+                    );
+                }
+
+                // Handle other non-OK responses
+                if (!response.ok) {
+                    throw new PlexLibraryError(
+                        AppErrorCode.SERVER_ERROR,
+                        `HTTP ${response.status}`,
+                        response.status
+                    );
+                }
+
+                // Parse response with error handling
+                let data: T;
+                let text = '';
+                try {
+                    text = await response.text();
+
+                    // Handle empty response
+                    if (!text || text.trim() === '') {
+                        logger.warn(`[PlexLibrary] Empty response from: ${url}`);
+                        return null;
+                    }
+
+                    data = JSON.parse(text) as T;
+                } catch (parseError) {
+                    // Include response body in parse error log per spec
+                    logger.error(`[PlexLibrary] Parse error for ${url}:`, parseError, `Response body: ${text.substring(0, 500)}`);
+                    return null;
+                }
+
+                // Check for empty MediaContainer
+                const container = data as { MediaContainer?: { Metadata?: unknown[]; Directory?: unknown[] } };
+                if (container.MediaContainer) {
+                    const hasContent =
+                        (container.MediaContainer.Metadata && container.MediaContainer.Metadata.length > 0) ||
+                        (container.MediaContainer.Directory && container.MediaContainer.Directory.length > 0);
+                    if (!hasContent && !container.MediaContainer.Metadata && !container.MediaContainer.Directory) {
+                        // Empty container without arrays is still valid
+                    }
+                }
+
+                return data;
+
+            } catch (error) {
+                // Handle timeout/abort errors - retry with exponential backoff
+                if (error instanceof Error && error.name === 'AbortError') {
+                    if (timeoutRetries < PLEX_LIBRARY_CONSTANTS.MAX_TIMEOUT_RETRIES) {
+                        const delay = PLEX_LIBRARY_CONSTANTS.TIMEOUT_RETRY_DELAYS[timeoutRetries] ?? 4000;
+                        logger.warn(`[PlexLibrary] Network timeout, retry ${timeoutRetries + 1}/${PLEX_LIBRARY_CONSTANTS.MAX_TIMEOUT_RETRIES} after ${delay}ms`);
+                        timeoutRetries++;
+                        await this._delay(delay);
+                        continue;
+                    }
+                    throw new PlexLibraryError(
+                        AppErrorCode.NETWORK_TIMEOUT,
+                        'Network timeout after max retries'
+                    );
+                }
+
+                // Don't retry auth errors
+                if (error instanceof PlexLibraryError && error.code === AppErrorCode.AUTH_EXPIRED) {
+                    throw error;
+                }
+
+                // Server unreachable - trigger re-discovery
+                if (error instanceof TypeError ||
+                    (error instanceof Error && error.message.includes('fetch'))) {
+                    this._config.onServerUnreachable?.();
+                    throw new PlexLibraryError(
+                        AppErrorCode.SERVER_UNREACHABLE,
+                        error instanceof Error ? error.message : 'Server unreachable'
+                    );
+                }
+
+                // Re-throw PlexLibraryError as-is
+                if (error instanceof PlexLibraryError) {
+                    throw error;
+                }
+
+                // Unknown error - trigger re-discovery and throw
+                this._config.onServerUnreachable?.();
+                throw new PlexLibraryError(
+                    AppErrorCode.SERVER_UNREACHABLE,
+                    error instanceof Error ? error.message : 'Unknown error'
+                );
+            }
+        }
+    }
+
+    /**
+     * Delay for a specified time.
+     * @param ms - Milliseconds to delay
+     */
+    private _delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Map hub type to media type.
+     * @param hubType - Hub type string from search results
+     * @returns Corresponding media type or undefined
+     */
+    private _mapHubTypeToMediaType(hubType: string): PlexMediaItem['type'] | undefined {
+        switch (hubType) {
+            case 'movie':
+                return 'movie';
+            case 'episode':
+            case 'show':
+                return 'episode';
+            case 'track':
+            case 'artist':
+            case 'album':
+                return 'track';
+            case 'clip':
+                return 'clip';
+            default:
+                return undefined;
+        }
+    }
+}

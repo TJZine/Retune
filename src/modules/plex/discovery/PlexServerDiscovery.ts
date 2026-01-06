@@ -36,6 +36,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     private _emitter: EventEmitter<PlexServerDiscoveryEvents>;
     private _getAuthHeaders: () => Record<string, string>;
     private _mixedContentConfig: MixedContentConfig;
+    private _pendingServerId?: string;
 
     /**
      * Create a new PlexServerDiscovery instance.
@@ -423,20 +424,21 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * Register handler for server or connection change events.
      * @param event - Event name
      * @param handler - Handler function
+     * @returns Disposable to remove the handler
      */
     public on(
         event: 'serverChange',
         handler: (server: PlexServer | null) => void
-    ): void;
+    ): { dispose: () => void };
     public on(
         event: 'connectionChange',
         handler: (uri: string | null) => void
-    ): void;
+    ): { dispose: () => void };
     public on(
         event: 'serverChange' | 'connectionChange',
         handler: ((server: PlexServer | null) => void) | ((uri: string | null) => void)
-    ): void {
-        this._emitter.on(event, handler as (payload: unknown) => void);
+    ): { dispose: () => void } {
+        return this._emitter.on(event, handler as (payload: unknown) => void);
     }
 
     // ============================================
@@ -569,21 +571,16 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             // Just note that there's a saved selection; actual restoration
             // happens in initialize() when we have server data
             if (savedServerId) {
-                // Store for async restoration
-                (this as { _pendingServerId?: string })._pendingServerId = savedServerId;
+                this._pendingServerId = savedServerId;
             }
         } catch {
             // localStorage not available
         }
     }
 
-    /**
-     * Restore saved server selection asynchronously.
-     */
     private async _restoreSelectionAsync(): Promise<void> {
-        const pendingId = (this as { _pendingServerId?: string })._pendingServerId;
-        if (pendingId && this._state.servers.length > 0) {
-            await this.selectServer(pendingId);
+        if (this._pendingServerId && this._state.servers.length > 0) {
+            await this.selectServer(this._pendingServerId);
         }
     }
 }

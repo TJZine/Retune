@@ -12,6 +12,12 @@ export const STORAGE_CONFIG = {
     STATE_KEY: 'retune_app_state',
     /** Current state schema version */
     STATE_VERSION: 1,
+    /** Non-critical keys to remove on quota cleanup */
+    CLEANUP_KEYS: [
+        'retune_focus_memory',
+        'retune_image_cache',
+        'retune_schedule_cache',
+    ],
 } as const;
 
 /**

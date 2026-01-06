@@ -251,7 +251,9 @@ describe('PlexServerDiscovery', () => {
         });
 
         it('should timeout after 5 seconds', async () => {
-            // Mock fetch that rejects after abort
+            jest.useFakeTimers();
+
+            // Mock fetch that never resolves until aborted
             (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation((_url: string, options: RequestInit) => {
                 return new Promise((_resolve, reject) => {
                     if (options.signal) {
@@ -268,12 +270,16 @@ describe('PlexServerDiscovery', () => {
 
             const promise = discovery.testConnection(mockServer, mockConnection);
 
-            // Wait for the actual timeout (5 seconds) to trigger
+            // Advance timers past the 5-second timeout
+            jest.advanceTimersByTime(5100);
+
             const lat = await promise;
 
-            // AbortController should have aborted the request - latency is null on failure
+            // AbortController should have aborted the request
             expect(lat).toBeNull();
-        }, 10000); // Extend test timeout to 10 seconds
+
+            jest.useRealTimers();
+        });
 
         it('should call identity endpoint', async () => {
             mockFetchJson({ machineIdentifier: 'test' });

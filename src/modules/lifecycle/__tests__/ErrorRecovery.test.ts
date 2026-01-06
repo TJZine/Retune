@@ -203,6 +203,15 @@ describe('ErrorRecovery', () => {
             expect(error.recoverable).toBe(false);
         });
 
+        it('should set recoverable to false for DATA_CORRUPTION', () => {
+            const error = recovery.createError(
+                AppErrorCode.DATA_CORRUPTION,
+                'Data corrupted'
+            );
+
+            expect(error.recoverable).toBe(false);
+        });
+
         it('should set recoverable to true for recoverable errors', () => {
             const error = recovery.createError(
                 AppErrorCode.NETWORK_TIMEOUT,
@@ -226,20 +235,20 @@ describe('ErrorRecovery', () => {
 
         it('should return user-friendly message for NETWORK_TIMEOUT', () => {
             const message = recovery.getUserMessage(AppErrorCode.NETWORK_TIMEOUT);
-            // Falls through to default "An error occurred" message
-            expect(message).toBeTruthy();
+            // Falls through to default message
+            expect(message).toBe('An error occurred. Please try again.');
         });
 
         it('should return user-friendly message for AUTH_REQUIRED', () => {
             const message = recovery.getUserMessage(AppErrorCode.AUTH_REQUIRED);
-            // Falls through to default "An error occurred" message
-            expect(message).toBeTruthy();
+            // Maps to AUTH_EXPIRED message per error handling design
+            expect(message).toBe('Please sign in again');
         });
 
         it('should return user-friendly message for SERVER_UNREACHABLE', () => {
             const message = recovery.getUserMessage(AppErrorCode.SERVER_UNREACHABLE);
-            // Falls through to default "An error occurred" message
-            expect(message).toBeTruthy();
+            // Explicitly maps to PLEX_UNREACHABLE message
+            expect(message).toBe('Cannot connect to Plex server');
         });
 
         it('should return generic message for unknown error codes', () => {
@@ -263,17 +272,15 @@ describe('ErrorRecovery', () => {
 
             // Execute Sign In action
             const signInAction = actions.find(a => a.label === 'Sign In');
-            if (signInAction) {
-                await recovery.executeRecovery(signInAction);
-            }
+            expect(signInAction).toBeDefined();
+            await recovery.executeRecovery(signInAction!);
 
             expect(onSignIn).toHaveBeenCalled();
 
             // Execute Exit action
             const exitAction = actions.find(a => a.label === 'Exit');
-            if (exitAction) {
-                await recovery.executeRecovery(exitAction);
-            }
+            expect(exitAction).toBeDefined();
+            await recovery.executeRecovery(exitAction!);
 
             expect(onExit).toHaveBeenCalled();
         });

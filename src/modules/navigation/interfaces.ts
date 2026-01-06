@@ -4,9 +4,8 @@
  * @version 1.0.0
  */
 
-// Re-export navigation interfaces from shared types
-// These are defined in spec-pack/artifact-2-shared-types.ts
-// and will be available in src/types once the types package is built.
+// Navigation module interfaces - local definitions matching the shared type surface.
+// These mirror the contracts in spec-pack/artifact-2-shared-types.ts.
 
 /**
  * Navigation Manager Interface
@@ -203,6 +202,7 @@ export interface FocusGroup {
  * Navigation events
  */
 export interface NavigationEventMap {
+    /** Index signature required for EventEmitter compatibility */
     [key: string]: unknown;
     keyPress: KeyEvent;
     screenChange: { from: Screen; to: Screen };

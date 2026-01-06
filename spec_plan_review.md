@@ -1,5 +1,25 @@
 # The Review Prompt
 
+## Table of Contents
+
+- [Role & Objective](#role--objective)
+- [Phase 0: Fail-Fast Sweeps](#phase-0-retune-fail-fast-sweeps-repo-specific)
+- [Phase 1: Structural Completeness](#phase-1-structural-completeness-audit)
+- [Phase 2: Type System Integrity](#phase-2-type-system-integrity)
+- [Phase 3: Interface Contract Validation](#phase-3-interface-contract-validation)
+- [Phase 4: Dependency & Integration Analysis](#phase-4-dependency--integration-analysis)
+- [Phase 5: Implementability Assessment](#phase-5-implementability-assessment)
+- [Phase 6: Test Specification Quality](#phase-6-test-specification-quality)
+- [Phase 7: Implementation Prompt Quality](#phase-7-implementation-prompt-quality)
+- [Phase 8: Cross-Reference Validation](#phase-8-cross-reference-validation)
+- [Phase 9: AI Implementation Readiness](#phase-9-ai-implementation-readiness)
+- [Phase 10: Orchestration Workflow Validation](#phase-10-orchestration-workflow-validation)
+- [Output Format](#output-format)
+- [Scoring Criteria](#scoring-criteria)
+- [Meta Development Workflow](#meta-development-workflow)
+
+---
+
 ## ROLE & OBJECTIVE
 
 You are a Senior Technical Reviewer and Quality Assurance Architect specializing in implementation specifications for AI coding agents. Your task is to perform a comprehensive review of a generated Spec Pack, identify gaps and inconsistencies, and provide specific, actionable improvements.
@@ -92,14 +112,14 @@ Check that ALL required artifacts exist:
 
 | Artifact | Status | Notes |
 | :--- | :--- | :--- |
-| Dependency Graph (JSON) | ✅ Present / ❌ Missing / ⚠️ Incomplete | |
-| Shared Types Package | ✅ / ❌ / ⚠️ | |
-| Module Specs (list each) | ✅ / ❌ / ⚠️ | |
-| Integration Contracts | ✅ / ❌ / ⚠️ | |
-| Configuration Spec | ✅ / ❌ / ⚠️ | |
-| File Manifest | ✅ / ❌ / ⚠️ | |
-| Implementation Prompts | ✅ / ❌ / ⚠️ | |
-| Verification Checklist | ✅ / ❌ / ⚠️ | |
+| Dependency Graph (JSON) | ✅ Present / ❌ Missing / ⚠️ Incomplete | *Fill with actual status* |
+| Shared Types Package | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| Module Specs (list each) | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| Integration Contracts | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| Configuration Spec | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| File Manifest | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| Implementation Prompts | ✅ / ❌ / ⚠️ | *Fill with actual status* |
+| Verification Checklist | ✅ / ❌ / ⚠️ | *Fill with actual status* |
 
 ### 1.2 Module Coverage Check
 
@@ -118,6 +138,8 @@ Structural Completeness: [XX]%
 ```
 
 **GATE**: If Structural Completeness < 80%, STOP and list missing items before continuing.
+
+> **Gate Escalation**: When a gate fails, document the specific gaps in the Issue Registry as BLOCKING issues. Do not proceed until gaps are resolved or explicitly waived by the project owner.
 
 ---
 
@@ -325,7 +347,9 @@ Scan specs for ambiguous language and unclear requirements:
 
 | ID | Location | Ambiguous Text | Impact | Clarification Needed |
 | :--- | :--- | :--- | :--- | :--- |
-| A001 | scheduler.spec.md:123 | "handle edge cases appropriately" | High | List specific edge cases |
+| A001 | scheduler.spec.md:123 | "handle edge cases appropriately" | High | List specific edge cases and handling strategy |
+
+> **Note**: Some phrases like "as needed" may be acceptable when bounded by explicit conditions in surrounding context. Flag only when the phrase introduces genuine ambiguity.
 
 ### 5.2 Missing Algorithm Specifications
 
@@ -666,7 +690,7 @@ Verify session persistence for cross-session context:
 | `prompts/agent-memory-system.md` defines memory format | ✅/❌ | |
 | `agent-memory/` directory structure specified | ✅/❌ | |
 | Session JSON format defined with required fields | ✅/❌ | |
-| Session markdown format defined for human readability | ✅/❌ | |
+| Session Markdown format defined for human readability | ✅/❌ | |
 | `coding-agent.md` references agent memory system | ✅/❌ | |
 | Previous attempt context available to retry sessions | ✅/❌ | |
 | Memory retention policy defined | ✅/❌ | |
@@ -1034,14 +1058,23 @@ GATE: Do not proceed to implementation if ANY identified issue remains unresolve
 Exception: Only if user EXPLICITLY approves deferral with documented rationale.
 ```
 
-**Anti-Pattern Detection**:
-Flag and reject responses that contain:
+> **Deferral Documentation**: When deferring an issue, create a `DEFERRED-001` entry in the Issue Registry with:
+>
+> - Rationale for deferral
+> - Who approved the deferral
+> - Planned resolution timeline
+> - Impact assessment if not resolved
 
-- "Address remaining issues during implementation"
-- "The coding agent can decide..."
-- "Left as implementation detail"
-- "Minor fixes can be done later"
-- "Suggestions are optional improvements"
+**Anti-Pattern Detection**:
+Flag and reject responses that contain these patterns (and their acceptable alternatives):
+
+| Anti-Pattern | Why It's Bad | Acceptable Alternative |
+| :--- | :--- | :--- |
+| "Address remaining issues during implementation" | Defers decisions to wrong phase | "All issues resolved in this pass" |
+| "The coding agent can decide..." | Creates non-deterministic output | Specify the decision explicitly |
+| "Left as implementation detail" | Ambiguity for coding agent | Provide explicit specification |
+| "Minor fixes can be done later" | Technical debt compounds | Fix now or document waiver |
+| "Suggestions are optional improvements" | Leaves gaps | Implement or explicitly reject with rationale |
 
 ### Issue Registry Format
 
@@ -1187,6 +1220,14 @@ Planning Agent MUST STOP and escalate to Phase 1 if it finds:
 - Missing error handling specification
 - Algorithm described in prose without pseudocode
 
+**Escalation Flow**:
+
+1. Planning Agent detects spec gap
+2. Update `implementation-state.json` with `status: "blocked"` and `blockedReason`
+3. Create escalation report in `escalations/ESCALATE-NNN.md`
+4. Halt current module implementation
+5. Trigger Phase 1 re-review for affected spec sections
+
 ---
 
 ## INPUT MATERIALS
@@ -1199,37 +1240,40 @@ FOUND IN: /spec-pack
 
 ### Generated Spec Pack
 
+> **Instructions**: Paste each artifact below. If an artifact is in a separate file, use the file path instead:
+> `See file: spec-pack/artifact-1-dependency-graph.json`
+
 ### Artifact 1: Dependency Graph
 
-[PASTE JSON HERE]
+*Paste JSON or reference file path*
 
 ### Artifact 2: Shared Types
 
-[PASTE TYPES HERE]
+*Paste types or reference file path*
 
 ### Artifact 3: Module Specs
 
-[PASTE EACH MODULE SPEC]
+*Paste each module spec or reference file paths*
 
 ### Artifact 4: Integration Contracts
 
-[PASTE CONTRACTS]
+*Paste contracts or reference file path*
 
 ### Artifact 5: Configuration
 
-[PASTE CONFIG]
+*Paste config or reference file path*
 
 ### Artifact 6: File Manifest
 
-[PASTE MANIFEST]
+*Paste manifest or reference file path*
 
 ### Artifact 7: Implementation Prompts
 
-[PASTE PROMPTS]
+*Paste prompts or reference file path*
 
 ### Artifact 8: Verification Checklist
 
-[PASTE CHECKLIST]
+*Paste checklist or reference file path*
 
 ---
 
@@ -1340,4 +1384,19 @@ echo "Run review and save to: $OUTPUT_DIR/review-v${REVIEW_NUM}-${TIMESTAMP}.md"
 interface IPlexAuth {
   // ...
 }
+```
+
+### Generate Review Summary
+
+```bash
+#!/bin/bash
+# Extract issue counts from a review Markdown file
+
+REVIEW_FILE="${1:-reviews/review-v1.md}"
+
+echo "=== Review Summary ==="
+echo "BLOCKING: $(grep -c '^### BLOCK-' "$REVIEW_FILE" 2>/dev/null || echo 0)"
+echo "MAJOR:    $(grep -c '^### MAJOR-' "$REVIEW_FILE" 2>/dev/null || echo 0)"
+echo "MINOR:    $(grep -c '^### MINOR-' "$REVIEW_FILE" 2>/dev/null || echo 0)"
+echo "SUGGEST:  $(grep -c '^### SUGGEST-' "$REVIEW_FILE" 2>/dev/null || echo 0)"
 ```

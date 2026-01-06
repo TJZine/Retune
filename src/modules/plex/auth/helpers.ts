@@ -89,11 +89,13 @@ export function getOrCreateClientId(): string {
  * Build request headers for Plex API calls.
  * @param config - Plex auth configuration
  * @param token - Optional auth token
+ * @param options - Optional additional headers
  * @returns Headers object
  */
 export function buildRequestHeaders(
     config: PlexAuthConfig,
-    token?: string
+    token?: string,
+    options?: { platformVersion?: string; deviceName?: string }
 ): Record<string, string> {
     const headers: Record<string, string> = {
         'Accept': 'application/json',
@@ -106,6 +108,12 @@ export function buildRequestHeaders(
     };
     if (token) {
         headers['X-Plex-Token'] = token;
+    }
+    if (options?.platformVersion) {
+        headers['X-Plex-Platform-Version'] = options.platformVersion;
+    }
+    if (options?.deviceName) {
+        headers['X-Plex-Device-Name'] = options.deviceName;
     }
     return headers;
 }
