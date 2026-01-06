@@ -54,7 +54,7 @@ export const TIMING_CONFIG = {
  */
 export const DEFAULT_USER_PREFERENCES = {
     theme: 'dark' as const,
-    volume: 100,
+    volume: 70,
     subtitleLanguage: null,
     audioLanguage: null,
 };

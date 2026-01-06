@@ -88,6 +88,11 @@ export class StateManager implements IStateManager {
                 return null;
             }
 
+            // Re-validate after migration to catch buggy migration functions
+            if (!this._isValidState(migrated)) {
+                return null;
+            }
+
             return migrated as unknown as PersistentState;
         } catch (error) {
             // Log parse errors in development for debugging

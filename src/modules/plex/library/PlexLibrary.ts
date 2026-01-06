@@ -572,7 +572,7 @@ export class PlexLibrary implements IPlexLibrary {
 
                 // Handle 401 Unauthorized - emit event, no retry
                 if (response.status === 401) {
-                    this._emitter.emit('authExpired', undefined as unknown as void);
+                    this._emitter.emit('authExpired', undefined);
                     throw new PlexLibraryError(
                         AppErrorCode.AUTH_EXPIRED,
                         'Authentication expired',
@@ -583,9 +583,19 @@ export class PlexLibrary implements IPlexLibrary {
                 // Handle 429 Rate Limited - backoff per Retry-After
                 if (response.status === 429) {
                     const retryAfterHeader = response.headers.get('Retry-After');
-                    const retryAfter = retryAfterHeader
-                        ? parseInt(retryAfterHeader, 10)
-                        : PLEX_LIBRARY_CONSTANTS.DEFAULT_RATE_LIMIT_DELAY;
+                    let retryAfter: number = PLEX_LIBRARY_CONSTANTS.DEFAULT_RATE_LIMIT_DELAY;
+                    if (retryAfterHeader) {
+                        const parsed = parseInt(retryAfterHeader, 10);
+                        if (!isNaN(parsed)) {
+                            retryAfter = parsed;
+                        } else {
+                            // Try parsing as HTTP-date
+                            const date = Date.parse(retryAfterHeader);
+                            if (!isNaN(date)) {
+                                retryAfter = Math.max(0, Math.ceil((date - Date.now()) / 1000));
+                            }
+                        }
+                    }
                     await this._delay(retryAfter * 1000);
                     continue;
                 }
@@ -639,16 +649,7 @@ export class PlexLibrary implements IPlexLibrary {
                     return null;
                 }
 
-                // Check for empty MediaContainer
-                const container = data as { MediaContainer?: { Metadata?: unknown[]; Directory?: unknown[] } };
-                if (container.MediaContainer) {
-                    const hasContent =
-                        (container.MediaContainer.Metadata && container.MediaContainer.Metadata.length > 0) ||
-                        (container.MediaContainer.Directory && container.MediaContainer.Directory.length > 0);
-                    if (!hasContent && !container.MediaContainer.Metadata && !container.MediaContainer.Directory) {
-                        // Empty container without arrays is still valid
-                    }
-                }
+                // Empty MediaContainer is valid - no special handling needed
 
                 return data;
 
@@ -673,13 +674,12 @@ export class PlexLibrary implements IPlexLibrary {
                     throw error;
                 }
 
-                // Server unreachable - trigger re-discovery
-                if (error instanceof TypeError ||
-                    (error instanceof Error && error.message.includes('fetch'))) {
+                // Server unreachable (TypeError = fetch network failure) - trigger re-discovery
+                if (error instanceof TypeError) {
                     this._config.onServerUnreachable?.();
                     throw new PlexLibraryError(
                         AppErrorCode.SERVER_UNREACHABLE,
-                        error instanceof Error ? error.message : 'Server unreachable'
+                        error.message
                     );
                 }
 

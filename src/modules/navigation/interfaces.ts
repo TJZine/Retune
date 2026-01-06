@@ -18,6 +18,10 @@ export interface INavigationManager {
 
     // Screen Navigation
     goTo(screen: Screen, params?: Record<string, unknown>): void;
+    /**
+     * Navigate back to the previous screen.
+     * @returns true if navigation occurred, false if already at root screen
+     */
     goBack(): boolean;
     replaceScreen(screen: Screen): void;
     getScreenParams(): Record<string, unknown>;
@@ -25,6 +29,10 @@ export interface INavigationManager {
     // Focus Management
     setFocus(elementId: string): void;
     getFocusedElement(): FocusableElement | null;
+    /**
+     * Move focus in the specified direction.
+     * @returns true if focus moved, false if no neighbor found or movement blocked
+     */
     moveFocus(direction: Direction): boolean;
 
     // Registration
@@ -35,7 +43,16 @@ export interface INavigationManager {
 
     // Modals
     openModal(modalId: string, focusableIds?: string[]): void;
+    /**
+     * Close a modal.
+     * @param modalId - ID of modal to close, or omit to close the topmost modal
+     */
     closeModal(modalId?: string): void;
+    /**
+     * Check if a modal is open.
+     * @param modalId - ID of modal to check, or omit to check if any modal is open
+     * @returns true if the specified modal (or any modal) is open
+     */
     isModalOpen(modalId?: string): boolean;
 
     // Input Blocking
@@ -64,13 +81,22 @@ export interface INavigationManager {
 
 /**
  * Focus Manager Interface (internal)
+ * Manages focus state, focus ring display, and focus navigation within groups.
  */
 export interface IFocusManager {
+    /**
+     * Set focus on an element.
+     * @returns true if focus was set successfully, false if element not found
+     */
     focus(elementId: string): boolean;
     blur(): void;
     getElement(elementId: string): FocusableElement | null;
     findNeighbor(fromId: string, direction: Direction): string | null;
     saveFocusState(screenId: string): void;
+    /**
+     * Restore saved focus state for a screen.
+     * @returns true if focus was restored, false if no saved state exists
+     */
     restoreFocusState(screenId: string): boolean;
     updateFocusRing(elementId: string): void;
     hideFocusRing(): void;
@@ -199,10 +225,11 @@ export interface FocusGroup {
 }
 
 /**
- * Navigation events
+ * Navigation events.
+ * NOTE: The index signature is required for EventEmitter<T> generic constraint.
+ * EventEmitter expects T extends Record<string, unknown>.
  */
 export interface NavigationEventMap {
-    /** Index signature required for EventEmitter compatibility */
     [key: string]: unknown;
     keyPress: KeyEvent;
     screenChange: { from: Screen; to: Screen };

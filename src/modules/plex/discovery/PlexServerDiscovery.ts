@@ -37,6 +37,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     private _getAuthHeaders: () => Record<string, string>;
     private _mixedContentConfig: MixedContentConfig;
     private _pendingServerId?: string;
+    private _discoveryPromise: Promise<PlexServer[]> | null = null;
 
     /**
      * Create a new PlexServerDiscovery instance.
@@ -68,10 +69,25 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * @throws PlexApiError on connection failure
      */
     public async discoverServers(): Promise<PlexServer[]> {
-        if (this._state.isDiscovering) {
-            return this._state.servers;
+        // Return pending promise if discovery already in progress
+        if (this._discoveryPromise) {
+            return this._discoveryPromise;
         }
 
+        this._discoveryPromise = this._doDiscoverServers();
+        try {
+            return await this._discoveryPromise;
+        } finally {
+            this._discoveryPromise = null;
+        }
+    }
+
+    /**
+     * Internal discovery implementation.
+     * @returns Promise resolving to list of servers
+     * @throws PlexApiError on connection failure
+     */
+    private async _doDiscoverServers(): Promise<PlexServer[]> {
         this._state.isDiscovering = true;
 
         try {
@@ -497,9 +513,19 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         const connections: PlexConnection[] = [];
 
         for (const conn of apiConnections) {
+            let protocol: 'https' | 'http';
+            if (conn.protocol === 'https') {
+                protocol = 'https';
+            } else if (conn.protocol === 'http') {
+                protocol = 'http';
+            } else {
+                console.warn(`[Discovery] Unexpected protocol: ${conn.protocol}, defaulting to http`);
+                protocol = 'http';
+            }
+
             connections.push({
                 uri: conn.uri,
-                protocol: conn.protocol === 'https' ? 'https' : 'http',
+                protocol,
                 address: conn.address,
                 port: conn.port,
                 local: Boolean(conn.local),

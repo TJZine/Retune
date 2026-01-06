@@ -77,7 +77,8 @@ export function mapLibraryType(type: string): PlexLibraryType {
         case 'photo':
             return 'photo';
         default:
-            return 'movie'; // Default fallback
+            console.warn(`[ResponseParser] Unknown library type: ${type}, defaulting to 'movie'`);
+            return 'movie';
     }
 }
 
@@ -207,9 +208,19 @@ export function parseMediaPart(data: RawMediaPart): PlexMediaPart {
  * @returns Parsed stream
  */
 export function parseStream(data: RawStream): PlexStream {
+    // Validate streamType (1=video, 2=audio, 3=subtitle)
+    const validStreamTypes = [1, 2, 3] as const;
+    let streamType: 1 | 2 | 3;
+    if (validStreamTypes.includes(data.streamType as 1 | 2 | 3)) {
+        streamType = data.streamType as 1 | 2 | 3;
+    } else {
+        console.warn(`[ResponseParser] Invalid streamType: ${data.streamType}, defaulting to 1 (video)`);
+        streamType = 1;
+    }
+
     const stream: PlexStream = {
         id: String(data.id),
-        streamType: data.streamType as 1 | 2 | 3,
+        streamType,
         codec: data.codec ?? '',
     };
 

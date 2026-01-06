@@ -1,44 +1,12 @@
-/**
- * @fileoverview Unit tests for Plex Library module.
- * @module modules/plex/library/__tests__/PlexLibrary.test
- */
-
 import { PlexLibrary, PlexLibraryError, AppErrorCode } from '../PlexLibrary';
 import type { PlexLibraryConfig } from '../interfaces';
+import { mockLocalStorage, installMockLocalStorage } from '../../../../__tests__/mocks/localStorage';
 
 // ============================================
-// Mock localStorage
+// Install Mock localStorage
 // ============================================
 
-const mockLocalStorage = (function (): Storage {
-    let store: Record<string, string> = {};
-    return {
-        get length(): number {
-            return Object.keys(store).length;
-        },
-        key(index: number): string | null {
-            const keys = Object.keys(store);
-            return index < keys.length ? (keys[index] as string) : null;
-        },
-        getItem(key: string): string | null {
-            const value = store[key];
-            return value !== undefined ? value : null;
-        },
-        setItem(key: string, value: string): void {
-            store[key] = value;
-        },
-        removeItem(key: string): void {
-            delete store[key];
-        },
-        clear(): void {
-            store = {};
-        },
-    };
-})();
-
-Object.defineProperty(globalThis, 'localStorage', {
-    value: mockLocalStorage,
-});
+installMockLocalStorage();
 
 // ============================================
 // Mock Config

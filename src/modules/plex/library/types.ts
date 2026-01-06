@@ -217,7 +217,8 @@ export interface LibraryCacheEntry {
  * Event map for PlexLibrary EventEmitter.
  */
 export interface PlexLibraryEvents {
-    authExpired: void;
+    /** Emitted when authentication expires (401 response) */
+    authExpired: undefined;
     libraryRefreshed: { libraryId: string };
     [key: string]: unknown;
 }
