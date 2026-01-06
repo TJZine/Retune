@@ -421,13 +421,26 @@ export class ContentResolver {
             case 'neq':
                 return value !== filter.value;
             case 'gt':
-                return (value as number) > (filter.value as number);
             case 'gte':
-                return (value as number) >= (filter.value as number);
             case 'lt':
-                return (value as number) < (filter.value as number);
-            case 'lte':
-                return (value as number) <= (filter.value as number);
+            case 'lte': {
+                // Validate both values are finite numbers before comparison
+                const numVal = Number(value);
+                const numFilter = Number(filter.value);
+                if (!Number.isFinite(numVal) || !Number.isFinite(numFilter)) {
+                    return true; // Skip filter when values aren't valid numbers
+                }
+                switch (filter.operator) {
+                    case 'gt':
+                        return numVal > numFilter;
+                    case 'gte':
+                        return numVal >= numFilter;
+                    case 'lt':
+                        return numVal < numFilter;
+                    case 'lte':
+                        return numVal <= numFilter;
+                }
+            }
             case 'contains':
                 return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
             case 'notContains':

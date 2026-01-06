@@ -142,7 +142,7 @@ export class ChannelManager implements IChannelManager {
 
     private _state: ChannelManagerState;
     /** Issue 3 (Round 3): Pending retry queue for network errors */
-    private readonly _pendingRetries: Map<string, NodeJS.Timeout> = new Map();
+    private readonly _pendingRetries: Map<string, ReturnType<typeof setTimeout>> = new Map();
     private static readonly RETRY_DELAY_MS = 30000; // 30 seconds
 
     /**
@@ -417,6 +417,8 @@ export class ChannelManager implements IChannelManager {
 
     /**
      * Reorder channels.
+     * @remarks In-memory order is updated synchronously; persistence is best-effort.
+     * Save failures are logged but do not block the reorder operation.
      */
     reorderChannels(orderedIds: string[]): void {
         // Validate all IDs exist
