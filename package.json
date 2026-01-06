@@ -1,0 +1,42 @@
+{
+    "name": "retune",
+    "version": "1.0.0",
+    "description": "webOS Plex Virtual Channels Application",
+    "author": "TJZine",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/TJZine/Retune.git"
+    },
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/jest": "^29.5.12",
+        "@types/node": "^20.11.0",
+        "@typescript-eslint/eslint-plugin": "^8.51.0",
+        "@typescript-eslint/parser": "^8.51.0",
+        "eslint": "^9.0.0",
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^30.2.0",
+        "ts-jest": "^29.1.2",
+        "typescript": "^5.3.3"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "keywords": [
+        "webos",
+        "plex",
+        "tv",
+        "channels"
+    ]
+}
