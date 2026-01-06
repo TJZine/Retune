@@ -197,6 +197,37 @@ describe('PlexServerDiscovery', () => {
             expect(result).toHaveLength(1);
             expect(result[0]!.id).toBe('srv1');
         });
+
+        it('should return same promise for concurrent discovery calls', async () => {
+            const mockServers = [
+                {
+                    clientIdentifier: 'srv1',
+                    name: 'Test Server',
+                    sourceTitle: 'testuser',
+                    ownerId: 'owner1',
+                    owned: true,
+                    provides: 'server',
+                    connections: [],
+                },
+            ];
+            mockFetchJson(mockServers);
+            const discovery = new PlexServerDiscovery(mockConfig);
+
+            // Start two discoveries concurrently
+            const promise1 = discovery.discoverServers();
+            const promise2 = discovery.discoverServers();
+
+            // Should be the exact same promise
+            expect(promise1).toBe(promise2);
+
+            const result1 = await promise1;
+            const result2 = await promise2;
+
+            // Results should be identical
+            expect(result1).toBe(result2);
+            // Should only have made one fetch call
+            expect(fetch).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('testConnection', () => {

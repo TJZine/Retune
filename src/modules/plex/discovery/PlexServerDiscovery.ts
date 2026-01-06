@@ -68,18 +68,17 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * @returns Promise resolving to list of servers
      * @throws PlexApiError on connection failure
      */
-    public async discoverServers(): Promise<PlexServer[]> {
+    public discoverServers(): Promise<PlexServer[]> {
         // Return pending promise if discovery already in progress
         if (this._discoveryPromise) {
             return this._discoveryPromise;
         }
 
-        this._discoveryPromise = this._doDiscoverServers();
-        try {
-            return await this._discoveryPromise;
-        } finally {
+        this._discoveryPromise = this._doDiscoverServers().finally(() => {
             this._discoveryPromise = null;
-        }
+        });
+
+        return this._discoveryPromise;
     }
 
     /**
@@ -306,13 +305,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
         // Update state
         const serverWithConnection: PlexServer = {
-            id: server.id,
-            name: server.name,
-            sourceTitle: server.sourceTitle,
-            ownerId: server.ownerId,
-            owned: server.owned,
-            connections: server.connections,
-            capabilities: server.capabilities,
+            ...server,
             preferredConnection: connection,
         };
 

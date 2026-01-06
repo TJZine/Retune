@@ -150,7 +150,8 @@ export function mapMediaType(type: string): PlexMediaType {
         case 'clip':
             return 'clip';
         default:
-            return 'movie'; // Default fallback
+            console.warn(`[ResponseParser] Unknown media type: ${type}, defaulting to 'movie'`);
+            return 'movie';
     }
 }
 

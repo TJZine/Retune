@@ -15,7 +15,7 @@ export function createMockLocalStorage(): Storage {
         },
         key(index: number): string | null {
             const keys = Object.keys(store);
-            return index < keys.length ? (keys[index] as string) : null;
+            return index < keys.length ? keys[index]! : null;
         },
         getItem(key: string): string | null {
             const value = store[key];
@@ -46,5 +46,6 @@ export function installMockLocalStorage(): void {
     Object.defineProperty(globalThis, 'localStorage', {
         value: mockLocalStorage,
         writable: true,
+        configurable: true,
     });
 }
