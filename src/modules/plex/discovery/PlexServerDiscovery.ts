@@ -482,7 +482,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             }
 
             const connections = this._parseConnections(resource.connections);
-            const capabilities = resource.provides ? resource.provides.split(',') : [];
+            const capabilities = resource.provides.split(',');
 
             servers.push({
                 id: resource.clientIdentifier,
