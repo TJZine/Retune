@@ -44,6 +44,11 @@ export enum AppErrorCode {
     MODULE_INIT_FAILED = 'MODULE_INIT_FAILED',
     UNRECOVERABLE = 'UNRECOVERABLE',
 
+    // Scheduler/Channel Errors (per channel-manager spec)
+    CHANNEL_NOT_FOUND = 'CHANNEL_NOT_FOUND',
+    SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
+    CONTENT_UNAVAILABLE = 'CONTENT_UNAVAILABLE',
+
     // Generic
     UNKNOWN = 'UNKNOWN',
 }
