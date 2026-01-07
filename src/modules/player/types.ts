@@ -223,13 +223,9 @@ export interface PlaybackError extends AppError {
     retryAfterMs?: number;
 }
 
-// ============================================
-// Event Types
-// ============================================
-
 /**
  * Typed event map for player events.
- * Index signature added for EventEmitter compatibility.
+ * Index signature required for EventEmitter<TEventMap extends Record<string, unknown>> constraint.
  */
 export interface PlayerEventMap {
     /** Emitted on any state change */

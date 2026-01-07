@@ -237,8 +237,9 @@ export class VideoPlayer implements IVideoPlayer {
         // Trigger load
         this._videoElement.load();
 
-        // Wait for canplay event
-        await this._waitForCanPlay();
+        // Wait for canplay event with timeout (30s default)
+        // Uses VideoPlayerEvents.waitForCanPlay() to avoid code duplication
+        await this._eventManager.waitForCanPlay();
     }
 
     /**
@@ -621,40 +622,5 @@ export class VideoPlayer implements IVideoPlayer {
         this._emitter.emit('stateChange', this.getState());
     }
 
-    // ========================================
-    // Private Methods - Helpers
-    // ========================================
 
-    /**
-     * Wait for canplay event.
-     */
-    private _waitForCanPlay(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (!this._videoElement) {
-                reject(new Error('Video element not available'));
-                return;
-            }
-
-            // If already ready, resolve immediately
-            if (this._videoElement.readyState >= 3) {
-                resolve();
-                return;
-            }
-
-            const onCanPlay = (): void => {
-                this._videoElement?.removeEventListener('canplay', onCanPlay);
-                this._videoElement?.removeEventListener('error', onError);
-                resolve();
-            };
-
-            const onError = (): void => {
-                this._videoElement?.removeEventListener('canplay', onCanPlay);
-                this._videoElement?.removeEventListener('error', onError);
-                reject(new Error('Error loading media'));
-            };
-
-            this._videoElement.addEventListener('canplay', onCanPlay);
-            this._videoElement.addEventListener('error', onError);
-        });
-    }
 }

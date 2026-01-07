@@ -199,7 +199,11 @@ export class VideoPlayerEvents {
 
         const playbackError = this._retryManager.handleMediaError(mediaError.code);
 
-        if (!playbackError.recoverable) {
+        if (playbackError.recoverable) {
+            // Update status to buffering to indicate retry is in progress
+            // This informs the UI that we're recovering, not frozen
+            this._callbacks?.updateStatus('buffering');
+        } else {
             this._callbacks?.setState({ errorInfo: playbackError });
             this._callbacks?.updateStatus('error');
             this._emitter?.emit('error', playbackError);

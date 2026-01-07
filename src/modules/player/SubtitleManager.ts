@@ -152,12 +152,18 @@ export class SubtitleManager {
     private _createTrackElement(track: SubtitleTrack): HTMLTrackElement {
         const trackElement = document.createElement('track');
         trackElement.id = track.id;
-        trackElement.kind = track.forced ? 'forced' : 'subtitles';
+        // 'forced' is not a valid HTMLTrackElement.kind value - use 'subtitles'
+        // Valid values: subtitles, captions, descriptions, chapters, metadata
+        trackElement.kind = 'subtitles';
         trackElement.src = track.url || '';
         trackElement.srclang = track.languageCode;
         trackElement.label = track.title || track.language;
         if (track.default) {
             trackElement.default = true;
+        }
+        // Store forced flag in dataset for internal tracking
+        if (track.forced) {
+            trackElement.dataset.forced = 'true';
         }
 
         // Start hidden (with null check for jsdom compatibility)

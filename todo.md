@@ -88,6 +88,72 @@
 
 ---
 
+## webOS Device Testing Required
+
+> These issues require empirical testing on actual webOS hardware before making code changes.
+
+### Player: Retry Seek Position Preservation (#5)
+
+**Background**: The `RetryManager._retryPlayback()` sets `currentTime` after `load()`. Per HTML5 spec, `load()` resets `currentTime` to 0. The correct pattern is to wait for `loadedmetadata` before seeking.
+
+**Current Code** (RetryManager.ts:162-168):
+
+```typescript
+this._videoElement.load();
+this._videoElement.currentTime = currentTime;  // May be overwritten by load() reset
+this._videoElement.play();
+```
+
+**Test Procedure**:
+
+1. Start playback, seek to 5+ minutes
+2. Simulate network error (disconnect/reconnect WiFi or use Plex bandwidth limits)
+3. Observe: Does playback resume at the same position or restart from 0?
+
+**Expected Behavior**: Playback should resume at the position before the error.
+
+**If Broken - Recommended Fix**:
+
+```typescript
+this._videoElement.load();
+const seekPosition = currentTime;
+const onMetadata = () => {
+    this._videoElement.removeEventListener('loadedmetadata', onMetadata);
+    this._videoElement.currentTime = seekPosition;
+    this._videoElement.play();
+};
+this._videoElement.addEventListener('loadedmetadata', onMetadata);
+```
+
+---
+
+### Player: Keep-Alive Mechanism Validation (#6)
+
+**Background**: `KeepAliveManager` dispatches synthetic `click` events on `document` every 30s to prevent webOS app suspension. LG documentation confirms this is NOT an officially supported mechanism.
+
+**Current Code** (KeepAliveManager.ts:36-37):
+
+```typescript
+document.dispatchEvent(new Event('click'));
+```
+
+**Test Procedure**:
+
+1. Start playback of long content (2+ hours)
+2. Leave TV idle (no remote input) for 30+ minutes
+3. Observe: Does playback continue or does webOS suspend the app?
+
+**Alternative Approaches to Test if Current Fails**:
+
+- `document.dispatchEvent(new CustomEvent('__keepalive__', { bubbles: false }))`
+- `document.body.focus()` (focus manipulation)
+- `window.dispatchEvent(new Event('mousemove'))` (mouse simulation)
+- webOS Luna Service API: `com.webos.service.power/setState`
+
+**If All Fail**: May need to implement proper webOS media session via `webOS.service.request` to `com.webos.media`
+
+---
+
 ## Notes
 
 ### Telemetry Implementation Plan
