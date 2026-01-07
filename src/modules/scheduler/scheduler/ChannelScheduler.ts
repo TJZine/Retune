@@ -324,6 +324,8 @@ export class ChannelScheduler implements IChannelScheduler {
 
     /**
      * Jump to a specific program in the schedule.
+     * Adjusts the schedule anchor so the jumped-to program aligns with wall-clock time,
+     * ensuring the navigation persists across sync ticks.
      * @param program - The program to jump to
      */
     public jumpToProgram(program: ScheduledProgram): void {
@@ -331,15 +333,36 @@ export class ChannelScheduler implements IChannelScheduler {
             return;
         }
 
+        const now = Date.now();
+
+        // Calculate how much to shift the anchor so this program is "current" at wall time
+        // program.scheduledStartTime is relative to old anchor
+        // We want: newAnchor + offset = now - elapsedMs
+        // Where offset is the program's position in the loop
+        const programPositionInLoop = this._index.itemStartOffsets[program.scheduleIndex] ?? 0;
+        const loopOffset = program.loopNumber * this._index.totalLoopDurationMs;
+        const programStartFromAnchor = loopOffset + programPositionInLoop;
+
+        // New anchor: now - elapsedInProgram - programStartFromAnchor
+        const newAnchorTime = now - program.elapsedMs - programStartFromAnchor;
+
+        // Update config with new anchor
+        this._config = { ...this._config, anchorTime: newAnchorTime };
+
+        // Rebuild index with new anchor (shuffle order stays same since seed unchanged)
+        this._index = buildScheduleIndex(this._config, this._shuffler);
+
+        // Emit programEnd for old program
         if (this._currentProgram) {
             this._emitter.emit('programEnd', this._currentProgram);
         }
 
-        this._currentProgram = program;
-        this._nextProgram = calculateNextProgram(program, this._index, this._config.anchorTime);
-        this._lastSyncTime = Date.now();
+        // Recalculate program at new anchor-adjusted "now"
+        this._currentProgram = this.getProgramAtTime(now);
+        this._nextProgram = calculateNextProgram(this._currentProgram, this._index, this._config.anchorTime);
+        this._lastSyncTime = now;
 
-        this._emitter.emit('programStart', program);
+        this._emitter.emit('programStart', this._currentProgram);
     }
 
     /**

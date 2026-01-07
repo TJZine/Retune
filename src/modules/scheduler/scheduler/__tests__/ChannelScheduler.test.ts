@@ -412,6 +412,46 @@ describe('ChannelScheduler', () => {
                 })
             );
         });
+
+        it('should persist jump across sync ticks (not snap back)', () => {
+            const programStartHandler = jest.fn();
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content, // [a: 10s, b: 20s, c: 30s]
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+            scheduler.on('programStart', programStartHandler);
+            programStartHandler.mockClear();
+
+            // Initial: should be on item 'a'
+            expect(scheduler.getCurrentProgram()?.item.ratingKey).toBe('a');
+
+            // Skip to next (item 'b')
+            scheduler.skipToNext();
+            expect(scheduler.getCurrentProgram()?.item.ratingKey).toBe('b');
+            expect(programStartHandler).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    item: expect.objectContaining({ ratingKey: 'b' }),
+                })
+            );
+            programStartHandler.mockClear();
+
+            // Advance time 1.5s (within sync interval) and sync
+            jest.advanceTimersByTime(1500);
+            scheduler.syncToCurrentTime();
+
+            // Should STILL be on item 'b' - not snapped back to 'a'
+            expect(scheduler.getCurrentProgram()?.item.ratingKey).toBe('b');
+            // Should NOT have emitted another programStart (no snap-back)
+            expect(programStartHandler).not.toHaveBeenCalled();
+        });
     });
 
     describe('skipToPrevious', () => {
