@@ -114,9 +114,10 @@ export class ChannelScheduler implements IChannelScheduler {
         // Stop any existing timer
         this._stopSyncTimer();
 
-        // Validate and normalize anchorTime - fallback to now if invalid
+        // Validate anchorTime - fallback to now only if non-finite (NaN, Infinity)
+        // Zero (epoch) and negative timestamps are valid for deterministic schedules
         let anchorTime = config.anchorTime;
-        if (!Number.isFinite(anchorTime) || anchorTime <= 0) {
+        if (!Number.isFinite(anchorTime)) {
             anchorTime = Date.now();
         }
 

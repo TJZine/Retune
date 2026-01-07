@@ -627,6 +627,30 @@ describe('ChannelScheduler', () => {
             expect(upcoming).toHaveLength(0);
         });
 
+        it('anchorTime: 0 (Unix epoch) should be valid for deterministic schedules', () => {
+            // Epoch anchor allows globally synchronized schedules
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: 0, // Unix epoch
+                content,
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+
+            // Should not throw
+            expect(() => scheduler.loadChannel(config)).not.toThrow();
+
+            // Schedule should be deterministic from epoch
+            const index = scheduler.getScheduleIndex();
+            expect(index.totalLoopDurationMs).toBe(TOTAL_DURATION);
+
+            // getProgramAtTime should work relative to epoch
+            const program = scheduler.getProgramAtTime(5000); // 5s after epoch
+            expect(program.item.ratingKey).toBe('a');
+            expect(program.elapsedMs).toBe(5000);
+        });
+
         it('jumpToProgram should ignore stale elapsedMs and use calculated elapsed time', () => {
             const now = Date.now();
             jest.setSystemTime(now);

@@ -26,4 +26,6 @@ export const SCHEDULER_ERROR_MESSAGES = {
     EMPTY_CHANNEL: 'Cannot schedule empty channel',
     NO_CHANNEL_LOADED: 'No channel loaded',
     INVALID_TIME_RANGE: 'Invalid time range: start must be before end',
+    INVALID_SCHEDULE_DURATION: 'Schedule has zero total duration - all items have durationMs 0',
+    RANDOM_MODE_UNSUPPORTED: 'Random mode must be resolved upstream - pass shuffle with a fresh seed instead',
 } as const;

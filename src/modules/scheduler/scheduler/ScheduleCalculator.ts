@@ -58,6 +58,11 @@ export function buildScheduleIndex(
 
     const totalLoopDurationMs = cumulativeOffset;
 
+    // Fix #3: Guard against zero-duration schedules (division by zero prevention)
+    if (totalLoopDurationMs === 0) {
+        throw new Error(SCHEDULER_ERROR_MESSAGES.INVALID_SCHEDULE_DURATION);
+    }
+
     return {
         channelId: config.channelId,
         generatedAt: Date.now(),
@@ -243,16 +248,19 @@ export function applyPlaybackMode(
                 scheduledIndex: index,
             }));
 
-        case 'shuffle':
-        case 'random': {
-            // Both modes use deterministic shuffle with seed
-            // 'random' is deprecated here - true random handled by ContentResolver upstream
+        case 'shuffle': {
             const shuffled = shuffler.shuffle(items, seed);
             return shuffled.map((item, index) => ({
                 ...item,
                 scheduledIndex: index,
             }));
         }
+
+        case 'random':
+            // Fix #2: Random mode must be resolved upstream
+            // The scheduler is deterministic - upstream must generate a fresh seed
+            // and pass playbackMode: 'shuffle' instead
+            throw new Error(SCHEDULER_ERROR_MESSAGES.RANDOM_MODE_UNSUPPORTED);
 
         default:
             // Fallback to sequential
