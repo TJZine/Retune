@@ -136,6 +136,7 @@ export class RetryManager {
 
     /**
      * Retry loading the current stream.
+     * Mirrors VideoPlayer.loadStream logic for protocol-specific source handling.
      */
     private _retryPlayback(): void {
         if (!this._videoElement || !this._descriptor) {
@@ -144,10 +145,26 @@ export class RetryManager {
 
         const currentTime = this._videoElement.currentTime;
 
-        // Reload with current position
-        this._videoElement.src = this._descriptor.url;
-        this._videoElement.currentTime = currentTime;
+        // Clear existing sources
+        while (this._videoElement.firstChild) {
+            this._videoElement.removeChild(this._videoElement.firstChild);
+        }
+        this._videoElement.removeAttribute('src');
+
+        // Set source based on protocol (mirror loadStream logic)
+        if (this._descriptor.protocol === 'hls') {
+            // Native HLS - set src directly
+            this._videoElement.src = this._descriptor.url;
+        } else {
+            // Direct play - use source element with type hint for webOS
+            const source = document.createElement('source');
+            source.src = this._descriptor.url;
+            source.type = this._descriptor.mimeType;
+            this._videoElement.appendChild(source);
+        }
+
         this._videoElement.load();
+        this._videoElement.currentTime = currentTime;
         this._videoElement.play().catch(() => {
             // Error will be handled by error event
         });

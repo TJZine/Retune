@@ -252,6 +252,10 @@ export class VideoPlayer implements IVideoPlayer {
             return;
         }
 
+        // Cancel pending retries to prevent stream resurrection
+        this._retryManager.clear();
+        this._retryManager.setDescriptor(null);
+
         // Pause and clear source
         this._videoElement.pause();
 

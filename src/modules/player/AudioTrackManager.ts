@@ -245,10 +245,17 @@ export class AudioTrackManager {
                 }
             }
 
-            // Verify switch with polling
+            // Verify switch with polling - find by ID, not index
+            // AudioTrack.index is media-relative, not array-relative
             const checkInterval = setInterval(() => {
-                const activeTrack = audioTracks[targetTrack.index];
-                if (activeTrack && activeTrack.enabled) {
+                let matchedTrack: WebOSAudioTrack | undefined;
+                for (let i = 0; i < audioTracks.length; i++) {
+                    if (audioTracks[i]?.id === targetTrack.id) {
+                        matchedTrack = audioTracks[i];
+                        break;
+                    }
+                }
+                if (matchedTrack?.enabled) {
                     clearTimeout(timeout);
                     clearInterval(checkInterval);
                     resolve();
