@@ -7,6 +7,8 @@
 
 import type { AudioTrack, PlaybackError } from './types';
 import { AppErrorCode as ErrorCode } from './types';
+import { AUDIO_TRACK_SWITCH_TIMEOUT_MS } from './constants';
+import { SUPPORTED_AUDIO_CODECS } from '../plex/stream/constants';
 
 // ============================================
 // Type Augmentation for AudioTrackList
@@ -43,20 +45,11 @@ export interface HTMLVideoElementWithAudioTracks extends HTMLVideoElement {
 // Constants
 // ============================================
 
-/** Timeout for audio track switch in milliseconds */
-const AUDIO_TRACK_SWITCH_TIMEOUT_MS = 5000;
-
 /** Maximum retry attempts for audio track switch */
 const AUDIO_TRACK_MAX_RETRIES = 1;
 
 /** Polling interval for track switch verification */
 const TRACK_SWITCH_POLL_INTERVAL_MS = 100;
-
-/**
- * Supported audio codecs for direct play on webOS.
- * Matches plex/stream/constants.ts SUPPORTED_AUDIO_CODECS.
- */
-const SUPPORTED_AUDIO_CODECS: readonly string[] = ['aac', 'ac3', 'eac3'] as const;
 
 
 // ============================================

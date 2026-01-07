@@ -30,6 +30,12 @@ export function mapMediaErrorCodeToPlaybackError(
     let recoverable: boolean;
 
     switch (mediaErrorCode) {
+        case 1: // MEDIA_ERR_ABORTED
+            code = ErrorCode.UNKNOWN;
+            message = 'Media loading aborted';
+            recoverable = false;
+            break;
+
         case 2: // MEDIA_ERR_NETWORK
             code = ErrorCode.NETWORK_TIMEOUT;
             message = 'Network error during playback';

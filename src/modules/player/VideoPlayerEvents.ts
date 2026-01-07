@@ -99,9 +99,10 @@ export class VideoPlayerEvents {
     }
 
     /**
-     * Wait for canplay event.
+     * Wait for canplay event with timeout.
+     * @param timeoutMs - Maximum time to wait (default 30s)
      */
-    public waitForCanPlay(): Promise<void> {
+    public waitForCanPlay(timeoutMs: number = 30000): Promise<void> {
         return new Promise((resolve, reject) => {
             if (!this._videoElement) {
                 reject(new Error('Video element not available'));
@@ -113,20 +114,31 @@ export class VideoPlayerEvents {
                 return;
             }
 
-            const onCanPlay = (): void => {
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+            const cleanup = (): void => {
+                if (timeoutId) clearTimeout(timeoutId);
                 this._videoElement?.removeEventListener('canplay', onCanPlay);
                 this._videoElement?.removeEventListener('error', onError);
+            };
+
+            const onCanPlay = (): void => {
+                cleanup();
                 resolve();
             };
 
             const onError = (): void => {
-                this._videoElement?.removeEventListener('canplay', onCanPlay);
-                this._videoElement?.removeEventListener('error', onError);
+                cleanup();
                 reject(new Error('Error loading media'));
             };
 
             this._videoElement.addEventListener('canplay', onCanPlay);
             this._videoElement.addEventListener('error', onError);
+
+            timeoutId = setTimeout(() => {
+                cleanup();
+                reject(new Error('Timeout waiting for media to be ready'));
+            }, timeoutMs);
         });
     }
 

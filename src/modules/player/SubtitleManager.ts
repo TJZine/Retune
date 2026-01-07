@@ -73,10 +73,10 @@ export class SubtitleManager {
      */
     public unloadTracks(): void {
         // Remove track elements from DOM
-        for (const [trackId, element] of this._trackElements) {
+        for (const element of this._trackElements.values()) {
             element.remove();
-            this._trackElements.delete(trackId);
         }
+        this._trackElements.clear();
 
         this._tracks = [];
         this._activeTrackId = null;
@@ -156,7 +156,9 @@ export class SubtitleManager {
         trackElement.src = track.url || '';
         trackElement.srclang = track.languageCode;
         trackElement.label = track.title || track.language;
-        trackElement.default = track.default || false;
+        if (track.default) {
+            trackElement.default = true;
+        }
 
         // Start hidden (with null check for jsdom compatibility)
         if (trackElement.track) {

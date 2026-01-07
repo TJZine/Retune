@@ -116,7 +116,8 @@ export class VideoPlayer implements IVideoPlayer {
         }
         container.appendChild(this._videoElement);
 
-        // Set default volume
+        // Initialize state first, then set volume
+        this._state = this._createInitialState();
         this._videoElement.volume = Math.max(0, Math.min(1, this._config.defaultVolume));
         this._state.volume = this._videoElement.volume;
 
@@ -146,10 +147,6 @@ export class VideoPlayer implements IVideoPlayer {
         // Start keep-alive
         this._keepAliveManager.setIsPlayingCheck((): boolean => this.isPlaying());
         this._keepAliveManager.start();
-
-        // Set initial state
-        this._state = this._createInitialState();
-        this._state.volume = this._videoElement.volume;
     }
 
     /**
@@ -336,13 +333,27 @@ export class VideoPlayer implements IVideoPlayer {
 
         this._videoElement.currentTime = Math.min(positionSec, durationSec);
 
-        // Wait for seeked event
-        return new Promise((resolve) => {
-            const handler = (): void => {
+        // Wait for seeked event with timeout
+        return new Promise((resolve, reject) => {
+            const SEEK_TIMEOUT_MS = 5000;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+            const cleanup = (): void => {
+                if (timeoutId) clearTimeout(timeoutId);
                 this._videoElement?.removeEventListener('seeked', handler);
+            };
+
+            const handler = (): void => {
+                cleanup();
                 resolve();
             };
+
             this._videoElement?.addEventListener('seeked', handler);
+
+            timeoutId = setTimeout(() => {
+                cleanup();
+                reject(new Error('Seek operation timed out'));
+            }, SEEK_TIMEOUT_MS);
         });
     }
 
@@ -557,34 +568,17 @@ export class VideoPlayer implements IVideoPlayer {
      * Request media session (placeholder for future webOS media keys).
      */
     public requestMediaSession(): void {
-        // Placeholder for webOS media session API
-        console.warn('[VideoPlayer] Media session requested');
+        // TODO: Implement webOS media session API
+        console.debug('[VideoPlayer] Media session requested (not yet implemented)');
     }
 
     /**
      * Release media session.
      */
     public releaseMediaSession(): void {
-        // Placeholder for webOS media session API
-        console.warn('[VideoPlayer] Media session released');
+        // TODO: Implement webOS media session API
+        console.debug('[VideoPlayer] Media session released (not yet implemented)');
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     // ========================================
