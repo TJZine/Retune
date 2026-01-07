@@ -246,7 +246,7 @@ export class ChannelScheduler implements IChannelScheduler {
      * Get the next N upcoming programs.
      * Uses internal buffer to avoid allocation per call.
      * @param count - Number of programs to return
-     * @param output - Optional pre-allocated output array (overrides internal buffer)
+     * @param output - Optional pre-allocated output array (will be cleared before use)
      * @returns Array of upcoming programs (array may be reused internally)
      * @throws Error if no channel is loaded
      */
@@ -256,6 +256,10 @@ export class ChannelScheduler implements IChannelScheduler {
         // Use provided output or internal buffer to avoid per-call allocation
         const programs = output ?? this._upcomingBuffer;
         programs.length = 0; // Clear existing contents
+
+        if (count <= 0) {
+            return programs;
+        }
 
         let current = this.getCurrentProgram();
         programs.push(current);
@@ -343,8 +347,16 @@ export class ChannelScheduler implements IChannelScheduler {
         const loopOffset = program.loopNumber * this._index.totalLoopDurationMs;
         const programStartFromAnchor = loopOffset + programPositionInLoop;
 
-        // New anchor: now - elapsedInProgram - programStartFromAnchor
-        const newAnchorTime = now - program.elapsedMs - programStartFromAnchor;
+        // Calculate true elapsed time based on scheduledStartTime to avoid stale metadata
+        const trueElapsed = now - program.scheduledStartTime;
+
+        // If program is "live" (within duration), preserve schedule (resume).
+        // Otherwise (future/past), shift schedule to start from beginning.
+        const isLive = trueElapsed >= 0 && trueElapsed < program.item.durationMs;
+        const effectiveElapsed = isLive ? trueElapsed : 0;
+
+        // New anchor: now - effectiveElapsed - programStartFromAnchor
+        const newAnchorTime = now - effectiveElapsed - programStartFromAnchor;
 
         // Update config with new anchor
         this._config = { ...this._config, anchorTime: newAnchorTime };
@@ -499,8 +511,9 @@ export class ChannelScheduler implements IChannelScheduler {
             newProgram.scheduledEndTime !== this._currentProgram.scheduledEndTime
         );
 
-        if (programChanged && this._currentProgram) {
-            this._emitter.emit('programEnd', this._currentProgram);
+        if (programChanged) {
+            // _currentProgram is guaranteed to be non-null here by programChanged definition
+            this._emitter.emit('programEnd', this._currentProgram!);
             this._emitter.emit('programStart', newProgram);
         }
 

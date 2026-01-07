@@ -605,4 +605,89 @@ describe('ChannelScheduler', () => {
             expect(syncHandler).toHaveBeenCalledTimes(3);
         });
     });
+
+    // ============================================
+    // Regression Tests (Review Fixes)
+    // ============================================
+
+    describe('Regression Tests', () => {
+        it('getUpcoming(0) should return empty array', () => {
+            const now = Date.now();
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content,
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+
+            const upcoming = scheduler.getUpcoming(0);
+            expect(upcoming).toHaveLength(0);
+        });
+
+        it('jumpToProgram should ignore stale elapsedMs and use calculated elapsed time', () => {
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content, // [a: 10s, b: 20s]
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+
+            // Get a program and let it become "stale"
+            const originalProgram = scheduler.getCurrentProgram(); // Item A
+
+            // Advance time by 5 seconds
+            const futureTime = now + 5000;
+            jest.setSystemTime(futureTime);
+
+            // User clicks "Play" on the stale EPG entry (where elapsedMs was 0)
+            // If we trusted the stale elapsedMs (0), we would restart the item at 0.
+            // But since it's "live" (we are 5s into it), we should "tune in" at 5s.
+            scheduler.jumpToProgram(originalProgram);
+
+            const newCurrent = scheduler.getCurrentProgram();
+
+            // Should be at 5s elapsed, not 0
+            expect(newCurrent.item.ratingKey).toBe('a');
+            expect(newCurrent.elapsedMs).toBe(5000);
+        });
+
+        it('jumpToProgram should restart items that are not live (e.g. past/future)', () => {
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content, // [a: 10s, b: 20s]
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+
+            // Get next program (B), which is in the future
+            const nextProgram = scheduler.getNextProgram();
+
+            // Advance time just a little (1s) - still not time for B naturally
+            jest.setSystemTime(now + 1000);
+
+            // User clicks "Play" on B. Since B is not "live" (start time is in future relative to now),
+            // we should shift the schedule to start B immediately (elapsed 0).
+            scheduler.jumpToProgram(nextProgram);
+
+            const newCurrent = scheduler.getCurrentProgram();
+
+            expect(newCurrent.item.ratingKey).toBe('b');
+            expect(newCurrent.elapsedMs).toBe(0);
+        });
+    });
 });
