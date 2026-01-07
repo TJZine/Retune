@@ -117,8 +117,8 @@ describe('ShuffleGenerator', () => {
     });
 
     describe('Mulberry32 PRNG quality', () => {
-        it('should distribute values uniformly', () => {
-            // Simple distribution test
+        it('should shuffle items beyond initial positions', () => {
+            // Basic quality check - items should move significantly
             const items = Array.from({ length: 100 }, (_, i) => i);
             const result = shuffler.shuffle(items, 42);
 
@@ -126,6 +126,13 @@ describe('ShuffleGenerator', () => {
             const first10 = result.slice(0, 10);
             const hasHighIndexInFirst10 = first10.some((v) => v > 50);
             expect(hasHighIndexInFirst10).toBe(true);
+        });
+
+        it('should produce consistent output across invocations', () => {
+            const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            const seed = 42;
+            const results = Array.from({ length: 5 }, () => shuffler.shuffle(items, seed));
+            results.forEach((r) => expect(r).toEqual(results[0]));
         });
     });
 });

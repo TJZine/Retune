@@ -283,28 +283,8 @@ export class ChannelScheduler implements IChannelScheduler {
         const now = Date.now();
         const newCurrentProgram = this.getProgramAtTime(now);
 
-        // Check if program changed - compare scheduled times, not just ratingKey
-        // This handles single-item channels and loops of the same item
-        const programChanged = this._currentProgram && (
-            newCurrentProgram.scheduledStartTime !== this._currentProgram.scheduledStartTime ||
-            newCurrentProgram.scheduledEndTime !== this._currentProgram.scheduledEndTime
-        );
-
-        if (programChanged && this._currentProgram) {
-            // Emit programEnd for old program
-            this._emitter.emit('programEnd', this._currentProgram);
-            // Emit programStart for new program
-            this._emitter.emit('programStart', newCurrentProgram);
-        }
-
-        // Update state
-        this._currentProgram = newCurrentProgram;
-        this._nextProgram = calculateNextProgram(
-            newCurrentProgram,
-            this._index,
-            this._config.anchorTime
-        );
-        this._lastSyncTime = now;
+        // Update current program (emits events if changed)
+        this._updateCurrentProgram(newCurrentProgram);
 
         // Emit sync event
         this._emitter.emit('scheduleSync', this.getState());
@@ -335,21 +315,7 @@ export class ChannelScheduler implements IChannelScheduler {
         }
 
         const newProgram = this.getProgramAtTime(time);
-
-        // Compare scheduled times for proper transition detection
-        const programChanged = this._currentProgram && (
-            newProgram.scheduledStartTime !== this._currentProgram.scheduledStartTime ||
-            newProgram.scheduledEndTime !== this._currentProgram.scheduledEndTime
-        );
-
-        if (programChanged && this._currentProgram) {
-            this._emitter.emit('programEnd', this._currentProgram);
-            this._emitter.emit('programStart', newProgram);
-        }
-
-        this._currentProgram = newProgram;
-        this._nextProgram = calculateNextProgram(newProgram, this._index, this._config.anchorTime);
-        this._lastSyncTime = Date.now();
+        this._updateCurrentProgram(newProgram);
     }
 
     // ============================================
@@ -500,6 +466,29 @@ export class ChannelScheduler implements IChannelScheduler {
     }
 
     /**
+     * Update current program and emit transition events if changed.
+     * @param newProgram - The new program to set as current
+     * @returns true if program changed, false otherwise
+     */
+    private _updateCurrentProgram(newProgram: ScheduledProgram): boolean {
+        const programChanged = this._currentProgram && (
+            newProgram.scheduledStartTime !== this._currentProgram.scheduledStartTime ||
+            newProgram.scheduledEndTime !== this._currentProgram.scheduledEndTime
+        );
+
+        if (programChanged && this._currentProgram) {
+            this._emitter.emit('programEnd', this._currentProgram);
+            this._emitter.emit('programStart', newProgram);
+        }
+
+        this._currentProgram = newProgram;
+        this._nextProgram = calculateNextProgram(newProgram, this._index!, this._config!.anchorTime);
+        this._lastSyncTime = Date.now();
+
+        return !!programChanged;
+    }
+
+    /**
      * Start the sync timer with drift detection.
      */
     private _startSyncTimer(): void {
@@ -529,9 +518,14 @@ export class ChannelScheduler implements IChannelScheduler {
             // Case 3: Minor drift - adjust timing
             this.syncToCurrentTime();
 
-            // Adjust next tick to compensate
-            const adjustment = Math.min(drift, 100); // Cap adjustment at 100ms
-            this._syncTimerState.expectedNextTick = now + SYNC_INTERVAL_MS - adjustment;
+            // Only compensate for positive drift (timer running late)
+            // Negative drift is unusual and shouldn't push expectedNextTick forward
+            if (drift > 0) {
+                const adjustment = Math.min(drift, 100); // Cap adjustment at 100ms
+                this._syncTimerState.expectedNextTick = now + SYNC_INTERVAL_MS - adjustment;
+            } else {
+                this._syncTimerState.expectedNextTick = now + SYNC_INTERVAL_MS;
+            }
         }, SYNC_INTERVAL_MS);
     }
 
@@ -555,34 +549,13 @@ export class ChannelScheduler implements IChannelScheduler {
         }
 
         const now = Date.now();
-
-        // Get the actual current program
-        const currentProgram = this.getProgramAtTime(now);
         const previousCurrent = this._currentProgram;
 
-        // Check if program changed during the drift period
-        // Compare scheduled times, not just ratingKey, for single-item channels
-        const programChanged = previousCurrent && (
-            currentProgram.scheduledStartTime !== previousCurrent.scheduledStartTime ||
-            currentProgram.scheduledEndTime !== previousCurrent.scheduledEndTime
-        );
+        // Get and update to current program
+        const currentProgram = this.getProgramAtTime(now);
+        this._updateCurrentProgram(currentProgram);
 
-        if (programChanged && previousCurrent) {
-            // We missed a program transition - emit events
-            this._emitter.emit('programEnd', previousCurrent);
-            this._emitter.emit('programStart', currentProgram);
-        }
-
-        // Update state
-        this._currentProgram = currentProgram;
-        this._nextProgram = calculateNextProgram(
-            currentProgram,
-            this._index,
-            this._config.anchorTime
-        );
-        this._lastSyncTime = now;
-
-        // Emit sync event with drift info
+        // Emit sync event with hard resync info
         const previousEndTime = previousCurrent
             ? previousCurrent.scheduledEndTime
             : now;
