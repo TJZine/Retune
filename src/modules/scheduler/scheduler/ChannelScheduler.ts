@@ -362,8 +362,9 @@ export class ChannelScheduler implements IChannelScheduler {
         // Update config with new anchor
         this._config = { ...this._config, anchorTime: newAnchorTime };
 
-        // Rebuild index with new anchor (shuffle order stays same since seed unchanged)
-        this._index = buildScheduleIndex(this._config, this._shuffler);
+        // Note: No need to rebuild index - orderedItems, itemStartOffsets, and
+        // totalLoopDurationMs are independent of anchorTime (same seed = same shuffle).
+        // All time calculations use _config.anchorTime, not index data.
 
         // Emit programEnd for old program
         if (this._currentProgram) {
