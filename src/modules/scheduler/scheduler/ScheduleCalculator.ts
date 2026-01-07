@@ -202,6 +202,7 @@ export function calculatePreviousProgram(
     anchorTime: number
 ): ScheduledProgram {
     // Query 1ms before current program starts to get previous
+    // Returns the program at its actual elapsed position in the schedule
     return calculateProgramAtTime(
         currentProgram.scheduledStartTime - 1,
         index,
@@ -215,13 +216,18 @@ export function calculatePreviousProgram(
 
 /**
  * Apply playback mode to content items.
- * All modes are deterministic - random uses shuffleSeed just like shuffle.
+ * Scheduler only supports deterministic modes for replay/debugging.
  *
  * @param items - Original content items
  * @param mode - Playback mode
- * @param seed - Shuffle seed (used for both shuffle and random modes)
+ * @param seed - Shuffle seed (used for shuffle mode)
  * @param shuffler - Shuffle generator
  * @returns Ordered items based on mode
+ *
+ * @remarks
+ * The 'random' mode is deprecated in the scheduler. True random ordering
+ * should be resolved upstream by ContentResolver using Date.now() as seed.
+ * The scheduler treats 'random' identically to 'shuffle' for determinism.
  */
 export function applyPlaybackMode(
     items: ResolvedContentItem[],
@@ -238,14 +244,15 @@ export function applyPlaybackMode(
             }));
 
         case 'shuffle':
-        case 'random':
+        case 'random': {
             // Both modes use deterministic shuffle with seed
-            // 'random' is treated the same as 'shuffle' to ensure determinism
+            // 'random' is deprecated here - true random handled by ContentResolver upstream
             const shuffled = shuffler.shuffle(items, seed);
             return shuffled.map((item, index) => ({
                 ...item,
                 scheduledIndex: index,
             }));
+        }
 
         default:
             // Fallback to sequential

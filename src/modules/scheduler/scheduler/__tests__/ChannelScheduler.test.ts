@@ -440,6 +440,34 @@ describe('ChannelScheduler', () => {
                 })
             );
         });
+
+        it('should reset elapsed to 0 for restart-from-beginning behavior', () => {
+            const programStartHandler = jest.fn();
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content,
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+            scheduler.on('programStart', programStartHandler);
+            programStartHandler.mockClear();
+
+            scheduler.skipToPrevious();
+
+            // Verify elapsed is reset to 0 (not near durationMs)
+            expect(programStartHandler).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    elapsedMs: 0,
+                    remainingMs: 20000, // Item B has 20s duration
+                })
+            );
+        });
     });
 
     describe('getState', () => {

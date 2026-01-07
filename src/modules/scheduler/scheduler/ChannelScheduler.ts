@@ -214,7 +214,9 @@ export class ChannelScheduler implements IChannelScheduler {
      * Uses internal buffer to avoid allocation per call.
      * @param startTime - Window start (Unix ms)
      * @param endTime - Window end (Unix ms)
-     * @returns Schedule window with programs (array is reused internally)
+     * @returns Schedule window (programs array is reused - copy if storing)
+     * @remarks The returned programs array is an internal buffer. Subsequent
+     * calls will mutate this array. Clone if you need to persist the data.
      * @throws Error if no channel is loaded or invalid range
      */
     public getScheduleWindow(startTime: number, endTime: number): ScheduleWindow {
@@ -388,6 +390,7 @@ export class ChannelScheduler implements IChannelScheduler {
 
     /**
      * Skip to the previous program.
+     * Resets elapsed position to 0 for "restart from beginning" user experience.
      */
     public skipToPrevious(): void {
         if (!this._isActive || !this._config || !this._index) {
@@ -395,7 +398,14 @@ export class ChannelScheduler implements IChannelScheduler {
         }
 
         const previous = this.getPreviousProgram();
-        this.jumpToProgram(previous);
+        // Reset elapsed position for proper "skip to previous" behavior
+        // User expects to start from beginning, not resume from where we queried
+        const resetProgram = {
+            ...previous,
+            elapsedMs: 0,
+            remainingMs: previous.item.durationMs,
+        };
+        this.jumpToProgram(resetProgram);
     }
 
     // ============================================

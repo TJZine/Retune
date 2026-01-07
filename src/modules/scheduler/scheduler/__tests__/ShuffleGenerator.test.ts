@@ -51,7 +51,7 @@ describe('ShuffleGenerator', () => {
         it('should contain all original items', () => {
             const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
             const result = shuffler.shuffle(items, 42);
-            expect(result.sort()).toEqual(items.sort());
+            expect([...result].sort()).toEqual([...items].sort());
         });
 
         it('should work with string arrays', () => {
