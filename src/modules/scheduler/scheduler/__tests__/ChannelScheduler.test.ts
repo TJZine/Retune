@@ -421,7 +421,7 @@ describe('ChannelScheduler', () => {
             const config: ScheduleConfig = {
                 channelId: 'c1',
                 anchorTime: now,
-                content, // [a: 10s, b: 20s, c: 30s]
+                content, // [a: 10s, b: 20s]
                 playbackMode: 'sequential',
                 shuffleSeed: 1,
                 loopSchedule: true,
