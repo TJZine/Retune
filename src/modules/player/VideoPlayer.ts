@@ -216,11 +216,6 @@ export class VideoPlayer implements IVideoPlayer {
             this._videoElement.appendChild(source);
         }
 
-        // Set start position
-        if (descriptor.startPositionMs > 0) {
-            this._videoElement.currentTime = descriptor.startPositionMs / 1000;
-        }
-
         // Load subtitle tracks
         const burnInTracks = this._subtitleManager.loadTracks(descriptor.subtitleTracks);
         if (burnInTracks.length > 0) {
@@ -240,6 +235,12 @@ export class VideoPlayer implements IVideoPlayer {
         // Wait for canplay event with timeout (30s default)
         // Uses VideoPlayerEvents.waitForCanPlay() to avoid code duplication
         await this._eventManager.waitForCanPlay();
+
+        // Set start position AFTER metadata is loaded
+        // CRITICAL: load() resets currentTime to 0, so we must set it after canplay
+        if (descriptor.startPositionMs > 0) {
+            this._videoElement.currentTime = descriptor.startPositionMs / 1000;
+        }
     }
 
     /**
