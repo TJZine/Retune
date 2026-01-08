@@ -114,12 +114,14 @@ export class VideoPlayerEvents {
                 return;
             }
 
+            // Capture reference to ensure cleanup works if detach() is called
+            const videoElement = this._videoElement;
             let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
             const cleanup = (): void => {
                 if (timeoutId) clearTimeout(timeoutId);
-                this._videoElement?.removeEventListener('canplay', onCanPlay);
-                this._videoElement?.removeEventListener('error', onError);
+                videoElement.removeEventListener('canplay', onCanPlay);
+                videoElement.removeEventListener('error', onError);
             };
 
             const onCanPlay = (): void => {
@@ -132,8 +134,8 @@ export class VideoPlayerEvents {
                 reject(new Error('Error loading media'));
             };
 
-            this._videoElement.addEventListener('canplay', onCanPlay);
-            this._videoElement.addEventListener('error', onError);
+            videoElement.addEventListener('canplay', onCanPlay);
+            videoElement.addEventListener('error', onError);
 
             timeoutId = setTimeout(() => {
                 cleanup();

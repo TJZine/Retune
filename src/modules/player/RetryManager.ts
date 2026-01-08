@@ -168,7 +168,7 @@ export class RetryManager {
         video.load();
 
         // Wait for loadedmetadata before seeking, as load() resets currentTime
-        // This mirrors VideoPlayer.loadStream() which waits for canplay
+        // (VideoPlayer.loadStream uses canplay, but loadedmetadata is sufficient for seeking)
         const onMetadata = (): void => {
             video.removeEventListener('loadedmetadata', onMetadata);
             video.removeEventListener('error', onError);

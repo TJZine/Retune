@@ -97,23 +97,35 @@ export class EPGChannelList {
         name.className = 'epg-channel-name';
         name.textContent = channel.name;
 
-        // Channel icon (if available)
+        // Channel icon (if available) - validate URL scheme
         if (channel.icon) {
-            const icon = document.createElement('img');
-            icon.className = 'epg-channel-icon';
-            icon.src = channel.icon;
-            icon.alt = channel.name;
-            row.appendChild(icon);
+            // Only allow http:, https:, or safe data:image/* URLs
+            const isValidIconUrl = /^https?:\/\//i.test(channel.icon) ||
+                /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);/i.test(channel.icon);
+            if (isValidIconUrl) {
+                const icon = document.createElement('img');
+                icon.className = 'epg-channel-icon';
+                icon.src = channel.icon;
+                icon.alt = channel.name;
+                row.appendChild(icon);
+            }
         }
 
         row.appendChild(number);
         row.appendChild(name);
 
-        // Apply color if set
+        // Apply color if set - validate to prevent CSS injection
         if (channel.color) {
-            row.style.borderLeftColor = channel.color;
-            row.style.borderLeftWidth = '4px';
-            row.style.borderLeftStyle = 'solid';
+            // Only allow safe color formats: hex, rgb(), rgba(), or named colors
+            const isValidColor = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(channel.color) ||
+                /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(channel.color) ||
+                /^rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*[\d.]+\s*\)$/i.test(channel.color) ||
+                /^[a-z]+$/i.test(channel.color); // Named colors (no spaces/special chars)
+            if (isValidColor) {
+                row.style.borderLeftColor = channel.color;
+                row.style.borderLeftWidth = '4px';
+                row.style.borderLeftStyle = 'solid';
+            }
         }
 
         return row;
