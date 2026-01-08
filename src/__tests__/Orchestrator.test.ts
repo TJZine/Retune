@@ -112,6 +112,7 @@ const mockNavigation = {
     goTo: jest.fn(),
     getCurrentScreen: jest.fn().mockReturnValue('player'),
     on: jest.fn(() => jest.fn()),
+    off: jest.fn(),
     destroy: jest.fn(),
 };
 
@@ -212,6 +213,7 @@ const mockScheduler = {
     pauseSyncTimer: jest.fn(),
     resumeSyncTimer: jest.fn(),
     on: jest.fn(() => jest.fn()),
+    off: jest.fn(),
 };
 
 jest.mock('../modules/scheduler/scheduler', () => ({
@@ -245,6 +247,7 @@ const mockEpg = {
     isVisible: jest.fn().mockReturnValue(false),
     focusNow: jest.fn(),
     on: jest.fn(() => jest.fn()),
+    off: jest.fn(),
 };
 
 jest.mock('../modules/ui/epg', () => ({
@@ -451,6 +454,9 @@ describe('AppOrchestrator', () => {
 
             await expect(orchestrator.switchToChannel('invalid')).resolves.not.toThrow();
             expect(consoleSpy).toHaveBeenCalledWith('Channel not found:', 'invalid');
+
+            // Verify early return - stop should not be called for invalid channel
+            expect(mockVideoPlayer.stop).not.toHaveBeenCalled();
 
             consoleSpy.mockRestore();
         });

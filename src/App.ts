@@ -199,8 +199,23 @@ export class App {
 
     /**
      * Generate a unique client identifier.
+     * Uses crypto.randomUUID if available, falls back to Math.random.
      */
     private _generateClientId(): string {
+        // Prefer crypto.randomUUID() if available (Chromium 92+)
+        // Note: Some webOS versions may not support this despite Chromium version
+        if (
+            typeof crypto !== 'undefined' &&
+            typeof crypto.randomUUID === 'function'
+        ) {
+            try {
+                return `retune-${crypto.randomUUID()}`;
+            } catch {
+                // Fall through to Math.random fallback
+            }
+        }
+
+        // Fallback to Math.random (adequate for non-security-sensitive client ID)
         const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
         let result = 'retune-';
         for (let i = 0; i < 16; i++) {
@@ -208,6 +223,7 @@ export class App {
         }
         return result;
     }
+
 
     /**
      * Show error overlay with recovery actions.
@@ -287,13 +303,30 @@ export class App {
         const message = error instanceof Error ? error.message : String(error);
         const root = document.getElementById('app');
         if (root) {
-            root.innerHTML = `
-                <div class="fatal-error">
-                    <h1>Application Error</h1>
-                    <p>${message}</p>
-                    <p>Please refresh the page or restart the application.</p>
-                </div>
-            `;
+            // Clear existing content
+            root.innerHTML = '';
+
+            // Create container
+            const container = document.createElement('div');
+            container.className = 'fatal-error';
+
+            // Title
+            const title = document.createElement('h1');
+            title.textContent = 'Application Error';
+            container.appendChild(title);
+
+            // Error message (safe - uses textContent, not innerHTML)
+            const errorPara = document.createElement('p');
+            errorPara.textContent = message;
+            container.appendChild(errorPara);
+
+            // Instructions
+            const instructPara = document.createElement('p');
+            instructPara.textContent = 'Please refresh the page or restart the application.';
+            container.appendChild(instructPara);
+
+            root.appendChild(container);
         }
     }
+
 }

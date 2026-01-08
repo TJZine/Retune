@@ -71,8 +71,8 @@ if (document.readyState === 'loading') {
     bootstrap().catch(console.error);
 }
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
+// Cleanup on page hide (more reliable for async work than beforeunload)
+window.addEventListener('pagehide', () => {
     cleanup().catch(console.error);
 });
 

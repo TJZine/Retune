@@ -158,6 +158,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
     private _errorHandlers: Map<string, (error: AppError) => boolean> = new Map();
     private _eventUnsubscribers: Array<() => void> = [];
+    private _eventsWired: boolean = false;
     private _ready: boolean = false;
 
     constructor() {
@@ -351,6 +352,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             unsubscribe();
         }
         this._eventUnsubscribers = [];
+        this._eventsWired = false; // Reset to allow re-wiring on retry
 
         // Save state
         if (this._lifecycle) {
@@ -1014,8 +1016,15 @@ export class AppOrchestrator implements IAppOrchestrator {
 
     /**
      * Wire up all cross-module events per integration contracts.
+     * Idempotent: guards against duplicate wiring on retries.
      */
     private _setupEventWiring(): void {
+        // Guard against duplicate wiring on retries
+        if (this._eventsWired) {
+            return;
+        }
+        this._eventsWired = true;
+
         this._wireSchedulerEvents();
         this._wirePlayerEvents();
         this._wireNavigationEvents();
@@ -1029,13 +1038,17 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _wireSchedulerEvents(): void {
         if (!this._scheduler) return;
 
-        // Scheduler's on() returns void, we need a different approach for cleanup
-        // Track handlers separately for cleanup
         const handler = async (program: ScheduledProgram): Promise<void> => {
             await this._handleProgramStart(program);
         };
         this._scheduler.on('programStart', handler);
-        // Note: For cleanup, we would need off() method
+
+        // Register cleanup
+        this._eventUnsubscribers.push(() => {
+            if (this._scheduler) {
+                this._scheduler.off('programStart', handler);
+            }
+        });
     }
 
     /**
@@ -1051,6 +1064,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         };
         this._videoPlayer.on('ended', endedHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('ended', endedHandler);
+            }
+        });
 
         // Player error -> handle or skip
         const errorHandler = (error: PlaybackError): void => {
@@ -1071,6 +1089,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         };
         this._videoPlayer.on('error', errorHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('error', errorHandler);
+            }
+        });
     }
 
     /**
@@ -1084,12 +1107,22 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._handleKeyPress(event);
         };
         this._navigation.on('keyPress', keyHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('keyPress', keyHandler);
+            }
+        });
 
         // Screen change handler - show/hide screens
         const screenHandler = (payload: { from: string; to: string }): void => {
             this._handleScreenChange(payload.from, payload.to);
         };
         this._navigation.on('screenChange', screenHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('screenChange', screenHandler);
+            }
+        });
     }
 
     /**
@@ -1139,6 +1172,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             this.switchToChannel(payload.channel.id).catch(console.error);
         };
         this._epg.on('channelSelected', handler);
+        this._eventUnsubscribers.push(() => {
+            if (this._epg) {
+                this._epg.off('channelSelected', handler);
+            }
+        });
     }
 
     /**

@@ -232,4 +232,25 @@ export interface IChannelScheduler {
      * @param handler - Event handler
      */
     on(event: 'scheduleSync', handler: (state: SchedulerState) => void): void;
+
+    /**
+     * Unsubscribe from programStart events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'programStart', handler: (program: ScheduledProgram) => void): void;
+
+    /**
+     * Unsubscribe from programEnd events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'programEnd', handler: (program: ScheduledProgram) => void): void;
+
+    /**
+     * Unsubscribe from scheduleSync events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'scheduleSync', handler: (state: SchedulerState) => void): void;
 }
