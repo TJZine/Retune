@@ -26,6 +26,9 @@ export class RetryManager {
     /** Retry timer ID */
     private _retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    /** Metadata wait timeout ID (for _retryPlayback) */
+    private _metadataTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     /** Video element reference */
     private _videoElement: HTMLVideoElement | null = null;
 
@@ -103,6 +106,10 @@ export class RetryManager {
             clearTimeout(this._retryTimer);
             this._retryTimer = null;
         }
+        if (this._metadataTimeoutId) {
+            clearTimeout(this._metadataTimeoutId);
+            this._metadataTimeoutId = null;
+        }
     }
 
     /**
@@ -167,11 +174,22 @@ export class RetryManager {
 
         video.load();
 
+        // Timeout to prevent indefinite hang if loadedmetadata/error never fires
+        const METADATA_TIMEOUT_MS = 10000;
+
+        const cleanup = (): void => {
+            if (this._metadataTimeoutId) {
+                clearTimeout(this._metadataTimeoutId);
+                this._metadataTimeoutId = null;
+            }
+            video.removeEventListener('loadedmetadata', onMetadata);
+            video.removeEventListener('error', onError);
+        };
+
         // Wait for loadedmetadata before seeking, as load() resets currentTime
         // (VideoPlayer.loadStream uses canplay, but loadedmetadata is sufficient for seeking)
         const onMetadata = (): void => {
-            video.removeEventListener('loadedmetadata', onMetadata);
-            video.removeEventListener('error', onError);
+            cleanup();
             video.currentTime = savedTime;
             video.play().catch(() => {
                 // Error will be handled by error event
@@ -179,11 +197,19 @@ export class RetryManager {
         };
 
         const onError = (): void => {
-            video.removeEventListener('loadedmetadata', onMetadata);
-            video.removeEventListener('error', onError);
+            cleanup();
             // Error propagates through VideoPlayerEvents error handler
         };
 
+        const onTimeout = (): void => {
+            cleanup();
+            console.warn('[RetryManager] Metadata timeout after 10s, treating as error');
+            // Trigger error path - the video element may be in a zombie state
+            // Emit a synthetic error event to let VideoPlayerEvents handle recovery
+            video.dispatchEvent(new Event('error'));
+        };
+
+        this._metadataTimeoutId = setTimeout(onTimeout, METADATA_TIMEOUT_MS);
         video.addEventListener('loadedmetadata', onMetadata);
         video.addEventListener('error', onError);
     }

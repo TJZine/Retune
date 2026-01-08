@@ -106,7 +106,11 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         ) as HTMLImageElement;
         if (poster) {
             // Validate URL scheme to prevent javascript: or data: URLs
-            const isValidUrl = item.thumb && /^https?:\/\//i.test(item.thumb);
+            // Also allow relative paths (Plex returns /library/metadata/.../thumb/...)
+            const isValidUrl = item.thumb && (
+                /^https?:\/\//i.test(item.thumb) ||
+                item.thumb.startsWith('/')
+            );
             if (isValidUrl) {
                 poster.src = item.thumb!;
                 poster.alt = item.title;
