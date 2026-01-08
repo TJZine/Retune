@@ -1038,8 +1038,12 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _wireSchedulerEvents(): void {
         if (!this._scheduler) return;
 
-        const handler = async (program: ScheduledProgram): Promise<void> => {
-            await this._handleProgramStart(program);
+        // Fire-and-forget pattern: _handleProgramStart has internal error handling
+        // This catch is a safety net for any unexpected throws
+        const handler = (program: ScheduledProgram): void => {
+            this._handleProgramStart(program).catch((error) => {
+                console.error('[Orchestrator] Unhandled error in program start:', error);
+            });
         };
         this._scheduler.on('programStart', handler);
 
