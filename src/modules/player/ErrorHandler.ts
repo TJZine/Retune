@@ -70,7 +70,7 @@ export function mapMediaErrorCodeToPlaybackError(
 
     // Only set retryAfterMs if recoverable
     if (recoverable) {
-        error.retryAfterMs = retryDelayMs * Math.pow(2, retryCount);
+        error.retryAfterMs = calculateBackoffDelay(retryCount, retryDelayMs);
     }
 
     return error;

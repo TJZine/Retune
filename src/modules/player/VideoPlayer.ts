@@ -330,10 +330,12 @@ export class VideoPlayer implements IVideoPlayer {
             throw new Error('VideoPlayer not initialized');
         }
 
+        // Capture reference to prevent issues if destroy() is called mid-seek
+        const video = this._videoElement;
         const positionSec = Math.max(0, positionMs / 1000);
-        const durationSec = this._videoElement.duration || Infinity;
+        const durationSec = video.duration || Infinity;
 
-        this._videoElement.currentTime = Math.min(positionSec, durationSec);
+        video.currentTime = Math.min(positionSec, durationSec);
 
         // Wait for seeked event with timeout
         return new Promise((resolve, reject) => {
@@ -341,8 +343,11 @@ export class VideoPlayer implements IVideoPlayer {
             let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
             const cleanup = (): void => {
-                if (timeoutId) clearTimeout(timeoutId);
-                this._videoElement?.removeEventListener('seeked', handler);
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                video.removeEventListener('seeked', handler);
             };
 
             const handler = (): void => {
@@ -350,7 +355,7 @@ export class VideoPlayer implements IVideoPlayer {
                 resolve();
             };
 
-            this._videoElement?.addEventListener('seeked', handler);
+            video.addEventListener('seeked', handler);
 
             timeoutId = setTimeout(() => {
                 cleanup();

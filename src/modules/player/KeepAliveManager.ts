@@ -34,7 +34,9 @@ export class KeepAliveManager {
         this._intervalId = setInterval(() => {
             if (this._isPlayingFn()) {
                 // Touch DOM to prevent webOS suspension
-                document.dispatchEvent(new Event('click'));
+                // Use custom event to avoid triggering NavigationManager click handlers
+                // which expect event.target to be an HTMLElement with .closest()
+                document.dispatchEvent(new CustomEvent('retune:keepalive'));
             }
         }, KEEP_ALIVE_INTERVAL_MS);
     }

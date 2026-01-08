@@ -143,30 +143,48 @@ export class RetryManager {
             return;
         }
 
-        const currentTime = this._videoElement.currentTime;
+        // Capture current time BEFORE calling load() which resets it
+        const savedTime = this._videoElement.currentTime;
+        const video = this._videoElement;
 
         // Clear existing sources
-        while (this._videoElement.firstChild) {
-            this._videoElement.removeChild(this._videoElement.firstChild);
+        while (video.firstChild) {
+            video.removeChild(video.firstChild);
         }
-        this._videoElement.removeAttribute('src');
+        video.removeAttribute('src');
 
         // Set source based on protocol (mirror loadStream logic)
         if (this._descriptor.protocol === 'hls') {
             // Native HLS - set src directly
-            this._videoElement.src = this._descriptor.url;
+            video.src = this._descriptor.url;
         } else {
             // Direct play - use source element with type hint for webOS
             const source = document.createElement('source');
             source.src = this._descriptor.url;
             source.type = this._descriptor.mimeType;
-            this._videoElement.appendChild(source);
+            video.appendChild(source);
         }
 
-        this._videoElement.load();
-        this._videoElement.currentTime = currentTime;
-        this._videoElement.play().catch(() => {
-            // Error will be handled by error event
-        });
+        video.load();
+
+        // Wait for loadedmetadata before seeking, as load() resets currentTime
+        // This mirrors VideoPlayer.loadStream() which waits for canplay
+        const onMetadata = (): void => {
+            video.removeEventListener('loadedmetadata', onMetadata);
+            video.removeEventListener('error', onError);
+            video.currentTime = savedTime;
+            video.play().catch(() => {
+                // Error will be handled by error event
+            });
+        };
+
+        const onError = (): void => {
+            video.removeEventListener('loadedmetadata', onMetadata);
+            video.removeEventListener('error', onError);
+            // Error propagates through VideoPlayerEvents error handler
+        };
+
+        video.addEventListener('loadedmetadata', onMetadata);
+        video.addEventListener('error', onError);
     }
 }
