@@ -208,6 +208,12 @@ export class EPGVirtualizer {
                     const cellKey = `${channelId}-${program.scheduledStartTime}`;
                     const cell = positionCell(program, this.gridAnchorTime, this.config.pixelsPerMinute);
 
+                    // Compute isPartial: true if program is clipped by visible window
+                    const programStartMinutes = (program.scheduledStartTime - this.gridAnchorTime) / 60000;
+                    const programEndMinutes = (program.scheduledEndTime - this.gridAnchorTime) / 60000;
+                    const isPartial = programStartMinutes < range.visibleTimeRange.start ||
+                        programEndMinutes > range.visibleTimeRange.end;
+
                     newVisibleCells.set(cellKey, {
                         key: cellKey,
                         channelId,
@@ -215,7 +221,7 @@ export class EPGVirtualizer {
                         program,
                         left: cell.left,
                         width: cell.width,
-                        isPartial: cell.isPartial,
+                        isPartial,
                         isCurrent: now >= program.scheduledStartTime && now < program.scheduledEndTime,
                         cellElement: null,
                     });
