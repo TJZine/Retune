@@ -393,7 +393,10 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             previousFocus.cellElement.classList.remove(EPG_CLASSES.CELL_FOCUSED);
         }
 
-        // Set focus on new cell
+        // Ensure cell is visible FIRST (may trigger render)
+        this.ensureCellVisible(channelIndex, program);
+
+        // THEN set focus on the now-rendered cell
         const cellElement = this.virtualizer.setFocusedCell(channel.id, program.scheduledStartTime);
 
         this.state.focusedCell = {
@@ -402,9 +405,6 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             program,
             cellElement,
         };
-
-        // Ensure cell is visible
-        this.ensureCellVisible(channelIndex, program);
 
         // Update channel list focus
         this.channelList.setFocusedChannel(channelIndex);
@@ -613,7 +613,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             return false; // At start of schedule day
         }
 
-        // Scroll time back and try to find a program
+        // Scroll time back
         this.state.scrollPosition.timeOffset = Math.max(
             0,
             this.state.scrollPosition.timeOffset - EPG_CONSTANTS.TIME_SCROLL_AMOUNT
@@ -621,13 +621,26 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
         this.renderGrid();
 
-        // Focus last visible program
+        // Find program that ends at or before the current program's start
         const channel = this.state.channels[focusedCell.channelIndex];
         if (channel) {
             const schedule = this.state.schedules.get(channel.id);
-            if (schedule && focusedCell.programIndex > 0) {
-                this.focusProgram(focusedCell.channelIndex, focusedCell.programIndex - 1);
-                return true;
+            if (schedule) {
+                // Find the program immediately before the currently focused one
+                // Use reverse search since programs are ordered by time
+                let prevIndex = -1;
+                for (let i = schedule.programs.length - 1; i >= 0; i--) {
+                    const p = schedule.programs[i];
+                    if (p && p.scheduledEndTime <= focusedCell.program.scheduledStartTime) {
+                        prevIndex = i;
+                        break;
+                    }
+                }
+
+                if (prevIndex >= 0) {
+                    this.focusProgram(focusedCell.channelIndex, prevIndex);
+                    return true;
+                }
             }
         }
 

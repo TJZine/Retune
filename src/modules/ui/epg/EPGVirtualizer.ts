@@ -234,9 +234,10 @@ export class EPGVirtualizer {
         for (const [key, cellData] of newVisibleCells) {
             const existing = this.visibleCells.get(key);
             if (existing && existing.cellElement) {
-                // Reuse existing element, just update position if needed
+                // Reuse existing element, update position and content
                 cellData.cellElement = existing.cellElement;
                 this.updateCellPosition(cellData);
+                this.updateCellContent(cellData);
             } else {
                 // Render new cell
                 this.renderCell(key, cellData);
@@ -375,6 +376,25 @@ export class EPGVirtualizer {
         } else {
             element.classList.remove(EPG_CLASSES.CELL_CURRENT);
         }
+    }
+
+    /**
+     * Update cell content (title and time).
+     * Called on reused cells to ensure fresh data after schedule updates.
+     *
+     * @param cellData - Cell data with program info
+     */
+    private updateCellContent(cellData: CellRenderData): void {
+        const element = cellData.cellElement;
+        if (!element) return;
+
+        const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
+        const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
+        if (title) title.textContent = cellData.program.item.title;
+        if (time) time.textContent = formatTimeRange(
+            cellData.program.scheduledStartTime,
+            cellData.program.scheduledEndTime
+        );
     }
 
     /**
