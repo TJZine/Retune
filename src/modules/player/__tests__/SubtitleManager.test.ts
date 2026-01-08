@@ -1,0 +1,215 @@
+/**
+ * @fileoverview Unit tests for SubtitleManager.
+ * @module modules/player/__tests__/SubtitleManager.test
+ * @jest-environment jsdom
+ */
+
+import { SubtitleManager } from '../SubtitleManager';
+import type { SubtitleTrack } from '../types';
+
+// ============================================
+// Test Helpers
+// ============================================
+
+function createMockVideoElement(): HTMLVideoElement {
+    const video = document.createElement('video');
+
+    // Create a minimal mock for textTracks
+    const mockTextTracks = {
+        length: 0,
+        getTrackById: jest.fn().mockReturnValue(null),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        onchange: null,
+        onaddtrack: null,
+        onremovetrack: null,
+        item: jest.fn().mockReturnValue(null),
+    };
+
+    Object.defineProperty(video, 'textTracks', {
+        get: (): TextTrackList => mockTextTracks as unknown as TextTrackList,
+        configurable: true,
+    });
+
+    return video;
+}
+
+function createMockSubtitleTrack(
+    overrides: Partial<SubtitleTrack> = {}
+): SubtitleTrack {
+    return {
+        id: 'sub-1',
+        title: 'English',
+        languageCode: 'en',
+        language: 'English',
+        format: 'srt',
+        url: 'http://example.com/subs.srt',
+        default: false,
+        forced: false,
+        ...overrides,
+    };
+}
+
+// ============================================
+// SubtitleManager Tests
+// ============================================
+
+describe('SubtitleManager', () => {
+    let manager: SubtitleManager;
+    let videoElement: HTMLVideoElement;
+
+    beforeEach(() => {
+        manager = new SubtitleManager();
+        videoElement = createMockVideoElement();
+        manager.initialize(videoElement);
+    });
+
+    afterEach(() => {
+        manager.destroy();
+    });
+
+    // ========================================
+    // loadTracks
+    // ========================================
+
+    describe('loadTracks', () => {
+        it('should create track elements for text-based formats', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en', format: 'srt' }),
+                createMockSubtitleTrack({ id: 'es', format: 'vtt', languageCode: 'es' }),
+            ];
+
+            const burnInRequired = manager.loadTracks(tracks);
+
+            // Should not require burn-in for SRT/VTT
+            expect(burnInRequired).toHaveLength(0);
+
+            // Should have loaded tracks
+            expect(manager.getTracks()).toHaveLength(2);
+        });
+
+        it('should return burn-in required for PGS format', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'pgs-en', format: 'pgs' }),
+            ];
+
+            const burnInRequired = manager.loadTracks(tracks);
+
+            expect(burnInRequired).toContain('pgs-en');
+        });
+
+        it('should return burn-in required for ASS format', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'ass-en', format: 'ass' }),
+            ];
+
+            const burnInRequired = manager.loadTracks(tracks);
+
+            expect(burnInRequired).toContain('ass-en');
+        });
+
+        it('should unload existing tracks before loading new ones', () => {
+            const tracks1: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en-1' }),
+            ];
+            const tracks2: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en-2' }),
+            ];
+
+            manager.loadTracks(tracks1);
+            expect(manager.getTracks()).toHaveLength(1);
+            expect(manager.getTracks()[0]?.id).toBe('en-1');
+
+            manager.loadTracks(tracks2);
+            expect(manager.getTracks()).toHaveLength(1);
+            expect(manager.getTracks()[0]?.id).toBe('en-2');
+        });
+    });
+
+    // ========================================
+    // setActiveTrack
+    // ========================================
+
+    describe('setActiveTrack', () => {
+        it('should update active track ID', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en' }),
+            ];
+            manager.loadTracks(tracks);
+
+            manager.setActiveTrack('en');
+            expect(manager.getActiveTrackId()).toBe('en');
+
+            manager.setActiveTrack(null);
+            expect(manager.getActiveTrackId()).toBeNull();
+        });
+    });
+
+    // ========================================
+    // unloadTracks
+    // ========================================
+
+    describe('unloadTracks', () => {
+        it('should clear all tracks', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en' }),
+                createMockSubtitleTrack({ id: 'es' }),
+            ];
+            manager.loadTracks(tracks);
+
+            expect(manager.getTracks()).toHaveLength(2);
+
+            manager.unloadTracks();
+
+            expect(manager.getTracks()).toHaveLength(0);
+            expect(manager.getActiveTrackId()).toBeNull();
+        });
+    });
+
+    // ========================================
+    // requiresBurnIn
+    // ========================================
+
+    describe('requiresBurnIn', () => {
+        it('should return true for PGS', () => {
+            expect(manager.requiresBurnIn('pgs')).toBe(true);
+            expect(manager.requiresBurnIn('PGS')).toBe(true);
+        });
+
+        it('should return true for ASS', () => {
+            expect(manager.requiresBurnIn('ass')).toBe(true);
+            expect(manager.requiresBurnIn('ASS')).toBe(true);
+        });
+
+        it('should return true for SSA', () => {
+            expect(manager.requiresBurnIn('ssa')).toBe(true);
+        });
+
+        it('should return false for SRT', () => {
+            expect(manager.requiresBurnIn('srt')).toBe(false);
+        });
+
+        it('should return false for VTT', () => {
+            expect(manager.requiresBurnIn('vtt')).toBe(false);
+        });
+    });
+
+    // ========================================
+    // destroy
+    // ========================================
+
+    describe('destroy', () => {
+        it('should cleanup on destroy', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en' }),
+            ];
+            manager.loadTracks(tracks);
+            manager.setActiveTrack('en');
+
+            manager.destroy();
+
+            expect(manager.getTracks()).toHaveLength(0);
+            expect(manager.getActiveTrackId()).toBeNull();
+        });
+    });
+});

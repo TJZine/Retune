@@ -186,7 +186,7 @@ export interface ChannelConfig {
     name: string;
     /** Optional description */
     description?: string;
-    /** Custom icon URL or built-in icon ID */
+    /** Custom icon URL */
     icon?: string;
     /** Accent color for UI (hex string) */
     color?: string;
