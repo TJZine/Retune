@@ -74,6 +74,21 @@ export interface IChannelScheduler {
      */
     unloadChannel(): void;
 
+    /**
+     * Pause the sync timer without unloading the channel.
+     * This preserves loaded channel state (config/index/current/next).
+     *
+     * Idempotent: calling when already paused or before loadChannel() is a no-op.
+     */
+    pauseSyncTimer(): void;
+
+    /**
+     * Resume the sync timer without re-loading the channel.
+     *
+     * Idempotent: calling when already running or before loadChannel() is a no-op.
+     */
+    resumeSyncTimer(): void;
+
     // ============================================
     // Time-based Queries (Core Algorithm)
     // ============================================
