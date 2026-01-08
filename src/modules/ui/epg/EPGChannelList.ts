@@ -77,7 +77,6 @@ export class EPGChannelList {
      * Create a channel row element.
      *
      * @param channel - Channel configuration
-     * @param index - Channel index
      * @returns The row element
      */
     private createChannelRow(channel: ChannelConfig): HTMLElement {

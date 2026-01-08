@@ -83,19 +83,13 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
     /**
      * Update the info panel with new program details.
+     * Shows the panel if not already visible.
      *
      * @param program - Program to display
      */
     update(program: ScheduledProgram): void {
-        if (!this.containerElement) return;
-
-        this.currentProgram = program;
-        this.updateContent(program);
-
-        if (!this.isVisible) {
-            this.containerElement.style.display = 'flex';
-            this.isVisible = true;
-        }
+        // Delegate to show() which handles content update and visibility
+        this.show(program);
     }
 
     /**
@@ -106,13 +100,15 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         const { item } = program;
 
-        // Update poster
+        // Update poster with URL validation (defense-in-depth)
         const poster = this.containerElement.querySelector(
             `.${EPG_CLASSES.INFO_POSTER}`
         ) as HTMLImageElement;
         if (poster) {
-            if (item.thumb) {
-                poster.src = item.thumb;
+            // Validate URL scheme to prevent javascript: or data: URLs
+            const isValidUrl = item.thumb && /^https?:\/\//i.test(item.thumb);
+            if (isValidUrl) {
+                poster.src = item.thumb!;
                 poster.alt = item.title;
                 poster.style.display = 'block';
             } else {
@@ -137,11 +133,12 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             meta.textContent = `${startTime} - ${endTime} (${duration}) ${year}`;
         }
 
-        // Update description (if available via extended metadata)
-        const description = this.containerElement.querySelector(`.${EPG_CLASSES.INFO_DESCRIPTION}`);
+        // Update description - hide when no extended metadata available
+        const description = this.containerElement.querySelector(`.${EPG_CLASSES.INFO_DESCRIPTION}`) as HTMLElement;
         if (description) {
-            // Description would come from extended metadata, placeholder for now
+            // Description would come from extended metadata, hide until available
             description.textContent = '';
+            description.style.display = 'none';
         }
     }
 

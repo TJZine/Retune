@@ -292,8 +292,10 @@ describe('EPGVirtualizer', () => {
             virtualizer.renderVisibleCells(channelIds, schedules, scrolledRange);
             const afterScrollCount = container.querySelectorAll('.epg-cell').length;
 
-            // Element count should stay stable (recycled, not grown unboundedly)
-            expect(afterScrollCount).toBeLessThanOrEqual(initialCount * 2);
+            // Element count should stay stable due to recycling
+            expect(afterScrollCount).toBeLessThan(EPG_CONSTANTS.MAX_DOM_ELEMENTS);
+            // Should be roughly similar to initial count (allowing some variance for buffer)
+            expect(Math.abs(afterScrollCount - initialCount)).toBeLessThan(50);
         });
     });
 

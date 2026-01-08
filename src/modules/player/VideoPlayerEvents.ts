@@ -186,7 +186,7 @@ export class VideoPlayerEvents {
 
     private _handleEnded(): void {
         this._callbacks?.updateStatus('ended');
-        this._emitter?.emit('ended', undefined as unknown as void);
+        this._emitter?.emit('ended', undefined);
     }
 
     private _handleError(event: Event): void {
@@ -247,7 +247,7 @@ export class VideoPlayerEvents {
             }
         }
 
-        const bufferPercent = Math.round((bufferedEnd / duration) * 100);
+        const bufferPercent = Math.min(100, Math.round((bufferedEnd / duration) * 100));
         this._callbacks?.setState({ bufferPercent });
 
         this._emitter?.emit('bufferUpdate', { percent: bufferPercent, bufferedRanges });

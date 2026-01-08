@@ -94,7 +94,7 @@ export class VideoPlayer implements IVideoPlayer {
         // Guard: Prevent creating multiple video elements (spec requirement)
         if (this._videoElement) {
             console.warn('[VideoPlayer] Already initialized. Call destroy() before re-initializing.');
-            this.destroy();
+            return;
         }
 
         // Apply defaults

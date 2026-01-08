@@ -238,6 +238,15 @@ export class AudioTrackManager {
                 }
             }
 
+            // Immediate check before polling - track switch may be instantaneous
+            for (let i = 0; i < audioTracks.length; i++) {
+                if (audioTracks[i]?.id === targetTrack.id && audioTracks[i]?.enabled) {
+                    clearTimeout(timeout);
+                    resolve();
+                    return;
+                }
+            }
+
             // Verify switch with polling - find by ID, not index
             // AudioTrack.index is media-relative, not array-relative
             const checkInterval = setInterval(() => {

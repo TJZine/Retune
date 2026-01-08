@@ -237,7 +237,7 @@ export interface PlayerEventMap {
     /** Emitted when audio or subtitle track changes */
     trackChange: { type: 'audio' | 'subtitle'; trackId: string | null };
     /** Emitted when playback reaches the end */
-    ended: void;
+    ended: undefined;
     /** Emitted on unrecoverable error */
     error: PlaybackError;
     /** Emitted when media metadata is loaded */
@@ -247,7 +247,7 @@ export interface PlayerEventMap {
 }
 
 // ============================================
-// Internal State (not exported publicly)
+// Internal State (exported for related player modules only)
 // ============================================
 
 /**
