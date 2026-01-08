@@ -242,15 +242,17 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.containerElement.classList.add(EPG_CLASSES.CONTAINER_VISIBLE);
         this.state.isVisible = true;
 
+        // Start time indicator updates (paused when hidden)
+        this.startTimeUpdateInterval();
+
+        // Render grid first, then focus (focus needs rendered cells)
+        this.renderGrid();
+
         // Auto-scroll to current time if configured
         if (this.config.autoScrollToNow) {
             this.focusNow();
         }
 
-        // Start time indicator updates (paused when hidden)
-        this.startTimeUpdateInterval();
-
-        this.renderGrid();
         this.emit('open', undefined);
     }
 
@@ -427,6 +429,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const centerOffset = minutesFromAnchor - (this.config.visibleHours * 60 / 2);
         this.state.scrollPosition.timeOffset = Math.max(0, centerOffset);
 
+        // Track if we focused a program (to avoid redundant render)
+        let didFocus = false;
+
         // If we have a focused channel, find current program there
         const channelIndex = this.state.focusedCell
             ? this.state.focusedCell.channelIndex
@@ -444,14 +449,19 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
                     if (currentProgramIndex >= 0) {
                         this.focusProgram(channelIndex, currentProgramIndex);
+                        didFocus = true;
                     } else if (schedule.programs.length > 0) {
                         this.focusProgram(channelIndex, 0);
+                        didFocus = true;
                     }
                 }
             }
         }
 
-        this.renderGrid();
+        // Only render if focusProgram wasn't called (it already renders)
+        if (!didFocus) {
+            this.renderGrid();
+        }
     }
 
     /**
@@ -501,12 +511,20 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private ensureCellVisible(channelIndex: number, program: ScheduledProgram): void {
         const { scrollPosition } = this.state;
         const { visibleChannels, visibleHours } = this.config;
+        let needsRender = false;
 
         // Check vertical visibility
         if (channelIndex < scrollPosition.channelOffset) {
-            this.scrollToChannel(channelIndex);
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            needsRender = true;
         } else if (channelIndex >= scrollPosition.channelOffset + visibleChannels) {
-            this.scrollToChannel(channelIndex - visibleChannels + 1);
+            const targetOffset = channelIndex - visibleChannels + 1;
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            needsRender = true;
         }
 
         // Check horizontal visibility
@@ -517,10 +535,15 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (programStartMinutes < scrollPosition.timeOffset) {
             this.state.scrollPosition.timeOffset = programStartMinutes;
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
-            this.renderGrid();
+            needsRender = true;
         } else if (programEndMinutes > visibleEndMinutes) {
             this.state.scrollPosition.timeOffset = programEndMinutes - (visibleHours * 60);
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
+            needsRender = true;
+        }
+
+        // Single render at end if any scroll occurred
+        if (needsRender) {
             this.renderGrid();
         }
     }
@@ -677,6 +700,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.scrollPosition.timeOffset += EPG_CONSTANTS.TIME_SCROLL_AMOUNT;
         this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
         this.renderGrid();
+
+        // Find and focus the next program after the current one
+        const nextIndex = schedule.programs.findIndex(
+            (p) => p.scheduledStartTime >= focusedCell.program.scheduledEndTime
+        );
+        if (nextIndex >= 0) {
+            this.focusProgram(focusedCell.channelIndex, nextIndex);
+        }
 
         return true;
     }
