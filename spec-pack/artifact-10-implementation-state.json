@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "lastUpdated": "2026-01-05T11:19:46Z",
+  "lastUpdated": "2026-01-07T06:47:00Z",
   "specPackVersion": "1.0.2",
-  "currentPhase": 1,
+  "currentPhase": 4,
   "phases": {
     "1": {
       "name": "Core Infrastructure",
-      "status": "pending",
+      "status": "complete",
       "modules": [
         "event-emitter",
         "plex-auth",
@@ -16,7 +16,7 @@
     },
     "2": {
       "name": "Plex Integration",
-      "status": "pending",
+      "status": "complete",
       "modules": [
         "plex-server-discovery",
         "plex-library",
@@ -25,7 +25,7 @@
     },
     "3": {
       "name": "Core Playback (MVP)",
-      "status": "pending",
+      "status": "complete",
       "modules": [
         "video-player",
         "channel-manager",
@@ -34,7 +34,7 @@
     },
     "4": {
       "name": "Full EPG Experience",
-      "status": "pending",
+      "status": "in-progress",
       "modules": [
         "epg-ui"
       ]
@@ -311,13 +311,13 @@
       "retryCount": 3
     },
     "video-player": {
-      "status": "review",
+      "status": "complete",
       "specVersion": "1.0.0",
       "blockedBy": [
         "plex-stream-resolver"
       ],
       "implementedBy": "coding-agent",
-      "reviewedBy": null,
+      "reviewedBy": "code-review-agent",
       "verificationPassed": true,
       "priority": 4,
       "estimatedLoC": 480,
@@ -326,27 +326,34 @@
       "orchestrationDoc": "orchestration-docs/session-video-player-1.md",
       "blockedReason": null,
       "startedAt": "2026-01-06T19:53:44Z",
-      "completedAt": "2026-01-06T19:55:00Z"
+      "completedAt": "2026-01-06T19:55:00Z",
+      "lastReview": "2026-01-07T03:39:23Z",
+      "retryCount": 2,
+      "lastFailure": null
     },
     "epg-ui": {
-      "status": "pending",
+      "status": "complete",
       "specVersion": "1.0.0",
       "blockedBy": [
         "navigation",
         "channel-scheduler",
         "channel-manager"
       ],
-      "implementedBy": null,
-      "reviewedBy": null,
-      "verificationPassed": null,
+      "implementedBy": "coding-agent",
+      "reviewedBy": "code-review-agent",
+      "verificationPassed": true,
       "priority": 6,
       "estimatedLoC": 700,
-      "attempts": 0,
-      "sessionId": null,
-      "orchestrationDoc": null,
+      "attempts": 2,
+      "sessionId": "a3f2c8d4-7e91-4b5a-9c6f-1d8e2a0b3c4d",
+      "orchestrationDoc": "orchestration-docs/session-epg-ui-1.md",
+      "contextHandoff": "spec-pack/context-handoff/epg-ui.md",
       "blockedReason": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-01-07T19:52:00Z",
+      "completedAt": "2026-01-08T00:56:00Z",
+      "lastReview": "2026-01-08T00:56:00Z",
+      "lastFailure": null,
+      "retryCount": 1
     },
     "app-orchestrator": {
       "status": "pending",

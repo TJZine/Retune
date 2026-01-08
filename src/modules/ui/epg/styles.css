@@ -1,0 +1,265 @@
+/* EPG Container */
+.epg-container {
+  position: absolute;
+  top: 5%;
+  left: 5%;
+  width: 90%;
+  height: 90%;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.epg-container.visible {
+  display: flex;
+}
+
+/* Grid Layout */
+.epg-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Channel List (Left Column) */
+.epg-channel-list {
+  grid-row: 2;
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.8);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+.epg-channel-row {
+  height: 80px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.epg-channel-row.focused {
+  background: rgba(0, 168, 225, 0.2);
+}
+
+.epg-channel-number {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 32px;
+}
+
+.epg-channel-name {
+  font-size: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epg-channel-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* Time Header */
+.epg-time-header {
+  grid-row: 1;
+  grid-column: 2;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.epg-time-slot {
+  position: absolute;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  box-sizing: border-box;
+}
+
+/* Program Area */
+.epg-program-area {
+  grid-row: 2;
+  grid-column: 2;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Program Cells */
+.epg-cell {
+  position: absolute;
+  height: 76px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: 2px;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  cursor: pointer;
+}
+
+.epg-cell:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.epg-cell.focused {
+  background: var(--focus-color, #00a8e1);
+  transform: scale(1.02);
+  z-index: 10;
+  box-shadow: 0 0 20px rgba(0, 168, 225, 0.5);
+}
+
+.epg-cell.current {
+  border-left: 4px solid #ff4444;
+}
+
+.epg-cell-title {
+  font-size: 24px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.epg-cell-time {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Current Time Indicator */
+.epg-time-indicator {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: #ff4444;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* Info Panel (Bottom) */
+.epg-info-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 180px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.8));
+  padding: 16px 24px;
+  display: flex;
+  gap: 24px;
+  box-sizing: border-box;
+}
+
+.epg-info-poster {
+  width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.epg-info-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.epg-info-title {
+  font-size: 32px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.epg-info-meta {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.epg-info-description {
+  font-size: 20px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.9);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: calc(20px * 1.4 * 3);
+}
+
+.epg-info-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: auto;
+}
+
+.epg-info-button {
+  padding: 12px 32px;
+  font-size: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 150ms ease-out;
+}
+
+.epg-info-button:focus,
+.epg-info-button.focused {
+  background: var(--focus-color, #00a8e1);
+  border-color: white;
+  outline: none;
+}
+
+.epg-info-button.primary {
+  background: var(--primary-color, #e5a00d);
+}
+
+/* CSS Variables for theming */
+:root {
+  --focus-color: #00a8e1;
+  --primary-color: #e5a00d;
+  --surface-elevated: rgba(255, 255, 255, 0.1);
+}
