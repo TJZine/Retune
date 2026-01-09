@@ -1,0 +1,11 @@
+# Default owners
+* @TJZine
+
+# Modules
+src/modules/player/ @TJZine
+src/modules/plex/ @TJZine
+src/modules/scheduler/ @TJZine
+
+# Documentation
+docs/ @TJZine
+*.md @TJZine
