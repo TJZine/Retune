@@ -1,0 +1,56 @@
+# Troubleshooting
+
+Common issues and how to fix them.
+
+## Installation Issues
+
+### "Developer Mode" expires
+
+**Issue**: The app stops working after a few days.
+**Cause**: LG Developer Mode sessions are limited to 50 hours.
+**Fix**: Open the **Developer Mode** app on your TV and click **"Extend Session"**. You do not need to reinstall Retune.
+
+### "Connection Refused" when installing
+
+**Issue**: `ares-install` fails with connection error.
+**Fix**:
+
+1. Ensure TV and PC are on the same Wi-Fi.
+2. Check if the IP address in Developer Mode app has changed.
+3. Turn "Key Server" OFF and ON again in Developer Mode app.
+
+## Playback Issues
+
+### Video buffers constantly
+
+- **Network**: Check your Wi-Fi signal. 4K content requires high bandwidth.
+- **Server**: Your Plex server might be struggling to transcode. Retune tries to Direct Play, but sometimes transcoding is unavoidable (e.g. unsupported subtitles).
+
+### "Playback Failed" error
+
+- **File Moved**: Use "Scan Library Files" in Plex to ensure the file still exists.
+- **Format**: The specific video codec might not be supported by webOS.
+
+### Audio is out of sync
+
+- Try pausing and resuming playback.
+- If persistent, check if "Direct Play" is active in Plex Dashboard. Transcoding sometimes introduces sync issues.
+
+## EPG & Channel Issues
+
+### Guide data is empty
+
+- Wait a moment; schedule generation happens in the background.
+- If persistent, go to specific Channel settings and click **Save** to regenerate the schedule.
+
+### Wrong poster art
+
+- Retune caches images for performance. If you changed art in Plex, it might take a while to update in Retune.
+
+## Still stuck?
+
+Please [open an issue](https://github.com/TJZine/Retune/issues) on GitHub with:
+
+1. Your TV Model
+2. webOS Version
+3. Description of the problem
