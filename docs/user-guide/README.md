@@ -15,7 +15,7 @@ Detailed documentation for using and configuring Retune.
 
 ### How do I refresh content?
 
-If you've added new movies to Plex, Retune will pick them up automatically the next time the channel playlist regenerates (usually daily). You can force a refresh by editing the channel and saving it again.
+If you've added new movies to Plex, Retune will pick them up automatically the next time the channel schedule regenerates (typically when a new day begins or when you edit/save the channel). You can force a refresh by editing the channel and saving it again.
 
 ### Can I use multiple Plex servers?
 
@@ -23,4 +23,4 @@ Yes! You can mix content from different servers on different channels. Retune wi
 
 ### Does it support 4K / HDR?
 
-Yes, Retune instructs the efficient webOS player to use Direct Play whenever possible. If your TV supports the format and network bandwidth is sufficient, 4K HDR works great.
+Yes, Retune instructs the native webOS player to use Direct Play (streaming without server-side transcoding) whenever possible. If your TV supports the format and network bandwidth is sufficient, 4K HDR works great.

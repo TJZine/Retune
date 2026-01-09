@@ -31,7 +31,7 @@ We recommend using the webOS TV CLI tools, but for easier installation, you can 
 
 ### Option A: webOS Dev Manager (Recommended)
 
-1. Download [webOS Dev Manager](https://github.com/webosbrew/webos-homebrew-channel/releases) for your OS.
+1. Download [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop/releases) for your OS.
 2. Open the application.
 3. Click **Add Device** and follow the prompts:
    - Enter the **Passphrase** shown in the TV's Developer Mode app.

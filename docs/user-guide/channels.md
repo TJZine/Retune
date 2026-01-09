@@ -22,7 +22,7 @@ Choose where the channel gets its videos:
 |-------------|-------------|
 | **Library** | Uses an entire Plex Library (e.g. "Movies"). You can filter by genre, year, etc. |
 | **Collection** | Uses a specific Plex Collection. Great for curated lists like "Marvel Universe". |
-| **Show** | Plays a specific TV Show. Useful for "The Office 24/7" type channels. |
+| **Show** | Plays a specific TV Show. Great for 24/7 marathon channels (e.g., "The Office"). |
 | **Playlist** | Uses a Plex Playlist. |
 
 ### Playback Mode

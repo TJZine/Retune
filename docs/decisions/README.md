@@ -19,7 +19,7 @@ Use the following template for new ADRs:
 
 - **Status**: [Proposed | Accepted | Deprecated]
 - **Date**: [YYYY-MM-DD]
-- **Drivers**: [Key reasons for this decision]
+- **Drivers**: [Business, technical, or organizational reasons that prompted this decision]
 
 ## Context
 

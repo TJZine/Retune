@@ -43,4 +43,4 @@ Manages the visual interface.
 
 ## 6. App Orchestrator (`src/Orchestrator.ts`)
 
-The central nervous system. It wires modules together, handling events like "User pressed Channel Up" -> "Tell Scheduler to get next channel" -> "Tell Player to load new URL".
+The central nervous system. It wires modules together, orchestrating event flows: User presses Channel Up → Scheduler selects next channel → Player loads the stream.

@@ -4,7 +4,7 @@
 
 ### Is Retune free?
 
-Yes, Retune is open-source and free to use under the MIT License[^1].
+Yes, Retune is open-source and free to use under the Apache License 2.0[^1].
 
 ### Do I need a Plex Pass?
 

@@ -38,5 +38,9 @@ You can scroll forward in time to see what's playing later today.
 
 ### Tuning
 
-- If you select a program that is **currently airing**, the TV will switch to that channel immediately.
 - If you select a **future** program, you will see its details but cannot tune to it yet.
+
+## See Also
+
+- [Remote Control Reference](remote-keys.md) — Full button mapping
+- [Channel Management](channels.md) — Creating and editing channels

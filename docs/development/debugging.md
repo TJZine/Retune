@@ -29,7 +29,22 @@ ares-inspect --device my-tv --app com.retune.app --open
 
 ### CORS Errors
 
-Plex servers may reject requests from localhost. Use a proxy or disable CORS security in your dev browser (carefully).
+Plex servers may reject requests from localhost. Recommended solutions:
+
+1. **Local Proxy** (Recommended): Configure your dev server to proxy Plex requests:
+
+   ```javascript
+   // vite.config.js example
+   server: {
+     proxy: { '/plex': { target: 'https://your-plex-server:32400', changeOrigin: true } }
+   }
+   ```
+
+2. **Reverse Proxy**: Use nginx or Caddy locally to forward `/api` to your Plex server.
+
+3. **Browser Extension** (Last Resort):
+   > [!CAUTION]
+   > CORS-disabling extensions create security risks. Only use in an isolated browser profile dedicated to development. Never on your primary browser.
 
 ### Memory Leaks
 

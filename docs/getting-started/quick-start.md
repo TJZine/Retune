@@ -30,7 +30,7 @@ On first launch, Retune can automatically create a few demo channels for you if 
 
 1. You'll be taken to the live player.
 2. **Video should start playing immediately**.
-3. Use **CH+ / CH-** to switch between the demo channels.
+3. Use **[CH+ / CH-](../user-guide/remote-keys.md)** to switch between the demo channels.
 4. Press **Guide** (or 'G' on keyboard) to see the schedule.
 
 ## Congratulations! 🎉

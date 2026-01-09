@@ -34,7 +34,7 @@ npm run test:coverage
 ### Emulator Testing
 
 - **Goal**: Verify platform integration (LS2 API), native video playback, and remote input.
-- **Key Check**: HLS playback performance.
+- **Key Check**: HLS playback—verify smooth startup (<3s), no buffering interruptions, correct resolution rendering.
 
 ### Physical Device Testing
 

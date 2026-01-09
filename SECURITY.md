@@ -18,12 +18,13 @@ We take security seriously. If you discover a vulnerability, please report it re
 ### How to Report
 
 1. **GitHub Security Advisories** (Preferred)
-   - Go to the [Security tab](../../security/advisories) of this repository
+   - Go to the [Security tab](https://github.com/TJZine/Retune/security/advisories) of this repository
    - Click "Report a vulnerability"
    - Fill out the form with details
 
-2. **Email** (Alternative)
-   - Contact the maintainers directly via GitHub
+2. **Direct Contact** (If GitHub Advisories unavailable)
+   - Open a private discussion or DM the maintainer [@TJZine](https://github.com/TJZine)
+   - Expected response time: Within 48 hours
 
 ### What to Include
 
