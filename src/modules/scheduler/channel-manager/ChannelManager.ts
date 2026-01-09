@@ -724,7 +724,7 @@ export class ChannelManager implements IChannelManager {
             const orderedItems = this._contentResolver.applyPlaybackMode(
                 items,
                 channel.playbackMode,
-                channel.shuffleSeed || Date.now()
+                channel.shuffleSeed ?? Date.now()
             );
 
             // Build result

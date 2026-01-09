@@ -161,6 +161,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _eventUnsubscribers: Array<() => void> = [];
     private _eventsWired: boolean = false;
     private _ready: boolean = false;
+    private _isChannelSwitching: boolean = false;
 
     constructor() {
         this._initializeModuleStatus();
@@ -354,9 +355,13 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
-        // Unregister all event subscriptions
+        // Unregister all event subscriptions (resilient to throwing handlers)
         for (const unsubscribe of this._eventUnsubscribers) {
-            unsubscribe();
+            try {
+                unsubscribe();
+            } catch (e) {
+                console.warn('[Orchestrator] unsubscribe failed:', e);
+            }
         }
         this._eventUnsubscribers = [];
         this._eventsWired = false; // Reset to allow re-wiring on retry
@@ -366,9 +371,13 @@ export class AppOrchestrator implements IAppOrchestrator {
             await this._lifecycle.saveState();
         }
 
-        // Stop playback
+        // Stop playback (resilient to errors)
         if (this._videoPlayer) {
-            this._videoPlayer.stop();
+            try {
+                this._videoPlayer.stop();
+            } catch (e) {
+                console.warn('[Orchestrator] stop failed:', e);
+            }
         }
 
         // Stop scheduler timer
@@ -416,44 +425,66 @@ export class AppOrchestrator implements IAppOrchestrator {
             return;
         }
 
-        const channel = this._channelManager.getChannel(channelId);
-        if (!channel) {
-            console.error('Channel not found:', channelId);
+        // Prevent concurrent channel switches from causing state corruption
+        if (this._isChannelSwitching) {
+            console.warn('Channel switch already in progress, ignoring request');
             return;
         }
 
-        // Stop current playback
-        this._videoPlayer.stop();
+        this._isChannelSwitching = true;
 
-        // Resolve channel content
-        let content: ResolvedChannelContent;
         try {
-            content = await this._channelManager.resolveChannelContent(channelId);
-        } catch (error) {
-            console.error('Failed to resolve channel content:', error);
-            return;
-        }
+            const channel = this._channelManager.getChannel(channelId);
+            if (!channel) {
+                console.error('Channel not found:', channelId);
+                return;
+            }
 
-        // Configure scheduler
-        const scheduleConfig: ScheduleConfig = {
-            channelId: channel.id,
-            anchorTime: channel.startTimeAnchor,
-            content: content.orderedItems,
-            playbackMode: channel.playbackMode,
-            shuffleSeed: channel.shuffleSeed || Date.now(),
-            loopSchedule: true,
-        };
-        this._scheduler.loadChannel(scheduleConfig);
+            // Resolve channel content BEFORE stopping player
+            // This prevents blank screen if resolution fails
+            let content: ResolvedChannelContent;
+            try {
+                content = await this._channelManager.resolveChannelContent(channelId);
+            } catch (error) {
+                console.error('Failed to resolve channel content:', error);
+                // Report error but keep current playback running
+                this.handleGlobalError(
+                    {
+                        code: AppErrorCode.CONTENT_UNAVAILABLE,
+                        message: `Failed to switch to channel: ${channel.name}`,
+                        recoverable: true,
+                    },
+                    'switchToChannel'
+                );
+                return;
+            }
 
-        // Sync to current time (this will emit programStart)
-        this._scheduler.syncToCurrentTime();
+            // Only stop player after successful content resolution
+            this._videoPlayer.stop();
 
-        // Update current channel
-        this._channelManager.setCurrentChannel(channelId);
+            // Configure scheduler
+            const scheduleConfig: ScheduleConfig = {
+                channelId: channel.id,
+                anchorTime: channel.startTimeAnchor,
+                content: content.orderedItems,
+                playbackMode: channel.playbackMode,
+                shuffleSeed: channel.shuffleSeed ?? Date.now(),
+                loopSchedule: true,
+            };
+            this._scheduler.loadChannel(scheduleConfig);
 
-        // Save state
-        if (this._lifecycle) {
-            await this._lifecycle.saveState();
+            // Sync to current time (this will emit programStart)
+            this._scheduler.syncToCurrentTime();
+
+            // Update current channel
+            this._channelManager.setCurrentChannel(channelId);
+
+            // Save state
+            if (this._lifecycle) {
+                await this._lifecycle.saveState();
+            }
+        } finally {
+            this._isChannelSwitching = false;
         }
     }
 
@@ -775,8 +806,18 @@ export class AppOrchestrator implements IAppOrchestrator {
         const current = this._moduleStatus.get(id);
         if (current) {
             current.status = status;
+
+            // Clear stale error when transitioning to non-error state
+            if (status !== 'error') {
+                delete current.error;
+            }
             if (error) {
                 current.error = error;
+            }
+
+            // Clear stale loadTimeMs except when explicitly provided
+            if (status !== 'initializing' && loadTimeMs === undefined) {
+                delete current.loadTimeMs;
             }
             if (loadTimeMs !== undefined) {
                 current.loadTimeMs = loadTimeMs;
@@ -908,12 +949,19 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         // Connect to saved server
-        if (savedState && savedState.plexAuth && savedState.plexAuth.selectedServerId) {
-            const connected = await this._plexDiscovery.selectServer(
-                savedState.plexAuth.selectedServerId
-            );
+        if (savedState?.plexAuth?.selectedServerId) {
+            try {
+                const connected = await this._plexDiscovery.selectServer(
+                    savedState.plexAuth.selectedServerId
+                );
 
-            if (!connected) {
+                if (!connected) {
+                    this._navigation.goTo('server-select');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Failed to connect to saved server:', error);
+                this._updateModuleStatus('plex-server-discovery', 'error');
                 this._navigation.goTo('server-select');
                 return false;
             }

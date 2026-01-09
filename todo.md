@@ -81,6 +81,7 @@
 ### Other Nice-to-Haves
 
 - [ ] Memory diagnostics per module (`ModuleStatus.memoryUsageMB`) for testing and debugging
+- [ ] AbortController-based channel switching (abort previous resolve when user rapidly switches channels)
 - [ ] Keyboard quick reference overlay (Info button)
 - [ ] Rate limiting module (if Plex API issues arise)
 - [ ] Favorite channels feature
