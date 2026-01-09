@@ -4,6 +4,8 @@
  * @version 1.0.0
  */
 
+import { AppErrorCode } from '../../../types/app-errors';
+
 // ============================================
 // Shared Types (Copied from artifact-2-shared-types.ts)
 // Cannot import directly as spec-pack is outside rootDir
@@ -167,7 +169,7 @@ export interface PlexMediaItem {
 /**
  * Unified error codes
  */
-export enum AppErrorCode {
+export enum PlexStreamErrorCode {
     AUTH_REQUIRED = 'AUTH_REQUIRED',
     AUTH_EXPIRED = 'AUTH_EXPIRED',
     AUTH_INVALID = 'AUTH_INVALID',
@@ -181,6 +183,42 @@ export enum AppErrorCode {
     PARSE_ERROR = 'PARSE_ERROR',
     ITEM_NOT_FOUND = 'ITEM_NOT_FOUND',
     SERVER_ERROR = 'SERVER_ERROR',
+    UNKNOWN = 'UNKNOWN',
+}
+
+export function mapPlexStreamErrorCodeToAppErrorCode(
+    code: PlexStreamErrorCode
+): AppErrorCode {
+    switch (code) {
+        case PlexStreamErrorCode.AUTH_REQUIRED:
+            return AppErrorCode.AUTH_REQUIRED;
+        case PlexStreamErrorCode.AUTH_EXPIRED:
+            return AppErrorCode.AUTH_EXPIRED;
+        case PlexStreamErrorCode.AUTH_INVALID:
+            return AppErrorCode.AUTH_INVALID;
+        case PlexStreamErrorCode.NETWORK_TIMEOUT:
+            return AppErrorCode.NETWORK_TIMEOUT;
+        case PlexStreamErrorCode.NETWORK_OFFLINE:
+            return AppErrorCode.NETWORK_OFFLINE;
+        case PlexStreamErrorCode.SERVER_UNREACHABLE:
+            return AppErrorCode.SERVER_UNREACHABLE;
+        case PlexStreamErrorCode.MIXED_CONTENT_BLOCKED:
+            return AppErrorCode.MIXED_CONTENT_BLOCKED;
+        case PlexStreamErrorCode.PLAYBACK_SOURCE_NOT_FOUND:
+            return AppErrorCode.PLAYBACK_SOURCE_NOT_FOUND;
+        case PlexStreamErrorCode.PLAYBACK_FORMAT_UNSUPPORTED:
+            return AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED;
+        case PlexStreamErrorCode.TRANSCODE_FAILED:
+            return AppErrorCode.TRANSCODE_FAILED;
+        case PlexStreamErrorCode.PARSE_ERROR:
+            return AppErrorCode.PARSE_ERROR;
+        case PlexStreamErrorCode.ITEM_NOT_FOUND:
+            return AppErrorCode.ITEM_NOT_FOUND;
+        case PlexStreamErrorCode.SERVER_ERROR:
+            return AppErrorCode.SERVER_ERROR;
+        default:
+            return AppErrorCode.UNKNOWN;
+    }
 }
 
 // ============================================

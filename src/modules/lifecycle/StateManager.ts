@@ -5,7 +5,12 @@
  */
 
 import { IStateManager } from './interfaces';
-import { PersistentState, UserPreferences } from './types';
+import {
+    PersistentState,
+    UserPreferences,
+    ChannelConfig,
+    PlexAuthData,
+} from './types';
 import {
     STORAGE_CONFIG,
     MIGRATIONS,
@@ -78,7 +83,7 @@ export class StateManager implements IStateManager {
             }
 
             const parsed: unknown = JSON.parse(serialized);
-            if (!this._isValidState(parsed)) {
+            if (!this._isMinimalState(parsed)) {
                 return null;
             }
 
@@ -88,12 +93,7 @@ export class StateManager implements IStateManager {
                 return null;
             }
 
-            // Re-validate after migration to catch buggy migration functions
-            if (!this._isValidState(migrated)) {
-                return null;
-            }
-
-            return migrated as unknown as PersistentState;
+            return this._repairState(migrated);
         } catch (error) {
             // Log parse errors in development for debugging
             if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
@@ -188,39 +188,170 @@ export class StateManager implements IStateManager {
     }
 
     /**
-     * Validate that parsed data looks like a PersistentState.
+     * Minimal validation: must be an object with a numeric version.
      */
-    private _isValidState(data: unknown): boolean {
-        if (typeof data !== 'object' || data === null) {
+    private _isMinimalState(data: unknown): data is Record<string, unknown> {
+        if (!this._isRecord(data)) {
             return false;
+        }
+        return typeof data['version'] === 'number';
+    }
+
+    /**
+     * Repair state shape after migration to ensure a safe PersistentState.
+     */
+    private _repairState(state: Record<string, unknown>): PersistentState {
+        const version =
+            typeof state['version'] === 'number' ? state['version'] : this._currentVersion;
+        const lastUpdated =
+            typeof state['lastUpdated'] === 'number' ? state['lastUpdated'] : Date.now();
+
+        const plexAuth = this._normalizePlexAuthData(state['plexAuth']);
+
+        const channelConfigs = this._filterValidChannelConfigs(state['channelConfigs']);
+
+        const userPreferences = this._isValidUserPreferences(state['userPreferences'])
+            ? (state['userPreferences'] as UserPreferences)
+            : ({ ...DEFAULT_USER_PREFERENCES } as UserPreferences);
+
+        let currentChannelIndex =
+            typeof state['currentChannelIndex'] === 'number' &&
+            Number.isFinite(state['currentChannelIndex'])
+                ? state['currentChannelIndex']
+                : 0;
+        if (channelConfigs.length === 0) {
+            currentChannelIndex = 0;
+        } else {
+            currentChannelIndex = Math.max(
+                0,
+                Math.min(channelConfigs.length - 1, currentChannelIndex)
+            );
         }
 
-        const obj = data as Record<string, unknown>;
+        return {
+            version,
+            plexAuth,
+            channelConfigs,
+            currentChannelIndex,
+            userPreferences,
+            lastUpdated,
+        };
+    }
 
-        // Must have version number
-        if (typeof obj['version'] !== 'number') {
-            return false;
-        }
+    private _isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null;
+    }
 
-        // Must have lastUpdated timestamp
-        if (typeof obj['lastUpdated'] !== 'number') {
-            return false;
+    private _filterValidChannelConfigs(value: unknown): ChannelConfig[] {
+        if (!Array.isArray(value)) {
+            return [];
         }
+        return value.filter((entry) => this._isValidChannelConfig(entry)) as ChannelConfig[];
+    }
 
-        // Must have required state shape
-        if (!('plexAuth' in obj)) {
+    private _isValidChannelConfig(value: unknown): value is ChannelConfig {
+        if (!this._isRecord(value)) {
             return false;
         }
-        if (!Array.isArray(obj['channelConfigs'])) {
-            return false;
-        }
-        if (typeof obj['currentChannelIndex'] !== 'number') {
-            return false;
-        }
-        if (typeof obj['userPreferences'] !== 'object' || obj['userPreferences'] === null) {
-            return false;
-        }
+        return (
+            typeof value['id'] === 'string' &&
+            typeof value['name'] === 'string' &&
+            typeof value['number'] === 'number' &&
+            Number.isFinite(value['number'])
+        );
+    }
 
+    private _isValidUserPreferences(value: unknown): value is UserPreferences {
+        if (!this._isRecord(value)) {
+            return false;
+        }
+        const theme = value['theme'];
+        const volume = value['volume'];
+        if (theme !== 'dark' && theme !== 'light') {
+            return false;
+        }
+        if (typeof volume !== 'number' || !Number.isFinite(volume) || volume < 0 || volume > 100) {
+            return false;
+        }
+        const subtitleLanguage = value['subtitleLanguage'];
+        const audioLanguage = value['audioLanguage'];
+        if (subtitleLanguage !== null && typeof subtitleLanguage !== 'string') {
+            return false;
+        }
+        if (audioLanguage !== null && typeof audioLanguage !== 'string') {
+            return false;
+        }
         return true;
+    }
+
+    private _normalizePlexAuthData(value: unknown): PlexAuthData | null {
+        if (!this._isRecord(value)) {
+            return null;
+        }
+        const token = value['token'];
+        if (!this._isRecord(token)) {
+            return null;
+        }
+        if (typeof token['token'] !== 'string') {
+            return null;
+        }
+
+        const userId = typeof token['userId'] === 'string' ? token['userId'] : '';
+        const username = typeof token['username'] === 'string' ? token['username'] : '';
+        const email = typeof token['email'] === 'string' ? token['email'] : '';
+        const thumb = typeof token['thumb'] === 'string' ? token['thumb'] : '';
+
+        const expiresAt = token['expiresAt'];
+        let normalizedExpiresAt: Date | null = null;
+        if (expiresAt instanceof Date) {
+            normalizedExpiresAt = expiresAt;
+        } else if (typeof expiresAt === 'string' || typeof expiresAt === 'number') {
+            const parsed = new Date(expiresAt);
+            normalizedExpiresAt = isNaN(parsed.getTime()) ? null : parsed;
+        } else if (expiresAt !== null && expiresAt !== undefined) {
+            return null;
+        }
+
+        const issuedAt = token['issuedAt'];
+        let normalizedIssuedAt: Date = new Date();
+        if (issuedAt instanceof Date) {
+            normalizedIssuedAt = issuedAt;
+        } else if (typeof issuedAt === 'string' || typeof issuedAt === 'number') {
+            const parsed = new Date(issuedAt);
+            normalizedIssuedAt = isNaN(parsed.getTime()) ? new Date() : parsed;
+        } else if (issuedAt !== undefined) {
+            return null;
+        }
+
+        const selectedServerId = value['selectedServerId'];
+        if (
+            selectedServerId !== undefined &&
+            selectedServerId !== null &&
+            typeof selectedServerId !== 'string'
+        ) {
+            return null;
+        }
+        const selectedServerUri = value['selectedServerUri'];
+        if (
+            selectedServerUri !== undefined &&
+            selectedServerUri !== null &&
+            typeof selectedServerUri !== 'string'
+        ) {
+            return null;
+        }
+
+        return {
+            token: {
+                token: token['token'],
+                userId,
+                username,
+                email,
+                thumb,
+                expiresAt: normalizedExpiresAt,
+                issuedAt: normalizedIssuedAt,
+            },
+            selectedServerId: selectedServerId ?? null,
+            selectedServerUri: selectedServerUri ?? null,
+        };
     }
 }

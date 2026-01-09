@@ -5,8 +5,8 @@
  * @version 1.0.0
  */
 
-import type { PlaybackError, AppErrorCode } from './types';
-import { AppErrorCode as ErrorCode } from './types';
+import type { PlaybackError, PlayerErrorCode } from './types';
+import { PlayerErrorCode as ErrorCode } from './types';
 import { RETRY_BASE_DELAY_MS, MAX_RETRY_ATTEMPTS } from './constants';
 
 /**
@@ -25,7 +25,7 @@ export function mapMediaErrorCodeToPlaybackError(
     retryAttempts: number,
     retryDelayMs: number = RETRY_BASE_DELAY_MS
 ): PlaybackError {
-    let code: AppErrorCode;
+    let code: PlayerErrorCode;
     let message: string;
     let recoverable: boolean;
 

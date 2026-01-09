@@ -138,6 +138,11 @@ export interface IAppLifecycle {
         event: K,
         handler: (payload: LifecycleEventMap[K]) => void
     ): IDisposable;
+
+    /**
+     * Get the error recovery handler.
+     */
+    getErrorRecovery(): IErrorRecovery;
 }
 
 /**
@@ -171,6 +176,13 @@ export interface IErrorRecovery {
         message: string,
         context?: Record<string, unknown>
     ): AppError;
+
+    /**
+     * Get user-facing message for an error code.
+     * @param code - Error code
+     * @returns User-friendly message
+     */
+    getUserMessage(code: AppErrorCode): string;
 }
 
 /**

@@ -17,6 +17,9 @@ import {
     type IAppLifecycle,
     type AppError,
     type PersistentState,
+    type LifecycleAppError,
+    type AppPhase,
+    type LifecycleEventMap,
 } from './modules/lifecycle';
 import {
     NavigationManager,
@@ -63,12 +66,14 @@ import {
     type VideoPlayerConfig,
     type StreamDescriptor,
     type PlaybackError,
+    mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
 import {
     EPGComponent,
     type IEPGComponent,
     type EPGConfig,
 } from './modules/ui/epg';
+import type { IDisposable } from './utils/interfaces';
 
 // ============================================
 // Types
@@ -124,6 +129,11 @@ export interface IAppOrchestrator {
     handleGlobalError(error: AppError, context: string): void;
     registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
     getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
+    toLifecycleAppError(error: AppError): LifecycleAppError;
+    onLifecycleEvent<K extends keyof LifecycleEventMap>(
+        event: K,
+        handler: (payload: LifecycleEventMap[K]) => void
+    ): IDisposable;
 }
 
 // Re-export AppErrorCode for consumers
@@ -769,6 +779,30 @@ export class AppOrchestrator implements IAppOrchestrator {
         return actions;
     }
 
+    public toLifecycleAppError(error: AppError): LifecycleAppError {
+        const phase: AppPhase = this._lifecycle ? this._lifecycle.getPhase() : 'error';
+        const userMessage = this._lifecycle
+            ? this._lifecycle.getErrorRecovery().getUserMessage(error.code)
+            : error.message;
+        return {
+            ...error,
+            phase,
+            timestamp: Date.now(),
+            userMessage,
+            actions: this.getRecoveryActions(error.code),
+        };
+    }
+
+    public onLifecycleEvent<K extends keyof LifecycleEventMap>(
+        event: K,
+        handler: (payload: LifecycleEventMap[K]) => void
+    ): IDisposable {
+        if (!this._lifecycle) {
+            return { dispose: (): void => undefined };
+        }
+        return this._lifecycle.on(event, handler);
+    }
+
     // ============================================
     // Private Methods - Initialization Phases
     // ============================================
@@ -1132,9 +1166,10 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Player error -> handle or skip
         const errorHandler = (error: PlaybackError): void => {
             if (error.recoverable) {
+                const mappedCode = mapPlayerErrorCodeToAppErrorCode(error.code);
                 this.handleGlobalError(
                     {
-                        code: AppErrorCode.PLAYBACK_FAILED,
+                        code: mappedCode,
                         message: error.message,
                         recoverable: true,
                     },

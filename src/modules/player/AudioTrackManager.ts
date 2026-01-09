@@ -6,7 +6,7 @@
  */
 
 import type { AudioTrack, PlaybackError } from './types';
-import { AppErrorCode as ErrorCode } from './types';
+import { PlayerErrorCode as ErrorCode } from './types';
 import { AUDIO_TRACK_SWITCH_TIMEOUT_MS } from './constants';
 import { SUPPORTED_AUDIO_CODECS } from '../plex/stream/constants';
 

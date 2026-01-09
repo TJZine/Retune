@@ -15,7 +15,6 @@ import type {
     SessionEndPayload,
 } from './interfaces';
 import type {
-    AppErrorCode,
     PlexMediaItem,
     PlexMediaFile,
     PlexStream,
@@ -25,6 +24,7 @@ import type {
     PlaybackSession,
     StreamResolverState,
 } from './types';
+import { PlexStreamErrorCode } from './types';
 import {
     SUPPORTED_CONTAINERS,
     SUPPORTED_VIDEO_CODECS,
@@ -39,7 +39,7 @@ import {
 import { generateUUID, withTimeout } from './utils';
 
 // Re-export types for consumers
-export { AppErrorCode } from './types';
+export { PlexStreamErrorCode } from './types';
 
 /**
  * Plex Stream Resolver implementation.
@@ -77,7 +77,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const item = await this._config.getItem(request.itemKey);
         if (!item) {
             throw this._createError(
-                'PLAYBACK_SOURCE_NOT_FOUND' as AppErrorCode,
+                PlexStreamErrorCode.PLAYBACK_SOURCE_NOT_FOUND,
                 `Item not found: ${request.itemKey}`,
                 false
             );
@@ -87,7 +87,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const media = this._selectBestMedia(item.media, request.maxBitrate);
         if (!media) {
             throw this._createError(
-                'PLAYBACK_FORMAT_UNSUPPORTED' as AppErrorCode,
+                PlexStreamErrorCode.PLAYBACK_FORMAT_UNSUPPORTED,
                 'No compatible media version found',
                 false
             );
@@ -96,7 +96,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const part = media.parts[0];
         if (!part) {
             throw this._createError(
-                'PLAYBACK_SOURCE_NOT_FOUND' as AppErrorCode,
+                PlexStreamErrorCode.PLAYBACK_SOURCE_NOT_FOUND,
                 'No media parts available',
                 false
             );
@@ -395,7 +395,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             throw this._createError(
-                'SERVER_UNREACHABLE' as AppErrorCode,
+                PlexStreamErrorCode.SERVER_UNREACHABLE,
                 'No server connection available',
                 true
             );
@@ -488,7 +488,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             throw this._createError(
-                'SERVER_UNREACHABLE' as AppErrorCode,
+                PlexStreamErrorCode.SERVER_UNREACHABLE,
                 'No server connection available',
                 true
             );
@@ -515,7 +515,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             // No fallback available
             throw this._createError(
-                'MIXED_CONTENT_BLOCKED' as AppErrorCode,
+                PlexStreamErrorCode.MIXED_CONTENT_BLOCKED,
                 'Cannot access HTTP server from HTTPS app - no fallback available',
                 false
             );
@@ -635,7 +635,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * Create a StreamResolverError.
      */
     private _createError(
-        code: AppErrorCode,
+        code: PlexStreamErrorCode,
         message: string,
         recoverable: boolean,
         retryAfterMs?: number

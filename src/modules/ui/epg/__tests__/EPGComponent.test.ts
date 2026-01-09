@@ -12,7 +12,7 @@ import type { ScheduledProgram, ScheduleWindow, ChannelConfig } from '../types';
 describe('EPGComponent', () => {
     let epg: EPGComponent;
     let container: HTMLElement;
-    const gridAnchorTime = new Date('2026-01-07T00:00:00').getTime();
+    let gridAnchorTime = 0;
 
     const createMockChannel = (index: number): ChannelConfig => ({
         id: `ch${index}`,
@@ -79,6 +79,8 @@ describe('EPGComponent', () => {
             showCurrentTimeIndicator: true,
             autoScrollToNow: false,
         });
+
+        gridAnchorTime = epg.getState().viewWindow.startTime;
     });
 
     afterEach(() => {

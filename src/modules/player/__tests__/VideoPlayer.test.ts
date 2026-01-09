@@ -5,7 +5,7 @@
  */
 
 import { VideoPlayer, mapMediaErrorCodeToPlaybackError } from '../VideoPlayer';
-import { AppErrorCode } from '../types';
+import { PlayerErrorCode } from '../types';
 import type { VideoPlayerConfig, StreamDescriptor } from '../types';
 
 // ============================================
@@ -55,34 +55,34 @@ describe('mapMediaErrorCodeToPlaybackError', () => {
         const e2 = mapMediaErrorCodeToPlaybackError(2, 2, 3);
         const e3 = mapMediaErrorCodeToPlaybackError(2, 3, 3);
 
-        expect(e0.code).toBe(AppErrorCode.NETWORK_TIMEOUT);
+        expect(e0.code).toBe(PlayerErrorCode.NETWORK_TIMEOUT);
         expect(e0.recoverable).toBe(true);
         expect(e0.retryAfterMs).toBe(1000); // 1s base delay
 
-        expect(e2.code).toBe(AppErrorCode.NETWORK_TIMEOUT);
+        expect(e2.code).toBe(PlayerErrorCode.NETWORK_TIMEOUT);
         expect(e2.recoverable).toBe(true);
         expect(e2.retryAfterMs).toBe(4000); // 1s * 2^2 = 4s
 
-        expect(e3.code).toBe(AppErrorCode.NETWORK_TIMEOUT);
+        expect(e3.code).toBe(PlayerErrorCode.NETWORK_TIMEOUT);
         expect(e3.recoverable).toBe(false);
         expect(e3.retryCount).toBe(3);
     });
 
     it('maps MEDIA_ERR_DECODE (3) to PLAYBACK_DECODE_ERROR and recoverable=false', () => {
         const e = mapMediaErrorCodeToPlaybackError(3, 0, 3);
-        expect(e.code).toBe(AppErrorCode.PLAYBACK_DECODE_ERROR);
+        expect(e.code).toBe(PlayerErrorCode.PLAYBACK_DECODE_ERROR);
         expect(e.recoverable).toBe(false);
     });
 
     it('maps MEDIA_ERR_SRC_NOT_SUPPORTED (4) to PLAYBACK_FORMAT_UNSUPPORTED', () => {
         const e = mapMediaErrorCodeToPlaybackError(4, 0, 3);
-        expect(e.code).toBe(AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED);
+        expect(e.code).toBe(PlayerErrorCode.PLAYBACK_FORMAT_UNSUPPORTED);
         expect(e.recoverable).toBe(false);
     });
 
     it('maps unknown codes to UNKNOWN', () => {
         const e = mapMediaErrorCodeToPlaybackError(999, 0, 3);
-        expect(e.code).toBe(AppErrorCode.UNKNOWN);
+        expect(e.code).toBe(PlayerErrorCode.UNKNOWN);
         expect(e.recoverable).toBe(false);
     });
 });
@@ -544,7 +544,7 @@ describe('VideoPlayer', () => {
 
             expect(errorHandler).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    code: AppErrorCode.PLAYBACK_DECODE_ERROR,
+                    code: PlayerErrorCode.PLAYBACK_DECODE_ERROR,
                     recoverable: false,
                 })
             );
@@ -584,7 +584,7 @@ describe('VideoPlayer', () => {
 
             expect(errorHandler).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    code: AppErrorCode.NETWORK_TIMEOUT,
+                    code: PlayerErrorCode.NETWORK_TIMEOUT,
                     recoverable: false,
                     retryCount: 3,
                 })

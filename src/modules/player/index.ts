@@ -24,5 +24,6 @@ export type {
     PlayerEventMap,
 } from './types';
 
-// Re-export AppErrorCode for convenience
-export { AppErrorCode } from './types';
+// Re-export PlayerErrorCode for convenience
+export { PlayerErrorCode } from './types';
+export { mapPlayerErrorCodeToAppErrorCode } from './types';
