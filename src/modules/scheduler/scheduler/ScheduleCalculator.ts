@@ -275,7 +275,15 @@ export function applyPlaybackMode(
 // Schedule Window Generation
 // ============================================
 
-/** Maximum programs to return in a schedule window to prevent memory issues */
+/**
+ * Maximum programs to return in a schedule window.
+ * Acts as a memory safety guard for EPG generation.
+ * 
+ * Rationale: EPG typically shows 24 hours of content.
+ * At 30-min programs, that's 48 programs per channel.
+ * With 20 channels visible, that's ~1000 programs max.
+ * This limit prevents unbounded growth from edge cases.
+ */
 const MAX_WINDOW_PROGRAMS = 1000;
 
 /**
@@ -301,6 +309,11 @@ export function generateScheduleWindow(
     const programs = output ?? [];
     programs.length = 0; // Clear existing contents
 
+    // Invalid window - return empty
+    if (endTime <= startTime) {
+        return programs;
+    }
+
     // Get the first program that overlaps with startTime
     let currentProgram = calculateProgramAtTime(startTime, index, anchorTime);
     programs.push(currentProgram);
@@ -311,9 +324,13 @@ export function generateScheduleWindow(
         programs.push(currentProgram);
     }
 
-    if (programs.length >= MAX_WINDOW_PROGRAMS) {
+    // Warn only if we hit the limit AND would have continued (actual truncation)
+    const wasTruncated = programs.length === MAX_WINDOW_PROGRAMS &&
+        currentProgram.scheduledEndTime < endTime;
+    if (wasTruncated) {
         console.warn('[ScheduleCalculator] Reached MAX_WINDOW_PROGRAMS limit, window may be truncated');
     }
 
     return programs;
 }
+
