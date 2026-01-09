@@ -110,6 +110,13 @@ describe('StateManager', () => {
             expect(loaded).toBeNull();
         });
 
+        it('should return null for invalid JSON', async () => {
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = '{invalid json';
+
+            const loaded = await stateManager.load();
+            expect(loaded).toBeNull();
+        });
+
         it('should return null for invalid state format', async () => {
             mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = '{"foo": "bar"}';
 
@@ -139,6 +146,95 @@ describe('StateManager', () => {
 
             expect(loaded).not.toBeNull();
             expect(loaded?.version).toBe(999);
+        });
+
+        it('should repair invalid plexAuth without wiping other fields', async () => {
+            const state = {
+                version: 1,
+                plexAuth: 0,
+                channelConfigs: [{ id: 'c1', name: 'Channel 1', number: 1 }],
+                currentChannelIndex: 0,
+                userPreferences: { theme: 'light', volume: 50, subtitleLanguage: null, audioLanguage: null },
+                lastUpdated: Date.now(),
+            };
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = JSON.stringify(state);
+
+            const loaded = await stateManager.load();
+
+            expect(loaded?.plexAuth).toBeNull();
+            expect(loaded?.channelConfigs).toHaveLength(1);
+            expect(loaded?.currentChannelIndex).toBe(0);
+        });
+
+        it('should keep minimal plexAuth token data', async () => {
+            const state = {
+                version: 1,
+                plexAuth: {
+                    token: { token: 'abc', issuedAt: Date.now() },
+                    selectedServerId: null,
+                    selectedServerUri: null,
+                },
+                channelConfigs: [],
+                currentChannelIndex: 0,
+                userPreferences: { theme: 'dark', volume: 60, subtitleLanguage: null, audioLanguage: null },
+                lastUpdated: Date.now(),
+            };
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = JSON.stringify(state);
+
+            const loaded = await stateManager.load();
+
+            expect(loaded?.plexAuth?.token.token).toBe('abc');
+        });
+
+        it('should default invalid userPreferences', async () => {
+            const state = {
+                version: 1,
+                plexAuth: null,
+                channelConfigs: [],
+                currentChannelIndex: 0,
+                userPreferences: { theme: 'nope', volume: 999 },
+                lastUpdated: Date.now(),
+            };
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = JSON.stringify(state);
+
+            const loaded = await stateManager.load();
+
+            expect(loaded?.userPreferences).toEqual(stateManager.createDefaultState().userPreferences);
+        });
+
+        it('should salvage valid channel configs when some entries are invalid', async () => {
+            const state = {
+                version: 1,
+                plexAuth: null,
+                channelConfigs: [
+                    { id: 'c1', name: 'Channel 1', number: 1 },
+                    { id: 'bad', name: 123, number: 'x' },
+                    { id: 'c2', name: 'Channel 2', number: 2 },
+                ],
+                currentChannelIndex: 5,
+                userPreferences: { theme: 'dark', volume: 70, subtitleLanguage: null, audioLanguage: null },
+                lastUpdated: Date.now(),
+            };
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = JSON.stringify(state);
+
+            const loaded = await stateManager.load();
+
+            expect(loaded?.channelConfigs).toHaveLength(2);
+            expect(loaded).not.toBeNull();
+            if (!loaded) return;
+            expect(loaded.channelConfigs.map((config) => config.id)).toEqual(['c1', 'c2']);
+            expect(loaded.currentChannelIndex).toBe(1);
+        });
+
+        it('should repair minimal state after migration', async () => {
+            const state = { version: 1 };
+            mockLocalStorage[STORAGE_CONFIG.STATE_KEY] = JSON.stringify(state);
+
+            const loaded = await stateManager.load();
+
+            expect(loaded).not.toBeNull();
+            expect(loaded?.channelConfigs).toEqual([]);
+            expect(loaded?.currentChannelIndex).toBe(0);
         });
     });
 

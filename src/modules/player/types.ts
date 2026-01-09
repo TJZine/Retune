@@ -4,6 +4,8 @@
  * @version 1.0.0
  */
 
+import { AppErrorCode } from '../../types/app-errors';
+
 // ============================================
 // Shared Types (Copied from spec-pack/artifact-2-shared-types.ts)
 // Cannot import directly as spec-pack is outside rootDir
@@ -12,7 +14,7 @@
 /**
  * Unified error codes for consistent error handling.
  */
-export enum AppErrorCode {
+export enum PlayerErrorCode {
     // Playback Errors
     NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
     PLAYBACK_DECODE_ERROR = 'PLAYBACK_DECODE_ERROR',
@@ -29,13 +31,34 @@ export enum AppErrorCode {
  */
 export interface AppError {
     /** Error code from canonical taxonomy */
-    code: AppErrorCode;
+    code: PlayerErrorCode;
     /** Technical error message */
     message: string;
     /** Whether recovery might succeed */
     recoverable: boolean;
     /** Additional context for debugging */
     context?: Record<string, unknown>;
+}
+
+export function mapPlayerErrorCodeToAppErrorCode(code: PlayerErrorCode): AppErrorCode {
+    switch (code) {
+        case PlayerErrorCode.NETWORK_TIMEOUT:
+            return AppErrorCode.NETWORK_TIMEOUT;
+        case PlayerErrorCode.PLAYBACK_DECODE_ERROR:
+            return AppErrorCode.PLAYBACK_DECODE_ERROR;
+        case PlayerErrorCode.PLAYBACK_FORMAT_UNSUPPORTED:
+            return AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED;
+        case PlayerErrorCode.TRACK_NOT_FOUND:
+            return AppErrorCode.TRACK_NOT_FOUND;
+        case PlayerErrorCode.TRACK_SWITCH_FAILED:
+            return AppErrorCode.TRACK_SWITCH_FAILED;
+        case PlayerErrorCode.TRACK_SWITCH_TIMEOUT:
+            return AppErrorCode.TRACK_SWITCH_TIMEOUT;
+        case PlayerErrorCode.CODEC_UNSUPPORTED:
+            return AppErrorCode.CODEC_UNSUPPORTED;
+        default:
+            return AppErrorCode.UNKNOWN;
+    }
 }
 
 // ============================================

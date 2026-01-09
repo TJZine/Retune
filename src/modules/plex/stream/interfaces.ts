@@ -6,7 +6,7 @@
  */
 
 import type {
-    AppErrorCode,
+    PlexStreamErrorCode,
     PlexMediaItem,
     StreamRequest,
     StreamDecision,
@@ -19,11 +19,11 @@ import type {
 
 /**
  * Stream resolver error structure.
- * Uses canonical AppErrorCode for consistent error handling.
+ * Uses PlexStreamErrorCode for stream resolver errors.
  */
 export interface StreamResolverError {
-    /** Error code from canonical taxonomy */
-    code: AppErrorCode;
+    /** Error code from stream resolver taxonomy */
+    code: PlexStreamErrorCode;
     /** Human-readable error message */
     message: string;
     /** Whether recovery might succeed */

@@ -4,7 +4,8 @@
  * @version 1.0.0
  */
 
-export { PlexStreamResolver, AppErrorCode } from './PlexStreamResolver';
+export { PlexStreamResolver, PlexStreamErrorCode } from './PlexStreamResolver';
+export { mapPlexStreamErrorCodeToAppErrorCode } from './types';
 export { getMimeType } from './utils';
 export type { IPlexStreamResolver, PlexStreamResolverConfig, StreamResolverError, ProgressTimeoutPayload } from './interfaces';
 export type { StreamRequest, StreamDecision, HlsOptions, PlexMediaItem, PlexStream } from './types';

@@ -76,6 +76,10 @@ const mockLifecycle = {
     initialize: jest.fn().mockResolvedValue(undefined),
     setPhase: jest.fn(),
     getPhase: jest.fn().mockReturnValue('ready'),
+    getErrorRecovery: jest.fn(() => ({
+        getUserMessage: jest.fn().mockReturnValue('Test message'),
+        handleError: jest.fn().mockReturnValue([]),
+    })),
     restoreState: jest.fn().mockResolvedValue(null),
     saveState: jest.fn().mockResolvedValue(undefined),
     reportError: jest.fn(),
@@ -236,6 +240,7 @@ const mockVideoPlayer = {
 
 jest.mock('../modules/player', () => ({
     VideoPlayer: jest.fn(() => mockVideoPlayer),
+    mapPlayerErrorCodeToAppErrorCode: jest.fn((code) => code),
 }));
 
 // Mock EPGComponent

@@ -8,7 +8,6 @@ import { IAppLifecycle } from './interfaces';
 import {
     AppPhase,
     AppError,
-    AppErrorCode,
     PersistentState,
     AppLifecycleState,
     MemoryUsage,
@@ -64,10 +63,15 @@ export class AppLifecycle implements IAppLifecycle {
     // State save debounce
     private _saveDebounceTimer: number | null = null;
     private _pendingState: PersistentState | null = null;
+    private _nextPersistenceWarningAt: number = 0;
+    private _persistenceWarningBackoffMs: number = TIMING_CONFIG.PERSISTENCE_WARNING_BACKOFF_MS;
 
     // Idempotency guards (ISSUE-003)
     private _initialized: boolean = false;
     private _shutdownStarted: boolean = false;
+
+    // Network warning throttling
+    private _nextNetworkWarningAt: number = 0;
 
     /**
      * Create a new AppLifecycle manager.
@@ -172,7 +176,7 @@ export class AppLifecycle implements IAppLifecycle {
         }
 
         this._saveDebounceTimer = window.setTimeout(() => {
-            this._flushPendingSave();
+            this._fireAndForget(this._flushPendingSave(), 'saveState');
         }, TIMING_CONFIG.SAVE_DEBOUNCE_MS) as unknown as number;
     }
 
@@ -232,20 +236,19 @@ export class AppLifecycle implements IAppLifecycle {
      * @returns true if network test succeeds
      */
     public async checkNetworkStatus(): Promise<boolean> {
+        let timeoutId: number | null = null;
         try {
             // Simple HEAD request to check connectivity
             const controller = new AbortController();
-            const timeoutId = setTimeout(
+            timeoutId = window.setTimeout(
                 () => controller.abort(),
                 TIMING_CONFIG.NETWORK_CHECK_TIMEOUT_MS
-            );
+            ) as unknown as number;
 
             const response = await fetch('https://plex.tv/api/v2/ping', {
                 method: 'HEAD',
                 signal: controller.signal,
             });
-
-            clearTimeout(timeoutId);
 
             const available = response.ok;
             if (available !== this._isNetworkAvailable) {
@@ -255,20 +258,16 @@ export class AppLifecycle implements IAppLifecycle {
 
             return available;
         } catch {
-            // Report network check failure via event
-            this._emitter.emit('error', {
-                code: AppErrorCode.NETWORK_TIMEOUT,
-                message: 'Network connectivity check failed',
-                recoverable: true,
-                phase: this._phase,
-                timestamp: Date.now(),
-            } as LifecycleAppError);
-
             if (this._isNetworkAvailable) {
                 this._isNetworkAvailable = false;
                 this._emitter.emit('networkChange', { isAvailable: false });
             }
+            this._maybeEmitNetworkWarning('Network connectivity check failed');
             return false;
+        } finally {
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
@@ -396,6 +395,8 @@ export class AppLifecycle implements IAppLifecycle {
             ...error,
             phase: this._phase,
             timestamp: Date.now(),
+            userMessage: this._errorRecovery.getUserMessage(error.code),
+            actions: [],
         };
 
         // Set phase to error if not already
@@ -493,7 +494,7 @@ export class AppLifecycle implements IAppLifecycle {
      */
     private _startNetworkMonitoring(): void {
         this._networkCheckInterval = window.setInterval(() => {
-            this.checkNetworkStatus();
+            this._fireAndForget(this.checkNetworkStatus(), 'network-monitor');
         }, TIMING_CONFIG.NETWORK_CHECK_INTERVAL_MS) as unknown as number;
     }
 
@@ -656,9 +657,92 @@ export class AppLifecycle implements IAppLifecycle {
         }
 
         if (this._pendingState !== null) {
-            await this._stateManager.save(this._pendingState);
-            this._pendingState = null;
+            try {
+                await this._stateManager.save(this._pendingState);
+                this._pendingState = null;
+                this._persistenceWarningBackoffMs =
+                    TIMING_CONFIG.PERSISTENCE_WARNING_BACKOFF_MS;
+            } catch (error) {
+                this._handleSaveError(error);
+            }
         }
+    }
+
+    /**
+     * Fire-and-forget helper that funnels async errors into non-blocking handling.
+     */
+    private _fireAndForget(promise: Promise<unknown>, context: string): void {
+        void promise.catch((error) => {
+            this._handleAsyncError(error, context);
+        });
+    }
+
+    private _handleAsyncError(error: unknown, context: string): void {
+        if (context === 'saveState') {
+            this._handleSaveError(error);
+            return;
+        }
+        console.warn(`[AppLifecycle] Unhandled async error (${context}):`, error);
+    }
+
+    private _handleSaveError(error: unknown): void {
+        const isQuotaError = this._isQuotaError(error);
+        if (this._shouldEmitPersistenceWarning(isQuotaError)) {
+            const message = isQuotaError
+                ? 'Persistent storage quota exceeded; save deferred'
+                : 'Failed to persist state; will retry on next save';
+            console.warn(`[AppLifecycle] ${message}`, error);
+            this._emitter.emit('persistenceWarning', {
+                message,
+                isQuotaError,
+                timestamp: Date.now(),
+            });
+        }
+    }
+
+    private _shouldEmitPersistenceWarning(isQuotaError: boolean): boolean {
+        const now = Date.now();
+        if (now < this._nextPersistenceWarningAt) {
+            return false;
+        }
+        const backoff = isQuotaError
+            ? this._persistenceWarningBackoffMs
+            : TIMING_CONFIG.PERSISTENCE_WARNING_BACKOFF_MS;
+        this._nextPersistenceWarningAt = now + backoff;
+        if (isQuotaError) {
+            this._persistenceWarningBackoffMs = Math.min(
+                this._persistenceWarningBackoffMs * 2,
+                TIMING_CONFIG.PERSISTENCE_WARNING_MAX_BACKOFF_MS
+            );
+        } else {
+            this._persistenceWarningBackoffMs = TIMING_CONFIG.PERSISTENCE_WARNING_BACKOFF_MS;
+        }
+        return true;
+    }
+
+    private _maybeEmitNetworkWarning(message: string): void {
+        const now = Date.now();
+        if (now < this._nextNetworkWarningAt) {
+            return;
+        }
+        this._nextNetworkWarningAt = now + TIMING_CONFIG.NETWORK_WARNING_BACKOFF_MS;
+        console.warn(`[AppLifecycle] ${message}`);
+        this._emitter.emit('networkWarning', {
+            message,
+            isAvailable: this._isNetworkAvailable,
+            timestamp: now,
+        });
+    }
+
+    private _isQuotaError(error: unknown): boolean {
+        if (error instanceof DOMException) {
+            return (
+                error.code === 22 ||
+                error.code === 1014 ||
+                error.name === 'QuotaExceededError'
+            );
+        }
+        return false;
     }
 
     /**

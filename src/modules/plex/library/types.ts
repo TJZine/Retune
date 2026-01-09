@@ -4,6 +4,8 @@
  * @version 1.0.0
  */
 
+import { AppErrorCode } from '../../../types/app-errors';
+
 // ============================================
 // Shared Types (Copied from artifact-2-shared-types.ts)
 // Cannot import directly as spec-pack is outside rootDir
@@ -181,7 +183,7 @@ export interface SearchOptions {
 /**
  * Unified error codes
  */
-export enum AppErrorCode {
+export enum PlexLibraryErrorCode {
     AUTH_REQUIRED = 'AUTH_REQUIRED',
     AUTH_EXPIRED = 'AUTH_EXPIRED',
     AUTH_INVALID = 'AUTH_INVALID',
@@ -191,6 +193,33 @@ export enum AppErrorCode {
     ITEM_NOT_FOUND = 'ITEM_NOT_FOUND',
     RATE_LIMITED = 'RATE_LIMITED',
     PARSE_ERROR = 'PARSE_ERROR',
+}
+
+export function mapPlexLibraryErrorCodeToAppErrorCode(
+    code: PlexLibraryErrorCode
+): AppErrorCode {
+    switch (code) {
+        case PlexLibraryErrorCode.AUTH_REQUIRED:
+            return AppErrorCode.AUTH_REQUIRED;
+        case PlexLibraryErrorCode.AUTH_EXPIRED:
+            return AppErrorCode.AUTH_EXPIRED;
+        case PlexLibraryErrorCode.AUTH_INVALID:
+            return AppErrorCode.AUTH_INVALID;
+        case PlexLibraryErrorCode.NETWORK_TIMEOUT:
+            return AppErrorCode.NETWORK_TIMEOUT;
+        case PlexLibraryErrorCode.SERVER_UNREACHABLE:
+            return AppErrorCode.SERVER_UNREACHABLE;
+        case PlexLibraryErrorCode.SERVER_ERROR:
+            return AppErrorCode.SERVER_ERROR;
+        case PlexLibraryErrorCode.ITEM_NOT_FOUND:
+            return AppErrorCode.ITEM_NOT_FOUND;
+        case PlexLibraryErrorCode.RATE_LIMITED:
+            return AppErrorCode.RATE_LIMITED;
+        case PlexLibraryErrorCode.PARSE_ERROR:
+            return AppErrorCode.PARSE_ERROR;
+        default:
+            return AppErrorCode.UNKNOWN;
+    }
 }
 
 // ============================================

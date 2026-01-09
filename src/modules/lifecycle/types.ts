@@ -4,68 +4,9 @@
  * @version 1.0.0
  */
 
-/**
- * Unified error codes for the application.
- * Canonical taxonomy per shared-types specification.
- */
-export enum AppErrorCode {
-    // Authentication Errors
-    AUTH_REQUIRED = 'AUTH_REQUIRED',
-    AUTH_EXPIRED = 'AUTH_EXPIRED',
-    AUTH_INVALID = 'AUTH_INVALID',
-    AUTH_FAILED = 'AUTH_FAILED',
-    AUTH_RATE_LIMITED = 'AUTH_RATE_LIMITED',
-
-    // Network Errors
-    NETWORK_TIMEOUT = 'NETWORK_TIMEOUT',
-    NETWORK_OFFLINE = 'NETWORK_OFFLINE',
-    NETWORK_UNAVAILABLE = 'NETWORK_UNAVAILABLE',
-    SERVER_UNREACHABLE = 'SERVER_UNREACHABLE',
-    SERVER_SSL_ERROR = 'SERVER_SSL_ERROR',
-    MIXED_CONTENT_BLOCKED = 'MIXED_CONTENT_BLOCKED',
-    SERVER_ERROR = 'SERVER_ERROR',
-    RATE_LIMITED = 'RATE_LIMITED',
-    RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
-
-    // Playback Errors
-    PLAYBACK_FAILED = 'PLAYBACK_FAILED',
-    PLAYBACK_DECODE_ERROR = 'PLAYBACK_DECODE_ERROR',
-    PLAYBACK_FORMAT_UNSUPPORTED = 'PLAYBACK_FORMAT_UNSUPPORTED',
-
-    // Storage Errors
-    STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
-    STORAGE_CORRUPTED = 'STORAGE_CORRUPTED',
-
-    // Lifecycle Errors
-    INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
-    PLEX_UNREACHABLE = 'PLEX_UNREACHABLE',
-    DATA_CORRUPTION = 'DATA_CORRUPTION',
-    OUT_OF_MEMORY = 'OUT_OF_MEMORY',
-    MODULE_INIT_FAILED = 'MODULE_INIT_FAILED',
-    UNRECOVERABLE = 'UNRECOVERABLE',
-
-    // Scheduler/Channel Errors (per channel-manager spec)
-    CHANNEL_NOT_FOUND = 'CHANNEL_NOT_FOUND',
-    SCHEDULER_EMPTY_CHANNEL = 'SCHEDULER_EMPTY_CHANNEL',
-    CONTENT_UNAVAILABLE = 'CONTENT_UNAVAILABLE',
-
-    // Generic
-    UNKNOWN = 'UNKNOWN',
-}
-
-/**
- * Base application error structure.
- */
-export interface AppError {
-    /** Error code from canonical taxonomy */
-    code: AppErrorCode;
-    /** Technical error message */
-    message: string;
-    /** Whether recovery might succeed */
-    recoverable: boolean;
-    /** Additional context for debugging */
-    context?: Record<string, unknown>;
-}
+import type { AppError } from '../../types/app-errors';
+export type { AppError } from '../../types/app-errors';
+export { AppErrorCode } from '../../types/app-errors';
 
 /**
  * Application phase states.
@@ -165,6 +106,10 @@ export interface LifecycleAppError extends AppError {
     phase: AppPhase;
     /** Timestamp of error */
     timestamp: number;
+    /** User-facing message */
+    userMessage: string;
+    /** Available recovery actions */
+    actions: ErrorAction[];
 }
 
 /**
@@ -184,6 +129,10 @@ export interface LifecycleEventMap {
     plexConnectionChange: { status: ConnectionStatus };
     /** Emitted when an error is reported */
     error: LifecycleAppError;
+    /** Emitted when persistence fails but does not require blocking UI */
+    persistenceWarning: { message: string; isQuotaError: boolean; timestamp: number };
+    /** Emitted when network monitoring detects failures (throttled) */
+    networkWarning: { message: string; isAvailable: boolean; timestamp: number };
     /** Emitted when state is restored from localStorage */
     stateRestored: PersistentState;
     /** Emitted before app terminates */

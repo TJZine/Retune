@@ -4,7 +4,8 @@
  * @version 1.0.0
  */
 
-export { PlexLibrary, PlexLibraryError, AppErrorCode } from './PlexLibrary';
+export { PlexLibrary, PlexLibraryError, PlexLibraryErrorCode } from './PlexLibrary';
+export { mapPlexLibraryErrorCodeToAppErrorCode } from './types';
 export type { IPlexLibrary, PlexLibraryConfig } from './interfaces';
 export type {
     PlexLibrary as PlexLibraryType,

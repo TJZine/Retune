@@ -1,4 +1,4 @@
-import { PlexLibrary, PlexLibraryError, AppErrorCode } from '../PlexLibrary';
+import { PlexLibrary, PlexLibraryError, PlexLibraryErrorCode } from '../PlexLibrary';
 import type { PlexLibraryConfig } from '../interfaces';
 import { mockLocalStorage, installMockLocalStorage } from '../../../../__tests__/mocks/localStorage';
 
@@ -584,7 +584,7 @@ describe('PlexLibrary', () => {
                 fail('Expected error to be thrown');
             } catch (error) {
                 expect(error).toBeInstanceOf(PlexLibraryError);
-                expect((error as PlexLibraryError).code).toBe(AppErrorCode.AUTH_EXPIRED);
+                expect((error as PlexLibraryError).code).toBe(PlexLibraryErrorCode.AUTH_EXPIRED);
             }
         });
 
