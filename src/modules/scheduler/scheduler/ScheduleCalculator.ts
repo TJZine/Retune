@@ -311,5 +311,9 @@ export function generateScheduleWindow(
         programs.push(currentProgram);
     }
 
+    if (programs.length >= MAX_WINDOW_PROGRAMS) {
+        console.warn('[ScheduleCalculator] Reached MAX_WINDOW_PROGRAMS limit, window may be truncated');
+    }
+
     return programs;
 }

@@ -470,8 +470,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             | ((session: SessionEndPayload) => void)
             | ((error: StreamResolverError) => void)
     ): void {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this._emitter.on(event, handler as any);
+        // Type assertion to handler union - EventEmitter accepts this via index signature
+        type HandlerUnion = (payload: StreamResolverEventMap[keyof StreamResolverEventMap]) => void;
+        this._emitter.on(event, handler as HandlerUnion);
     }
 
     // ========================================

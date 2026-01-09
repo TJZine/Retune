@@ -39,6 +39,10 @@ export function createMulberry32(seed: number): () => number {
  * @returns New array with shuffled items
  */
 export function shuffleWithSeed<T>(items: T[], seed: number): T[] {
+    if (!Number.isFinite(seed)) {
+        throw new Error('Seed must be a finite number');
+    }
+
     if (items.length <= 1) {
         return [...items];
     }
