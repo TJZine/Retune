@@ -159,6 +159,26 @@ export class ChannelScheduler implements IChannelScheduler {
         this._lastSyncTime = 0;
     }
 
+    /**
+     * Pause the sync timer without unloading the channel.
+     */
+    public pauseSyncTimer(): void {
+        this._stopSyncTimer();
+    }
+
+    /**
+     * Resume the sync timer without re-loading the channel.
+     */
+    public resumeSyncTimer(): void {
+        if (!this._isActive || !this._config || !this._index) {
+            return;
+        }
+        if (this._syncTimerState.interval !== null) {
+            return;
+        }
+        this._startSyncTimer();
+    }
+
     // ============================================
     // Time-based Queries
     // ============================================

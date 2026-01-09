@@ -2043,6 +2043,10 @@ export interface IChannelScheduler {
   getScheduleWindow(startTime: number, endTime: number): ScheduleWindow;
   getUpcoming(count: number): ScheduledProgram[];
 
+  // Sync Timer Control (Lifecycle)
+  pauseSyncTimer(): void;
+  resumeSyncTimer(): void;
+
   // Playback Sync
   syncToCurrentTime(): void;
   isScheduleStale(currentTime: number): boolean;

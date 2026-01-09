@@ -54,6 +54,9 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.AUTH_FAILED:
                 return this._createAuthActions();
 
+            case AppErrorCode.AUTH_RATE_LIMITED:
+                return this._createRateLimitedActions();
+
             case AppErrorCode.NETWORK_UNAVAILABLE:
             case AppErrorCode.NETWORK_OFFLINE:
             case AppErrorCode.NETWORK_TIMEOUT:
@@ -67,13 +70,20 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.STORAGE_CORRUPTED:
                 return this._createDataCorruptionActions();
 
+            case AppErrorCode.STORAGE_QUOTA_EXCEEDED:
+                return this._createStorageQuotaActions();
+
             case AppErrorCode.PLAYBACK_FAILED:
             case AppErrorCode.PLAYBACK_DECODE_ERROR:
             case AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED:
                 return this._createPlaybackActions();
 
             case AppErrorCode.OUT_OF_MEMORY:
+            case AppErrorCode.MODULE_INIT_FAILED:
                 return this._createMemoryActions();
+
+            case AppErrorCode.UNRECOVERABLE:
+                return this._createUnrecoverableActions();
 
             default:
                 return this._createDefaultActions(error.recoverable);
@@ -130,6 +140,8 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.AUTH_EXPIRED:
             case AppErrorCode.AUTH_REQUIRED:
                 return ERROR_MESSAGES.AUTH_EXPIRED;
+            case AppErrorCode.AUTH_RATE_LIMITED:
+                return ERROR_MESSAGES.AUTH_RATE_LIMITED;
             case AppErrorCode.NETWORK_UNAVAILABLE:
             case AppErrorCode.NETWORK_OFFLINE:
                 return ERROR_MESSAGES.NETWORK_UNAVAILABLE;
@@ -139,10 +151,16 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.DATA_CORRUPTION:
             case AppErrorCode.STORAGE_CORRUPTED:
                 return ERROR_MESSAGES.DATA_CORRUPTION;
+            case AppErrorCode.STORAGE_QUOTA_EXCEEDED:
+                return ERROR_MESSAGES.STORAGE_QUOTA_EXCEEDED;
             case AppErrorCode.PLAYBACK_FAILED:
                 return ERROR_MESSAGES.PLAYBACK_FAILED;
             case AppErrorCode.OUT_OF_MEMORY:
                 return ERROR_MESSAGES.OUT_OF_MEMORY;
+            case AppErrorCode.MODULE_INIT_FAILED:
+                return ERROR_MESSAGES.MODULE_INIT_FAILED;
+            case AppErrorCode.UNRECOVERABLE:
+                return ERROR_MESSAGES.UNRECOVERABLE;
             default:
                 return 'An error occurred. Please try again.';
         }
@@ -242,6 +260,58 @@ export class ErrorRecovery implements IErrorRecovery {
         ];
     }
 
+    private _createRateLimitedActions(): ErrorAction[] {
+        return [
+            {
+                label: 'Wait and Retry',
+                action: (): void => {
+                    // Wait before retrying - delay handled by caller
+                    if (this._onRetry) {
+                        this._onRetry();
+                    } else {
+                        console.warn('[ErrorRecovery] onRetry callback not registered');
+                    }
+                },
+                isPrimary: true,
+                requiresNetwork: true,
+            },
+            {
+                label: 'Exit',
+                action: (): void => {
+                    if (this._onExit) this._onExit();
+                },
+                isPrimary: false,
+                requiresNetwork: false,
+            },
+        ];
+    }
+
+    private _createStorageQuotaActions(): ErrorAction[] {
+        return [
+            {
+                label: 'Restart App',
+                action: (): void => {
+                    // Restart may help reclaim storage after cleanup
+                    if (this._onRestart) {
+                        this._onRestart();
+                    } else {
+                        console.warn('[ErrorRecovery] onRestart callback not registered');
+                    }
+                },
+                isPrimary: true,
+                requiresNetwork: false,
+            },
+            {
+                label: 'Continue',
+                action: (): void => {
+                    // Acknowledge and continue without action
+                },
+                isPrimary: false,
+                requiresNetwork: false,
+            },
+        ];
+    }
+
     private _createPlaybackActions(): ErrorAction[] {
         return [
             {
@@ -281,6 +351,19 @@ export class ErrorRecovery implements IErrorRecovery {
                     } else {
                         console.warn('[ErrorRecovery] onRestart callback not registered');
                     }
+                },
+                isPrimary: true,
+                requiresNetwork: false,
+            },
+        ];
+    }
+
+    private _createUnrecoverableActions(): ErrorAction[] {
+        return [
+            {
+                label: 'Exit',
+                action: (): void => {
+                    if (this._onExit) this._onExit();
                 },
                 isPrimary: true,
                 requiresNetwork: false,

@@ -648,4 +648,307 @@ describe('VideoPlayer', () => {
             expect(handler).toHaveBeenCalled();
         });
     });
+
+    // ========================================
+    // Media Session
+    // ========================================
+
+    describe('Media Session', () => {
+        let player: VideoPlayer;
+        let originalMediaSession: PropertyDescriptor | undefined;
+        let originalMediaMetadata: unknown;
+
+        beforeEach(async () => {
+            // Store original navigator.mediaSession descriptor
+            originalMediaSession = Object.getOwnPropertyDescriptor(navigator, 'mediaSession');
+            // Store original MediaMetadata
+            originalMediaMetadata = (globalThis as { MediaMetadata?: unknown }).MediaMetadata;
+
+            player = new VideoPlayer();
+            await player.initialize(createMockConfig());
+        });
+
+        afterEach(() => {
+            player.destroy();
+
+            // Restore navigator.mediaSession
+            if (originalMediaSession) {
+                Object.defineProperty(navigator, 'mediaSession', originalMediaSession);
+            } else {
+                // If it didn't exist originally, try to delete it
+                try {
+                    delete (navigator as { mediaSession?: unknown }).mediaSession;
+                } catch {
+                    // Some environments don't allow deletion
+                }
+            }
+
+            // Restore MediaMetadata
+            if (originalMediaMetadata !== undefined) {
+                Object.defineProperty(globalThis, 'MediaMetadata', {
+                    value: originalMediaMetadata,
+                    configurable: true,
+                    writable: true,
+                });
+            } else {
+                try {
+                    delete (globalThis as { MediaMetadata?: unknown }).MediaMetadata;
+                } catch {
+                    // Ignore
+                }
+            }
+        });
+
+        it('should not throw when Media Session is absent', () => {
+            // Ensure mediaSession is absent
+            try {
+                delete (navigator as { mediaSession?: unknown }).mediaSession;
+            } catch {
+                // If can't delete, define as undefined
+                Object.defineProperty(navigator, 'mediaSession', {
+                    value: undefined,
+                    configurable: true,
+                    writable: true,
+                });
+            }
+
+            // Should not throw
+            expect(() => player.requestMediaSession()).not.toThrow();
+            expect(() => player.releaseMediaSession()).not.toThrow();
+        });
+
+        describe('when Media Session is present', () => {
+            interface MockMediaSession {
+                metadata: unknown;
+                playbackState: string;
+                setActionHandler: jest.Mock;
+                setPositionState: jest.Mock;
+                handlers: Map<string, ((details: unknown) => void) | null>;
+            }
+
+            interface MockMediaMetadataInit {
+                title?: string;
+                artist?: string;
+                album?: string;
+                artwork?: Array<{ src: string; sizes: string; type: string }>;
+            }
+
+            class MockMediaMetadata {
+                public title: string;
+                public artist: string;
+                public album: string;
+                public artwork: Array<{ src: string; sizes: string; type: string }>;
+
+                constructor(init: MockMediaMetadataInit) {
+                    this.title = init.title || '';
+                    this.artist = init.artist || '';
+                    this.album = init.album || '';
+                    this.artwork = init.artwork || [];
+                }
+            }
+
+            let mockMediaSession: MockMediaSession;
+
+            beforeEach(() => {
+                // Create mock media session
+                mockMediaSession = {
+                    metadata: null,
+                    playbackState: 'none',
+                    handlers: new Map(),
+                    setActionHandler: jest.fn((action: string, handler: ((details: unknown) => void) | null) => {
+                        mockMediaSession.handlers.set(action, handler);
+                    }),
+                    setPositionState: jest.fn(),
+                };
+
+                // Install mock on navigator
+                Object.defineProperty(navigator, 'mediaSession', {
+                    value: mockMediaSession,
+                    configurable: true,
+                    writable: true,
+                });
+
+                // Install mock MediaMetadata constructor
+                Object.defineProperty(globalThis, 'MediaMetadata', {
+                    value: MockMediaMetadata,
+                    configurable: true,
+                    writable: true,
+                });
+            });
+
+            it('should install all 6 action handlers and set metadata', async () => {
+                const descriptor = createMockDescriptor({
+                    mediaMetadata: {
+                        title: 'Test Title',
+                        subtitle: 'Test Artist',
+                        durationMs: 120000,
+                        thumb: 'http://example.com/thumb.jpg',
+                        year: 2024,
+                    },
+                });
+                await player.loadStream(descriptor);
+
+                player.requestMediaSession();
+
+                // Verify all 6 action handlers were installed
+                const expectedActions = ['play', 'pause', 'stop', 'seekto', 'seekbackward', 'seekforward'];
+                for (const action of expectedActions) {
+                    expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith(action, expect.any(Function));
+                    expect(mockMediaSession.handlers.get(action)).not.toBeNull();
+                }
+
+                // Verify metadata was set
+                expect(mockMediaSession.metadata).not.toBeNull();
+                const metadata = mockMediaSession.metadata as MockMediaMetadata;
+                expect(metadata.title).toBe('Test Title');
+                expect(metadata.artist).toBe('Test Artist');
+                expect(metadata.album).toBe('2024');
+                expect(metadata.artwork).toHaveLength(1);
+                expect(metadata.artwork[0]).toEqual({
+                    src: 'http://example.com/thumb.jpg',
+                    sizes: '512x512',
+                    type: 'image/jpeg',
+                });
+            });
+
+            it('should invoke player methods when handlers are called', async () => {
+                await player.loadStream(createMockDescriptor());
+                player.requestMediaSession();
+
+                const videoElement = container.querySelector('video')!;
+                let currentTimeValue = 30;
+
+                // Track currentTime changes
+                Object.defineProperty(videoElement, 'currentTime', {
+                    get: () => currentTimeValue,
+                    set: (val: number) => {
+                        currentTimeValue = val;
+                        // Dispatch seeked event
+                        setTimeout(() => {
+                            videoElement.dispatchEvent(new Event('seeked'));
+                        }, 0);
+                    },
+                    configurable: true,
+                });
+
+                // Test play handler
+                const playHandler = mockMediaSession.handlers.get('play');
+                if (playHandler) {
+                    playHandler({});
+                }
+                expect(videoElement.play).toHaveBeenCalled();
+
+                // Test pause handler
+                const pauseHandler = mockMediaSession.handlers.get('pause');
+                if (pauseHandler) {
+                    pauseHandler({});
+                }
+                expect(videoElement.pause).toHaveBeenCalled();
+
+                // Test stop handler
+                const stopHandler = mockMediaSession.handlers.get('stop');
+                if (stopHandler) {
+                    stopHandler({});
+                }
+                // Stop calls pause internally via unloadStream
+                expect(videoElement.pause).toHaveBeenCalled();
+
+                // Test seekto handler
+                const seektoHandler = mockMediaSession.handlers.get('seekto');
+                if (seektoHandler) {
+                    seektoHandler({ seekTime: 12 });
+                }
+                jest.advanceTimersByTime(10);
+                // currentTime should be set (12 seconds = 12000ms / 1000)
+                expect(currentTimeValue).toBe(12);
+
+                // Test seekforward handler
+                currentTimeValue = 50;
+                const seekforwardHandler = mockMediaSession.handlers.get('seekforward');
+                if (seekforwardHandler) {
+                    seekforwardHandler({ seekOffset: 5 });
+                }
+                jest.advanceTimersByTime(10);
+                expect(currentTimeValue).toBe(55); // 50 + 5
+
+                // Test seekbackward handler
+                currentTimeValue = 50;
+                const seekbackwardHandler = mockMediaSession.handlers.get('seekbackward');
+                if (seekbackwardHandler) {
+                    seekbackwardHandler({ seekOffset: 5 });
+                }
+                jest.advanceTimersByTime(10);
+                expect(currentTimeValue).toBe(45); // 50 - 5
+            });
+
+            it('should clear handlers and metadata on releaseMediaSession', async () => {
+                await player.loadStream(createMockDescriptor({
+                    mediaMetadata: { title: 'Test', durationMs: 1000 },
+                }));
+                player.requestMediaSession();
+
+                // Verify handlers are set
+                expect(mockMediaSession.handlers.size).toBeGreaterThan(0);
+                expect(mockMediaSession.metadata).not.toBeNull();
+
+                // Clear mock to track release calls specifically
+                mockMediaSession.setActionHandler.mockClear();
+
+                player.releaseMediaSession();
+
+                // Verify all handlers were cleared (set to null)
+                const expectedActions = ['play', 'pause', 'stop', 'seekto', 'seekbackward', 'seekforward'];
+                for (const action of expectedActions) {
+                    expect(mockMediaSession.setActionHandler).toHaveBeenCalledWith(action, null);
+                }
+
+                // Verify metadata and playback state were cleared
+                expect(mockMediaSession.metadata).toBeNull();
+                expect(mockMediaSession.playbackState).toBe('none');
+            });
+
+            it('should be idempotent - multiple request/release calls are safe', async () => {
+                await player.loadStream(createMockDescriptor());
+
+                // Multiple requests should not add duplicate handlers
+                player.requestMediaSession();
+                const firstCallCount = mockMediaSession.setActionHandler.mock.calls.length;
+
+                player.requestMediaSession();
+                expect(mockMediaSession.setActionHandler.mock.calls.length).toBe(firstCallCount);
+
+                // Multiple releases should be safe
+                player.releaseMediaSession();
+                mockMediaSession.setActionHandler.mockClear();
+
+                player.releaseMediaSession();
+                expect(mockMediaSession.setActionHandler).not.toHaveBeenCalled();
+            });
+
+            it('should not throw when setActionHandler throws for some actions', async () => {
+                // Make setActionHandler throw for 'seekto' action
+                mockMediaSession.setActionHandler.mockImplementation((action: string, handler: unknown) => {
+                    if (action === 'seekto') {
+                        throw new Error('seekto not supported');
+                    }
+                    mockMediaSession.handlers.set(action, handler as ((details: unknown) => void) | null);
+                });
+
+                await player.loadStream(createMockDescriptor());
+
+                // Should not throw
+                expect(() => player.requestMediaSession()).not.toThrow();
+
+                // Other handlers should still be installed
+                expect(mockMediaSession.handlers.get('play')).not.toBeNull();
+                expect(mockMediaSession.handlers.get('pause')).not.toBeNull();
+                expect(mockMediaSession.handlers.get('stop')).not.toBeNull();
+                expect(mockMediaSession.handlers.get('seekbackward')).not.toBeNull();
+                expect(mockMediaSession.handlers.get('seekforward')).not.toBeNull();
+
+                // seekto should NOT be in handlers (since it threw)
+                expect(mockMediaSession.handlers.has('seekto')).toBe(false);
+            });
+        });
+    });
 });

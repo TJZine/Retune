@@ -187,11 +187,11 @@ export interface LifecycleEventMap {
     /** Emitted when state is restored from localStorage */
     stateRestored: PersistentState;
     /** Emitted before app terminates */
-    beforeTerminate: void;
+    beforeTerminate: undefined;
     /** Emitted when memory warning threshold is reached */
     memoryWarning: { level: 'warning' | 'critical'; used: number };
     /** Emitted to trigger cache clearing */
-    clearCaches: void;
+    clearCaches: undefined;
 }
 
 /**

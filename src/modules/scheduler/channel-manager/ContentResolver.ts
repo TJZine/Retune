@@ -20,44 +20,7 @@ import type {
     PlaybackMode,
     PlexMediaType,
 } from './types';
-
-// ============================================
-// Shuffle Generator (Mulberry32 PRNG)
-// ============================================
-
-/**
- * Mulberry32 PRNG for deterministic shuffle.
- * @param seed - Seed value
- * @returns Function that returns next random number [0, 1)
- */
-function mulberry32(seed: number): () => number {
-    return function (): number {
-        let t = (seed += 0x6d2b79f5);
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
-
-/**
- * Fisher-Yates shuffle with Mulberry32 PRNG.
- * @param items - Items to shuffle
- * @param seed - Seed for deterministic shuffle
- * @returns New array with shuffled items
- */
-function shuffleWithSeed<T>(items: T[], seed: number): T[] {
-    const result = [...items];
-    const random = mulberry32(seed);
-
-    for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(random() * (i + 1));
-        const temp = result[i];
-        result[i] = result[j]!;
-        result[j] = temp!;
-    }
-
-    return result;
-}
+import { shuffleWithSeed } from '../../../utils/prng';
 
 // ============================================
 // Content Resolver Class

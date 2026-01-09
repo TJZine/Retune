@@ -74,6 +74,21 @@ export interface IChannelScheduler {
      */
     unloadChannel(): void;
 
+    /**
+     * Pause the sync timer without unloading the channel.
+     * This preserves loaded channel state (config/index/current/next).
+     *
+     * Idempotent: calling when already paused or before loadChannel() is a no-op.
+     */
+    pauseSyncTimer(): void;
+
+    /**
+     * Resume the sync timer without re-loading the channel.
+     *
+     * Idempotent: calling when already running or before loadChannel() is a no-op.
+     */
+    resumeSyncTimer(): void;
+
     // ============================================
     // Time-based Queries (Core Algorithm)
     // ============================================
@@ -217,4 +232,25 @@ export interface IChannelScheduler {
      * @param handler - Event handler
      */
     on(event: 'scheduleSync', handler: (state: SchedulerState) => void): void;
+
+    /**
+     * Unsubscribe from programStart events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'programStart', handler: (program: ScheduledProgram) => void): void;
+
+    /**
+     * Unsubscribe from programEnd events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'programEnd', handler: (program: ScheduledProgram) => void): void;
+
+    /**
+     * Unsubscribe from scheduleSync events.
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    off(event: 'scheduleSync', handler: (state: SchedulerState) => void): void;
 }

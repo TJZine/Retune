@@ -33,6 +33,43 @@ import { mapMediaErrorCodeToPlaybackError } from './ErrorHandler';
 export { mapMediaErrorCodeToPlaybackError };
 
 // ============================================
+// Media Session Types (local "like" types for feature detection)
+// ============================================
+
+/** Playback state for Media Session API */
+type MediaSessionPlaybackStateLike = 'none' | 'paused' | 'playing';
+
+/** Actions supported by Media Session API */
+type MediaSessionActionLike =
+    | 'play'
+    | 'pause'
+    | 'stop'
+    | 'seekto'
+    | 'seekbackward'
+    | 'seekforward';
+
+/** Handler function for Media Session actions */
+type MediaSessionActionHandlerLike = (details: unknown) => void;
+
+/** Minimal interface matching browser MediaSession shape */
+interface MediaSessionLike {
+    metadata: unknown;
+    playbackState: MediaSessionPlaybackStateLike;
+    setActionHandler(action: MediaSessionActionLike, handler: MediaSessionActionHandlerLike | null): void;
+    setPositionState?: (state: { duration: number; position: number; playbackRate: number }) => void;
+}
+
+/** List of actions we install handlers for */
+const MEDIA_SESSION_ACTIONS: MediaSessionActionLike[] = [
+    'play',
+    'pause',
+    'stop',
+    'seekto',
+    'seekbackward',
+    'seekforward',
+];
+
+// ============================================
 // VideoPlayer Class
 // ============================================
 
@@ -77,6 +114,12 @@ export class VideoPlayer implements IVideoPlayer {
 
     /** Player configuration */
     private _config: VideoPlayerConfig | null = null;
+
+    /** Whether Media Session is enabled */
+    private _mediaSessionEnabled: boolean = false;
+
+    /** State change handler for Media Session updates */
+    private _mediaSessionStateChangeHandler: ((state: PlaybackState) => void) | null = null;
 
     /** Internal state */
     private _state: VideoPlayerInternalState = this._createInitialState();
@@ -153,6 +196,9 @@ export class VideoPlayer implements IVideoPlayer {
      * Destroy the video player.
      */
     public destroy(): void {
+        // Release media session before tearing down event emitters
+        this.releaseMediaSession();
+
         // Stop managers
         this._keepAliveManager.stop();
         this._retryManager.destroy();
@@ -229,6 +275,9 @@ export class VideoPlayer implements IVideoPlayer {
         this._state.durationMs = descriptor.durationMs;
         this._state.activeAudioId = this._audioTrackManager.getActiveTrackId();
 
+        // Sync media session metadata if enabled
+        this._syncMediaSessionMetadata();
+
         // Trigger load
         this._videoElement.load();
 
@@ -281,6 +330,9 @@ export class VideoPlayer implements IVideoPlayer {
         this._state.activeSubtitleId = null;
         this._state.activeAudioId = null;
         this._state.errorInfo = null;
+
+        // Sync media session metadata if enabled (clears metadata)
+        this._syncMediaSessionMetadata();
 
         this._updateStatus('idle');
     }
@@ -568,23 +620,104 @@ export class VideoPlayer implements IVideoPlayer {
     }
 
     // ========================================
-    // webOS Specific
+    // Media Session
     // ========================================
 
     /**
-     * Request media session (placeholder for future webOS media keys).
+     * Request media session integration.
+     * Registers action handlers and syncs Now Playing metadata.
+     * Idempotent: multiple calls are safe. Never throws.
      */
     public requestMediaSession(): void {
-        // TODO: Implement webOS media session API
-        console.debug('[VideoPlayer] Media session requested (not yet implemented)');
+        // Idempotency guard
+        if (this._mediaSessionEnabled) {
+            return;
+        }
+
+        const mediaSession = this._getMediaSession();
+        if (!mediaSession) {
+            // Media Session not supported; do not mark as enabled
+            // so future calls can retry if API becomes available
+            return;
+        }
+
+        // Mark enabled only after confirming support
+        this._mediaSessionEnabled = true;
+
+        // Install action handlers (each wrapped in try/catch for quirky implementations)
+        for (let i = 0; i < MEDIA_SESSION_ACTIONS.length; i++) {
+            const action = MEDIA_SESSION_ACTIONS[i];
+            if (action) {
+                try {
+                    mediaSession.setActionHandler(action, this._createActionHandler(action));
+                } catch {
+                    // Some browsers throw for unsupported actions; skip and continue
+                }
+            }
+        }
+
+        // Sync metadata immediately based on current descriptor
+        this._syncMediaSessionMetadata();
+
+        // Sync playback state immediately
+        this._syncMediaSessionPlaybackState(this.getState());
+
+        // Subscribe to stateChange events for ongoing updates.
+        // Note: Position state (setPositionState) is best-effort and only updates on
+        // status changes (play/pause), not continuously during playback. This is acceptable
+        // as webOS does not surface a system-level scrubber for Media Session.
+        this._mediaSessionStateChangeHandler = (state: PlaybackState): void => {
+            this._syncMediaSessionPlaybackState(state);
+        };
+        this.on('stateChange', this._mediaSessionStateChangeHandler);
     }
 
     /**
-     * Release media session.
+     * Release media session integration.
+     * Clears handlers, metadata, and unsubscribes from events.
+     * Idempotent: multiple calls are safe.
      */
     public releaseMediaSession(): void {
-        // TODO: Implement webOS media session API
-        console.debug('[VideoPlayer] Media session released (not yet implemented)');
+        // Idempotency guard
+        if (!this._mediaSessionEnabled) {
+            return;
+        }
+        this._mediaSessionEnabled = false;
+
+        // Unsubscribe state change handler
+        if (this._mediaSessionStateChangeHandler) {
+            this.off('stateChange', this._mediaSessionStateChangeHandler);
+            this._mediaSessionStateChangeHandler = null;
+        }
+
+        const mediaSession = this._getMediaSession();
+        if (!mediaSession) {
+            return;
+        }
+
+        // Clear all action handlers
+        for (let i = 0; i < MEDIA_SESSION_ACTIONS.length; i++) {
+            const action = MEDIA_SESSION_ACTIONS[i];
+            if (action) {
+                try {
+                    mediaSession.setActionHandler(action, null);
+                } catch {
+                    // Some browsers may throw for unsupported actions; ignore
+                }
+            }
+        }
+
+        // Clear metadata and playback state (wrapped for quirky implementations)
+        try {
+            mediaSession.metadata = null;
+        } catch {
+            // Ignore
+        }
+        try {
+            mediaSession.playbackState = 'none';
+        } catch {
+            // Ignore
+        }
     }
 
 
@@ -628,5 +761,279 @@ export class VideoPlayer implements IVideoPlayer {
         this._emitter.emit('stateChange', this.getState());
     }
 
+    // ========================================
+    // Private Methods - Media Session
+    // ========================================
 
+    /**
+     * Get Media Session API if available and functional.
+     * Uses feature detection without relying on TypeScript DOM types.
+     */
+    private _getMediaSession(): MediaSessionLike | null {
+        // Check navigator exists
+        if (typeof navigator === 'undefined') {
+            return null;
+        }
+
+        // Check mediaSession exists on navigator
+        if (!('mediaSession' in navigator)) {
+            return null;
+        }
+
+        const candidate = (navigator as { mediaSession?: unknown }).mediaSession;
+
+        // Validate it has the required setActionHandler method
+        if (
+            typeof candidate !== 'object' ||
+            candidate === null ||
+            typeof (candidate as { setActionHandler?: unknown }).setActionHandler !== 'function'
+        ) {
+            return null;
+        }
+
+        return candidate as MediaSessionLike;
+    }
+
+    /**
+     * Create an action handler for a specific Media Session action.
+     * Handlers never throw and guard against uninitialized player.
+     */
+    private _createActionHandler(action: MediaSessionActionLike): MediaSessionActionHandlerLike {
+        return (details: unknown): void => {
+            // Guard: if player isn't initialized, no-op
+            if (!this._videoElement) {
+                return;
+            }
+
+            switch (action) {
+                case 'play':
+                    void this.play().catch(() => { /* swallow */ });
+                    break;
+
+                case 'pause':
+                    this.pause();
+                    break;
+
+                case 'stop':
+                    this.stop();
+                    break;
+
+                case 'seekto': {
+                    const seekTimeSec = this._extractSeekTime(details);
+                    if (seekTimeSec !== null) {
+                        void this.seekTo(seekTimeSec * 1000).catch(() => { /* swallow */ });
+                    }
+                    break;
+                }
+
+                case 'seekbackward': {
+                    const offsetSec = this._extractSeekOffset(details);
+                    void this.seekRelative(-offsetSec * 1000).catch(() => { /* swallow */ });
+                    break;
+                }
+
+                case 'seekforward': {
+                    const offsetSec = this._extractSeekOffset(details);
+                    void this.seekRelative(offsetSec * 1000).catch(() => { /* swallow */ });
+                    break;
+                }
+            }
+        };
+    }
+
+    /**
+     * Extract seekTime from action details.
+     * Returns null if not a valid finite number.
+     */
+    private _extractSeekTime(details: unknown): number | null {
+        if (
+            typeof details === 'object' &&
+            details !== null &&
+            'seekTime' in details
+        ) {
+            const seekTime = (details as { seekTime: unknown }).seekTime;
+            if (typeof seekTime === 'number' && isFinite(seekTime)) {
+                return seekTime;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract seekOffset from action details, or use default.
+     */
+    private _extractSeekOffset(details: unknown): number {
+        if (
+            typeof details === 'object' &&
+            details !== null &&
+            'seekOffset' in details
+        ) {
+            const seekOffset = (details as { seekOffset: unknown }).seekOffset;
+            if (typeof seekOffset === 'number' && isFinite(seekOffset)) {
+                return seekOffset;
+            }
+        }
+        // Use config if available and finite, else default 10 seconds
+        if (
+            this._config &&
+            typeof this._config.seekIncrementSec === 'number' &&
+            isFinite(this._config.seekIncrementSec)
+        ) {
+            return this._config.seekIncrementSec;
+        }
+        return 10;
+    }
+
+    /**
+     * Sync Media Session metadata from current descriptor.
+     */
+    private _syncMediaSessionMetadata(): void {
+        if (!this._mediaSessionEnabled) {
+            return;
+        }
+
+        const mediaSession = this._getMediaSession();
+        if (!mediaSession) {
+            return;
+        }
+
+        const descriptor = this._state.currentDescriptor;
+        if (!descriptor) {
+            try {
+                mediaSession.metadata = null;
+            } catch {
+                // Ignore
+            }
+            return;
+        }
+
+        // Check if MediaMetadata constructor exists
+        const MediaMetadataConstructor = this._getMediaMetadataConstructor();
+        if (!MediaMetadataConstructor) {
+            try {
+                mediaSession.metadata = null;
+            } catch {
+                // Ignore
+            }
+            return;
+        }
+
+        // Build init object
+        const metadata = descriptor.mediaMetadata;
+        const init: {
+            title: string;
+            artist?: string;
+            album?: string;
+            artwork?: Array<{ src: string; sizes: string; type: string }>;
+        } = {
+            title: metadata.title,
+        };
+
+        if (metadata.subtitle) {
+            init.artist = metadata.subtitle;
+        }
+
+        if (metadata.year !== undefined) {
+            init.album = String(metadata.year);
+        }
+
+        if (metadata.thumb) {
+            init.artwork = [
+                { src: metadata.thumb, sizes: '512x512', type: 'image/jpeg' },
+            ];
+        }
+
+        try {
+            mediaSession.metadata = new MediaMetadataConstructor(init);
+        } catch {
+            // MediaMetadata constructor can throw for invalid inputs; fall back to null
+            mediaSession.metadata = null;
+        }
+    }
+
+    /**
+     * Get MediaMetadata constructor if available.
+     */
+    private _getMediaMetadataConstructor(): (new (init: unknown) => unknown) | null {
+        const candidate = (globalThis as { MediaMetadata?: unknown }).MediaMetadata;
+        if (typeof candidate === 'function') {
+            return candidate as new (init: unknown) => unknown;
+        }
+        return null;
+    }
+
+    /**
+     * Sync Media Session playback state from player state.
+     */
+    private _syncMediaSessionPlaybackState(state: PlaybackState): void {
+        if (!this._mediaSessionEnabled) {
+            return;
+        }
+
+        const mediaSession = this._getMediaSession();
+        if (!mediaSession) {
+            return;
+        }
+
+        // Map player status to media session playback state (wrapped for quirky implementations)
+        try {
+            if (state.status === 'playing') {
+                mediaSession.playbackState = 'playing';
+            } else if (state.status === 'paused') {
+                mediaSession.playbackState = 'paused';
+            } else {
+                mediaSession.playbackState = 'none';
+            }
+        } catch {
+            // Ignore
+        }
+
+        // Update position state if supported and applicable
+        this._syncMediaSessionPositionState(state);
+    }
+
+    /**
+     * Sync Media Session position state (optional API).
+     */
+    private _syncMediaSessionPositionState(state: PlaybackState): void {
+        const mediaSession = this._getMediaSession();
+        if (
+            !mediaSession ||
+            typeof mediaSession.setPositionState !== 'function'
+        ) {
+            return;
+        }
+
+        // Only set position for non-live content with valid duration
+        const descriptor = this._state.currentDescriptor;
+        if (!descriptor || descriptor.isLive) {
+            return;
+        }
+
+        if (state.durationMs <= 0 || !isFinite(state.durationMs)) {
+            return;
+        }
+
+        const duration = state.durationMs / 1000;
+        let position = state.currentTimeMs / 1000;
+        const playbackRate = state.playbackRate;
+
+        // Validate all values are finite
+        if (!isFinite(duration) || !isFinite(position) || !isFinite(playbackRate)) {
+            return;
+        }
+
+        // Clamp position to [0, duration]
+        position = Math.max(0, Math.min(position, duration));
+
+        try {
+            mediaSession.setPositionState({
+                duration,
+                position,
+                playbackRate,
+            });
+        } catch {
+            // Some browsers may throw for invalid values; ignore
+        }
+    }
 }

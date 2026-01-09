@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
-  "lastUpdated": "2026-01-07T06:47:00Z",
+  "lastUpdated": "2026-01-08T08:35:00Z",
   "specPackVersion": "1.0.2",
-  "currentPhase": 4,
+  "currentPhase": 5,
   "phases": {
     "1": {
       "name": "Core Infrastructure",
@@ -34,14 +34,14 @@
     },
     "4": {
       "name": "Full EPG Experience",
-      "status": "in-progress",
+      "status": "complete",
       "modules": [
         "epg-ui"
       ]
     },
     "5": {
       "name": "Integration & Polish",
-      "status": "pending",
+      "status": "in-progress",
       "modules": [
         "app-orchestrator"
       ]
@@ -356,29 +356,36 @@
       "retryCount": 1
     },
     "app-orchestrator": {
-      "status": "pending",
+      "status": "in-progress",
       "specVersion": "1.0.0",
       "blockedBy": [
+        "event-emitter",
         "app-lifecycle",
         "navigation",
         "plex-auth",
+        "plex-server-discovery",
+        "plex-stream-resolver",
         "plex-library",
         "channel-manager",
         "channel-scheduler",
         "video-player",
         "epg-ui"
       ],
-      "implementedBy": null,
-      "reviewedBy": null,
-      "verificationPassed": null,
+      "implementedBy": "coding-agent",
+      "reviewedBy": "code-review-agent",
+      "verificationPassed": false,
       "priority": 7,
       "estimatedLoC": 350,
-      "attempts": 0,
-      "sessionId": null,
-      "orchestrationDoc": null,
+      "attempts": 2,
+      "sessionId": "phase5-app-orchestrator-001",
+      "orchestrationDoc": "orchestration-docs/session-app-orchestrator-1.md",
+      "contextHandoff": "spec-pack/context-handoff/app-orchestrator.md",
       "blockedReason": null,
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-01-08T10:26:08.000Z",
+      "completedAt": "2026-01-08T18:27:30.000Z",
+      "lastReview": "2026-01-08T18:39:14Z",
+      "retryCount": 3,
+      "lastFailure": "code-bug"
     }
   },
   "updateProtocol": {

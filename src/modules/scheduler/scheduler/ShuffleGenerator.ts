@@ -6,6 +6,7 @@
  */
 
 import type { IShuffleGenerator } from './interfaces';
+import { createMulberry32 } from '../../../utils/prng';
 
 // ============================================
 // ShuffleGenerator Class
@@ -29,25 +30,6 @@ import type { IShuffleGenerator } from './interfaces';
  */
 export class ShuffleGenerator implements IShuffleGenerator {
     /**
-     * Create a Mulberry32 PRNG function.
-     * Mulberry32 is a fast, high-quality 32-bit PRNG.
-     *
-     * @param seed - Initial seed value
-     * @returns A function that returns the next random number [0, 1)
-     * @see https://github.com/bryc/code/blob/master/jshash/PRNGs.md
-     */
-    private _createSeededRandom(seed: number): () => number {
-        // Mulberry32 PRNG - fast, good distribution
-        let state = seed;
-        return function (): number {
-            let t = (state += 0x6d2b79f5);
-            t = Math.imul(t ^ (t >>> 15), t | 1);
-            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-        };
-    }
-
-    /**
      * Shuffle an array deterministically using Fisher-Yates algorithm.
      * Same seed always produces identical order.
      *
@@ -61,7 +43,7 @@ export class ShuffleGenerator implements IShuffleGenerator {
         }
 
         const result = [...items];
-        const random = this._createSeededRandom(seed);
+        const random = createMulberry32(seed);
 
         // Fisher-Yates shuffle
         for (let i = result.length - 1; i > 0; i--) {
