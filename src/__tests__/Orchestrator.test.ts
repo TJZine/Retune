@@ -107,6 +107,11 @@ jest.mock('../modules/lifecycle', () => ({
         INITIALIZATION_FAILED: 'INITIALIZATION_FAILED',
         MODULE_INIT_FAILED: 'MODULE_INIT_FAILED',
         UNRECOVERABLE: 'UNRECOVERABLE',
+        TRACK_NOT_FOUND: 'TRACK_NOT_FOUND',
+        TRACK_SWITCH_FAILED: 'TRACK_SWITCH_FAILED',
+        TRACK_SWITCH_TIMEOUT: 'TRACK_SWITCH_TIMEOUT',
+        CODEC_UNSUPPORTED: 'CODEC_UNSUPPORTED',
+        UNKNOWN: 'UNKNOWN',
     },
 }));
 
@@ -311,6 +316,7 @@ describe('AppOrchestrator', () => {
     describe('start', () => {
         beforeEach(async () => {
             await orchestrator.initialize(mockConfig);
+            mockPlexAuth.getStoredCredentials.mockResolvedValue(null);
         });
 
         it('should initialize modules in correct phase order', async () => {
@@ -437,6 +443,37 @@ describe('AppOrchestrator', () => {
             if (initOrder !== undefined && mediaSessionOrder !== undefined) {
                 expect(initOrder).toBeLessThan(mediaSessionOrder);
             }
+        });
+
+        it('should proceed without auth UI when stored credentials exist', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+
+            await orchestrator.start();
+
+            expect(mockPlexAuth.validateToken).toHaveBeenCalledWith('valid-token');
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('player');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
+        });
+
+        it('should navigate to server-select when auth is valid but no selection restored', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(false);
+
+            await orchestrator.start();
+
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('server-select');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
         });
     });
 

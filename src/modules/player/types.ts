@@ -30,7 +30,7 @@ export enum PlayerErrorCode {
  * Base application error structure.
  */
 export interface PlayerError {
-    /** Error code from canonical taxonomy */
+    /** Player-module error code (maps to AppErrorCode via mapPlayerErrorCodeToAppErrorCode) */
     code: PlayerErrorCode;
     /** Technical error message */
     message: string;
@@ -56,6 +56,8 @@ export function mapPlayerErrorCodeToAppErrorCode(code: PlayerErrorCode): AppErro
             return AppErrorCode.TRACK_SWITCH_TIMEOUT;
         case PlayerErrorCode.CODEC_UNSUPPORTED:
             return AppErrorCode.CODEC_UNSUPPORTED;
+        case PlayerErrorCode.UNKNOWN:
+            return AppErrorCode.UNKNOWN;
         default:
             return AppErrorCode.UNKNOWN;
     }
