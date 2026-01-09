@@ -83,6 +83,7 @@ export interface ModuleStatus {
     status: 'pending' | 'initializing' | 'ready' | 'error' | 'disabled';
     loadTimeMs?: number;
     error?: AppError;
+    /** Placeholder for future memory diagnostics (per-module RAM usage tracking) */
     memoryUsageMB?: number;
 }
 
@@ -345,6 +346,12 @@ export class AppOrchestrator implements IAppOrchestrator {
     /**
      * Shutdown the application gracefully.
      * Saves state, stops playback, and cleans up all resources.
+     *
+     * NOTE: The orchestrator follows a singleton lifecycle pattern.
+     * After shutdown, the instance should be discarded. To restart,
+     * create a new AppOrchestrator instance and call initialize() + start().
+     * Internal state (_errorHandlers, _moduleStatus) is not reset because
+     * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
         // Unregister all event subscriptions

@@ -80,6 +80,7 @@
 
 ### Other Nice-to-Haves
 
+- [ ] Memory diagnostics per module (`ModuleStatus.memoryUsageMB`) for testing and debugging
 - [ ] Keyboard quick reference overlay (Info button)
 - [ ] Rate limiting module (if Plex API issues arise)
 - [ ] Favorite channels feature
