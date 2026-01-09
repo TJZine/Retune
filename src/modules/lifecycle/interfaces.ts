@@ -15,6 +15,7 @@ import {
     LifecycleEventMap,
     AppErrorCode,
 } from './types';
+import type { IDisposable } from '../../utils/interfaces';
 
 /**
  * Application Lifecycle Interface.
@@ -131,11 +132,12 @@ export interface IAppLifecycle {
      * Register an event handler.
      * @param event - Event name
      * @param handler - Handler function
+     * @returns A disposable to remove the handler
      */
     on<K extends keyof LifecycleEventMap>(
         event: K,
         handler: (payload: LifecycleEventMap[K]) => void
-    ): void;
+    ): IDisposable;
 }
 
 /**

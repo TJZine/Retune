@@ -19,6 +19,7 @@ import {
 import { StateManager } from './StateManager';
 import { ErrorRecovery } from './ErrorRecovery';
 import { EventEmitter } from '../../utils/EventEmitter';
+import type { IDisposable } from '../../utils/interfaces';
 import {
     MEMORY_THRESHOLDS,
     TIMING_CONFIG,
@@ -64,6 +65,10 @@ export class AppLifecycle implements IAppLifecycle {
     private _saveDebounceTimer: number | null = null;
     private _pendingState: PersistentState | null = null;
 
+    // Idempotency guards (ISSUE-003)
+    private _initialized: boolean = false;
+    private _shutdownStarted: boolean = false;
+
     /**
      * Create a new AppLifecycle manager.
      * @param stateManager - Optional custom StateManager (for testing)
@@ -82,7 +87,11 @@ export class AppLifecycle implements IAppLifecycle {
      * Sets up event listeners and restores state.
      */
     public async initialize(): Promise<void> {
-        // Note: Phase is already 'initializing' from constructor default
+        // Idempotency guard: prevent double-initialization
+        if (this._initialized) {
+            return;
+        }
+        this._initialized = true;
 
         // Setup event listeners
         this._setupVisibilityListeners();
@@ -111,10 +120,16 @@ export class AppLifecycle implements IAppLifecycle {
      * Saves state and removes all event listeners.
      */
     public async shutdown(): Promise<void> {
+        // Idempotency guard: prevent double-shutdown
+        if (this._shutdownStarted) {
+            return;
+        }
+        this._shutdownStarted = true;
+
         await this._transitionPhase('terminating');
 
         // Emit beforeTerminate
-        this._emitter.emit('beforeTerminate', undefined as unknown as void);
+        this._emitter.emit('beforeTerminate', undefined);
 
         // Execute terminate callbacks with timeout
         await this._executeCallbacksWithTimeout(
@@ -294,7 +309,7 @@ export class AppLifecycle implements IAppLifecycle {
      * Emits events to trigger cache clearing.
      */
     public performMemoryCleanup(): void {
-        this._emitter.emit('clearCaches', undefined as unknown as void);
+        this._emitter.emit('clearCaches', undefined);
     }
 
     // ========== Phase Management ==========
@@ -409,12 +424,13 @@ export class AppLifecycle implements IAppLifecycle {
 
     /**
      * Register an event handler.
+     * @returns A disposable to remove the handler
      */
     public on<K extends keyof LifecycleEventMap>(
         event: K,
         handler: (payload: LifecycleEventMap[K]) => void
-    ): void {
-        this._emitter.on(event, handler);
+    ): IDisposable {
+        return this._emitter.on(event, handler);
     }
 
     // ========== Private Methods ==========

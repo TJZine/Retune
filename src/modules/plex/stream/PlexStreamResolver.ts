@@ -225,11 +225,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         positionMs: number,
         state: 'playing' | 'paused' | 'stopped'
     ): Promise<void> {
-        await withTimeout(
-            this._reportProgress(sessionId, itemKey, positionMs, state),
+        // Wrap operation to return result we can check, using null as timeout sentinel
+        const result = await withTimeout(
+            this._reportProgress(sessionId, itemKey, positionMs, state).then(
+                () => ({ completed: true as const })
+            ),
             PROGRESS_TIMEOUT_MS,
-            undefined
+            null
         );
+
+        // SUGGESTION-002: Emit progressTimeout event for diagnostics when exceeded budget
+        if (result === null) {
+            this._emitter.emit('progressTimeout', { sessionId, itemKey });
+        }
     }
 
     /**
@@ -350,21 +358,18 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @returns true if direct play is supported
      */
     private _canDirectPlayMedia(media: PlexMediaFile): boolean {
-        // Check container
-        const container = media.container.toLowerCase();
-        if (!SUPPORTED_CONTAINERS.includes(container)) {
+        // Check container (pre-normalized to lowercase in ResponseParser)
+        if (!SUPPORTED_CONTAINERS.includes(media.container)) {
             return false;
         }
 
-        // Check video codec
-        const videoCodec = media.videoCodec.toLowerCase();
-        if (!SUPPORTED_VIDEO_CODECS.includes(videoCodec)) {
+        // Check video codec (pre-normalized to lowercase in ResponseParser)
+        if (!SUPPORTED_VIDEO_CODECS.includes(media.videoCodec)) {
             return false;
         }
 
-        // Check audio codec
-        const audioCodec = media.audioCodec.toLowerCase();
-        if (!SUPPORTED_AUDIO_CODECS.includes(audioCodec)) {
+        // Check audio codec (pre-normalized to lowercase in ResponseParser)
+        if (!SUPPORTED_AUDIO_CODECS.includes(media.audioCodec)) {
             return false;
         }
 

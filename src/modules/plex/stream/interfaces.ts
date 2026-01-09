@@ -54,14 +54,24 @@ export interface SessionEndPayload {
 }
 
 /**
+ * Payload for progressTimeout event.
+ */
+export interface ProgressTimeoutPayload {
+    sessionId: string;
+    itemKey: string;
+}
+
+/**
  * Event map for PlexStreamResolver events.
  */
 export interface StreamResolverEventMap {
     sessionStart: SessionStartPayload;
     sessionEnd: SessionEndPayload;
     error: StreamResolverError;
+    /** Emitted when progress reporting exceeds timeout budget (diagnostic) */
+    progressTimeout: ProgressTimeoutPayload;
     /** Index signature for EventEmitter compatibility */
-    [key: string]: SessionStartPayload | SessionEndPayload | StreamResolverError;
+    [key: string]: SessionStartPayload | SessionEndPayload | StreamResolverError | ProgressTimeoutPayload;
 }
 
 // ============================================

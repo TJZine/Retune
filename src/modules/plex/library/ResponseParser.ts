@@ -165,6 +165,12 @@ export function mapMediaType(type: string): PlexMediaType {
  * @returns Parsed media file
  */
 export function parseMediaFile(data: RawMediaFile): PlexMediaFile {
+    // Pre-normalize codec/container strings to lowercase to avoid repeated allocations
+    // in hot paths like direct play detection (SUGGESTION-001)
+    const videoCodec = data.videoCodec ?? '';
+    const audioCodec = data.audioCodec ?? '';
+    const container = data.container ?? '';
+
     return {
         id: String(data.id),
         duration: data.duration ?? 0,
@@ -172,10 +178,10 @@ export function parseMediaFile(data: RawMediaFile): PlexMediaFile {
         width: data.width ?? 0,
         height: data.height ?? 0,
         aspectRatio: data.aspectRatio ?? 0,
-        videoCodec: data.videoCodec ?? '',
-        audioCodec: data.audioCodec ?? '',
+        videoCodec: videoCodec.toLowerCase(),
+        audioCodec: audioCodec.toLowerCase(),
         audioChannels: data.audioChannels ?? 0,
-        container: data.container ?? '',
+        container: container.toLowerCase(),
         videoResolution: data.videoResolution ?? '',
         parts: (data.Part || []).map(parseMediaPart),
     };
