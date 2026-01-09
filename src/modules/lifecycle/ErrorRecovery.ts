@@ -140,6 +140,8 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.AUTH_EXPIRED:
             case AppErrorCode.AUTH_REQUIRED:
                 return ERROR_MESSAGES.AUTH_EXPIRED;
+            case AppErrorCode.AUTH_RATE_LIMITED:
+                return ERROR_MESSAGES.AUTH_RATE_LIMITED;
             case AppErrorCode.NETWORK_UNAVAILABLE:
             case AppErrorCode.NETWORK_OFFLINE:
                 return ERROR_MESSAGES.NETWORK_UNAVAILABLE;
@@ -149,10 +151,16 @@ export class ErrorRecovery implements IErrorRecovery {
             case AppErrorCode.DATA_CORRUPTION:
             case AppErrorCode.STORAGE_CORRUPTED:
                 return ERROR_MESSAGES.DATA_CORRUPTION;
+            case AppErrorCode.STORAGE_QUOTA_EXCEEDED:
+                return ERROR_MESSAGES.STORAGE_QUOTA_EXCEEDED;
             case AppErrorCode.PLAYBACK_FAILED:
                 return ERROR_MESSAGES.PLAYBACK_FAILED;
             case AppErrorCode.OUT_OF_MEMORY:
                 return ERROR_MESSAGES.OUT_OF_MEMORY;
+            case AppErrorCode.MODULE_INIT_FAILED:
+                return ERROR_MESSAGES.MODULE_INIT_FAILED;
+            case AppErrorCode.UNRECOVERABLE:
+                return ERROR_MESSAGES.UNRECOVERABLE;
             default:
                 return 'An error occurred. Please try again.';
         }
@@ -258,7 +266,11 @@ export class ErrorRecovery implements IErrorRecovery {
                 label: 'Wait and Retry',
                 action: (): void => {
                     // Wait before retrying - delay handled by caller
-                    if (this._onRetry) this._onRetry();
+                    if (this._onRetry) {
+                        this._onRetry();
+                    } else {
+                        console.warn('[ErrorRecovery] onRetry callback not registered');
+                    }
                 },
                 isPrimary: true,
                 requiresNetwork: true,
@@ -277,10 +289,14 @@ export class ErrorRecovery implements IErrorRecovery {
     private _createStorageQuotaActions(): ErrorAction[] {
         return [
             {
-                label: 'Clear Cache',
+                label: 'Restart App',
                 action: (): void => {
-                    // Trigger cache clearing - handled by caller
-                    if (this._onRestart) this._onRestart();
+                    // Restart may help reclaim storage after cleanup
+                    if (this._onRestart) {
+                        this._onRestart();
+                    } else {
+                        console.warn('[ErrorRecovery] onRestart callback not registered');
+                    }
                 },
                 isPrimary: true,
                 requiresNetwork: false,

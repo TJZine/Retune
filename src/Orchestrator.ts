@@ -1299,9 +1299,12 @@ export class AppOrchestrator implements IAppOrchestrator {
             throw new Error('Stream resolver not initialized');
         }
 
+        // Defensive: clamp elapsed time to valid bounds
+        const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
+
         const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
             itemKey: program.item.ratingKey,
-            startOffsetMs: program.elapsedMs,
+            startOffsetMs: clampedOffset,
             directPlay: true,
         });
 
@@ -1324,7 +1327,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             url: decision.playbackUrl,
             protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
             mimeType: this._getMimeType(decision),
-            startPositionMs: program.elapsedMs,
+            startPositionMs: clampedOffset,
             mediaMetadata: metadata,
             subtitleTracks: [],
             audioTracks: [],

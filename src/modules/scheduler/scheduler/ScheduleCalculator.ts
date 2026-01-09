@@ -275,6 +275,9 @@ export function applyPlaybackMode(
 // Schedule Window Generation
 // ============================================
 
+/** Maximum programs to return in a schedule window to prevent memory issues */
+const MAX_WINDOW_PROGRAMS = 1000;
+
 /**
  * Generate a schedule window for EPG display.
  * Accepts optional pre-allocated output array to avoid allocation.
@@ -286,6 +289,7 @@ export function applyPlaybackMode(
  * @param output - Optional pre-allocated output array (will be cleared and reused)
  * @returns Schedule window with all programs
  */
+
 export function generateScheduleWindow(
     startTime: number,
     endTime: number,
@@ -301,8 +305,8 @@ export function generateScheduleWindow(
     let currentProgram = calculateProgramAtTime(startTime, index, anchorTime);
     programs.push(currentProgram);
 
-    // Walk forward until we pass endTime
-    while (currentProgram.scheduledEndTime < endTime) {
+    // Walk forward until we pass endTime or hit max programs limit
+    while (currentProgram.scheduledEndTime < endTime && programs.length < MAX_WINDOW_PROGRAMS) {
         currentProgram = calculateNextProgram(currentProgram, index, anchorTime);
         programs.push(currentProgram);
     }

@@ -64,12 +64,15 @@ export const DEFAULT_USER_PREFERENCES = {
  */
 export const ERROR_MESSAGES = {
     AUTH_EXPIRED: 'Please sign in again',
+    AUTH_RATE_LIMITED: 'Too many sign-in attempts. Please wait a moment.',
     NETWORK_UNAVAILABLE: 'No internet connection',
     PLEX_UNREACHABLE: 'Cannot connect to Plex server',
     DATA_CORRUPTION: 'Settings were reset',
     PLAYBACK_FAILED: 'Unable to play content',
     OUT_OF_MEMORY: 'App needs to restart',
     STORAGE_QUOTA_EXCEEDED: 'Storage full - some settings may not be saved',
+    MODULE_INIT_FAILED: 'App failed to start. Please try again.',
+    UNRECOVERABLE: 'A critical error occurred. Please restart the app.',
 } as const;
 
 /**
