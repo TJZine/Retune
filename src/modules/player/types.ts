@@ -29,7 +29,7 @@ export enum PlayerErrorCode {
 /**
  * Base application error structure.
  */
-export interface AppError {
+export interface PlayerError {
     /** Error code from canonical taxonomy */
     code: PlayerErrorCode;
     /** Technical error message */
@@ -239,7 +239,7 @@ export interface PlaybackState {
 /**
  * Playback error with retry information.
  */
-export interface PlaybackError extends AppError {
+export interface PlaybackError extends PlayerError {
     /** Number of retry attempts made */
     retryCount: number;
     /** Suggested delay before retry in milliseconds */

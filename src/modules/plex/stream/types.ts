@@ -183,6 +183,7 @@ export enum PlexStreamErrorCode {
     PARSE_ERROR = 'PARSE_ERROR',
     ITEM_NOT_FOUND = 'ITEM_NOT_FOUND',
     SERVER_ERROR = 'SERVER_ERROR',
+    UNKNOWN = 'UNKNOWN',
 }
 
 export function mapPlexStreamErrorCodeToAppErrorCode(

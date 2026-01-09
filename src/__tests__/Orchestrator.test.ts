@@ -141,8 +141,8 @@ jest.mock('../modules/plex/auth', () => ({
 
 // Mock PlexServerDiscovery
 const mockPlexDiscovery = {
-    discoverServers: jest.fn().mockResolvedValue([]),
-    selectServer: jest.fn().mockResolvedValue(true),
+    initialize: jest.fn().mockResolvedValue(undefined),
+    isConnected: jest.fn().mockReturnValue(true),
     getSelectedServer: jest.fn().mockReturnValue(null),
     getServerUri: jest.fn().mockReturnValue('http://localhost:32400'),
     on: jest.fn(() => jest.fn()),
@@ -240,7 +240,26 @@ const mockVideoPlayer = {
 
 jest.mock('../modules/player', () => ({
     VideoPlayer: jest.fn(() => mockVideoPlayer),
-    mapPlayerErrorCodeToAppErrorCode: jest.fn((code) => code),
+    mapPlayerErrorCodeToAppErrorCode: jest.fn((code) => {
+        switch (code) {
+            case 'NETWORK_TIMEOUT':
+                return AppErrorCode.NETWORK_TIMEOUT;
+            case 'PLAYBACK_DECODE_ERROR':
+                return AppErrorCode.PLAYBACK_DECODE_ERROR;
+            case 'PLAYBACK_FORMAT_UNSUPPORTED':
+                return AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED;
+            case 'TRACK_NOT_FOUND':
+                return AppErrorCode.TRACK_NOT_FOUND;
+            case 'TRACK_SWITCH_FAILED':
+                return AppErrorCode.TRACK_SWITCH_FAILED;
+            case 'TRACK_SWITCH_TIMEOUT':
+                return AppErrorCode.TRACK_SWITCH_TIMEOUT;
+            case 'CODEC_UNSUPPORTED':
+                return AppErrorCode.CODEC_UNSUPPORTED;
+            default:
+                return AppErrorCode.UNKNOWN;
+        }
+    }),
 }));
 
 // Mock EPGComponent
@@ -307,17 +326,14 @@ describe('AppOrchestrator', () => {
                 initOrder.push('plex-auth');
                 return true;
             });
-            mockPlexDiscovery.discoverServers.mockImplementation(async () => {
+            mockPlexDiscovery.initialize.mockImplementation(async () => {
                 initOrder.push('plex-discovery');
-                return [];
             });
 
-            // Setup state with auth
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'test-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'test-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
 
             await orchestrator.start();
@@ -344,13 +360,13 @@ describe('AppOrchestrator', () => {
         });
 
         it('should validate token and proceed if valid', async () => {
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'valid-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
 
             await orchestrator.start();
 
@@ -359,11 +375,10 @@ describe('AppOrchestrator', () => {
         });
 
         it('should navigate to auth if token invalid', async () => {
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'invalid-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'invalid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(false);
 
@@ -373,14 +388,13 @@ describe('AppOrchestrator', () => {
         });
 
         it('should navigate to server-select if server connection fails', async () => {
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'valid-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(true);
-            mockPlexDiscovery.selectServer.mockResolvedValue(false);
+            mockPlexDiscovery.isConnected.mockReturnValue(false);
 
             await orchestrator.start();
 
@@ -388,14 +402,13 @@ describe('AppOrchestrator', () => {
         });
 
         it('should be ready after successful start', async () => {
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'valid-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(true);
-            mockPlexDiscovery.selectServer.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
 
             await orchestrator.start();
 
@@ -403,14 +416,13 @@ describe('AppOrchestrator', () => {
         });
 
         it('should call requestMediaSession once after player initialization', async () => {
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: {
-                    token: { token: 'valid-token' },
-                    selectedServerId: 'server1',
-                },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(true);
-            mockPlexDiscovery.selectServer.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
 
             await orchestrator.start();
 
@@ -629,11 +641,13 @@ describe('AppOrchestrator', () => {
 
         it('should set ready to false after shutdown', async () => {
             // First start to set ready
-            mockLifecycle.restoreState.mockResolvedValue({
-                plexAuth: { token: { token: 't' }, selectedServerId: 's' },
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 't' },
+                selectedServerId: null,
+                selectedServerUri: null,
             });
             mockPlexAuth.validateToken.mockResolvedValue(true);
-            mockPlexDiscovery.selectServer.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
             await orchestrator.start();
             expect(orchestrator.isReady()).toBe(true);
 
