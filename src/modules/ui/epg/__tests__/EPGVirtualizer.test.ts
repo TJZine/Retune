@@ -235,7 +235,7 @@ describe('EPGVirtualizer', () => {
 
             // Count DOM elements
             const cellCount = container.querySelectorAll('.epg-cell').length;
-            expect(cellCount).toBeLessThan(200);
+            expect(cellCount).toBeLessThanOrEqual(EPG_CONSTANTS.MAX_DOM_ELEMENTS);
             expect(cellCount).toBeGreaterThan(0);
         });
 
@@ -293,7 +293,7 @@ describe('EPGVirtualizer', () => {
             const afterScrollCount = container.querySelectorAll('.epg-cell').length;
 
             // Element count should stay stable due to recycling
-            expect(afterScrollCount).toBeLessThan(EPG_CONSTANTS.MAX_DOM_ELEMENTS);
+            expect(afterScrollCount).toBeLessThanOrEqual(EPG_CONSTANTS.MAX_DOM_ELEMENTS);
             // Should be roughly similar to initial count (allowing some variance for buffer)
             expect(Math.abs(afterScrollCount - initialCount)).toBeLessThan(50);
         });

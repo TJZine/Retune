@@ -86,7 +86,7 @@ export interface PlexAuthData {
 export interface PersistentState {
     /** Schema version for migrations */
     version: number;
-    /** Plex authentication data */
+    /** Plex authentication data (deprecated; managed by PlexAuth storage) */
     plexAuth: PlexAuthData | null;
     /** Channel configurations */
     channelConfigs: ChannelConfig[];

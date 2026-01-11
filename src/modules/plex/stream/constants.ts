@@ -12,12 +12,18 @@
 /**
  * Supported container formats for direct play on webOS.
  * All containers listed here can be played natively.
- * Per spec-pack/modules/plex-stream-resolver.md:463
+/**
+ * Supported container formats for direct play on webOS.
+ * Strictly limited to formats with high native compatibility assurance.
+ * Usage of legacy containers (AVI, WMV) generally triggers transcoding.
  */
 export const SUPPORTED_CONTAINERS: readonly string[] = [
     'mp4',
+    'm4v',
     'mkv',
-    'ts', // HLS segments
+    'ts',    // MPEG-TS
+    'm2ts',  // MPEG-TS
+    'mov',   // QuickTime
 ] as const;
 
 /**
@@ -29,17 +35,25 @@ export const SUPPORTED_VIDEO_CODECS: readonly string[] = [
     'avc',      // Alias for H.264
     'hevc',
     'h265',     // Alias for HEVC
+    'vp9',      // Supported in modern webOS (MP4/MKV/WebM)
+    'mpeg2video',
+    'av1',      // Supported in webOS 22+
 ] as const;
 
 /**
  * Supported audio codecs for direct play on webOS.
  * Per spec-pack/modules/plex-stream-resolver.md:463
- * Note: DTS and MP3 are NOT supported and must be transcoded.
+ * Note: DTS and MP3 are often problematic in Generic profiles.
  */
 export const SUPPORTED_AUDIO_CODECS: readonly string[] = [
     'aac',
     'ac3',
     'eac3',
+    'flac',
+    'vorbis',
+    'opus',
+    'mp3', // Kept but may transcode if bitrate conditional fails
+    'pcm',
 ] as const;
 
 /**
@@ -99,7 +113,8 @@ export const BURN_IN_SUBTITLE_FORMATS: readonly string[] = [
     'pgs',
     'vobsub',
     'dvdsub',
-    'ass',
+    'ass', // WebOS cannot render ASS natively usually
+    'ssa',
 ] as const;
 
 /**
@@ -119,10 +134,11 @@ export const SIDECAR_SUBTITLE_FORMATS: readonly string[] = [
 /**
  * webOS client profile for Plex transcode decisions.
  * Tells the server what formats the client can handle.
+ * Strictly adheres to Plex profile syntax.
  */
 export const WEBOS_CLIENT_PROFILE_PARTS: readonly string[] = [
-    'add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=20000)',
-    'add-limitation(scope=videoAudioCodec&scopeName=*&type=match&name=audio.channels&list=2|6)',
+    'add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=100000)',
+    'add-limitation(scope=videoAudioCodec&scopeName=*&type=match&name=audio.channels&list=2|6|8)',
     'append-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts)',
     'append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&videoCodec=h264)',
     'append-transcode-target-codec(type=videoProfile&context=streaming&protocol=hls&audioCodec=aac)',
@@ -143,11 +159,30 @@ export const DEFAULT_HLS_OPTIONS = {
 // ============================================
 
 /**
- * MIME type mapping for stream protocols.
+ * MIME type mapping for stream protocols and containers.
+ * Uses official IANA types where possible and robust defaults for native players.
  */
 export const MIME_TYPES: Record<string, string> = {
-    hls: 'application/x-mpegURL',
+    // Protocols
+    hls: 'application/vnd.apple.mpegurl', // Preferred for native players
     dash: 'application/dash+xml',
+
+    // Video Containers
+    mp4: 'video/mp4',
+    m4v: 'video/mp4',
+    mkv: 'video/x-matroska',
+    ts: 'video/mp2t',
+    m2ts: 'video/mp2t',
+    mov: 'video/quicktime',
+    webm: 'video/webm',
+
+    // Audio Containers
+    mp3: 'audio/mpeg',
+    m4a: 'audio/mp4',
+    flac: 'audio/flac',
+    aac: 'audio/aac',
+
+    // Fallback
     direct: 'video/mp4',
     http: 'video/mp4',
 } as const;

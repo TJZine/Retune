@@ -148,7 +148,7 @@ describe('StateManager', () => {
             expect(loaded?.version).toBe(999);
         });
 
-        it('should repair invalid plexAuth without wiping other fields', async () => {
+        it('should ignore persisted plexAuth without wiping other fields', async () => {
             const state = {
                 version: 1,
                 plexAuth: 0,
@@ -166,7 +166,7 @@ describe('StateManager', () => {
             expect(loaded?.currentChannelIndex).toBe(0);
         });
 
-        it('should keep minimal plexAuth token data', async () => {
+        it('should drop persisted plexAuth data', async () => {
             const state = {
                 version: 1,
                 plexAuth: {
@@ -183,7 +183,7 @@ describe('StateManager', () => {
 
             const loaded = await stateManager.load();
 
-            expect(loaded?.plexAuth?.token.token).toBe('abc');
+            expect(loaded?.plexAuth).toBeNull();
         });
 
         it('should default invalid userPreferences', async () => {

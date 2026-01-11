@@ -27,6 +27,7 @@ import {
     INITIAL_SCREEN,
     FOCUS_CLASSES,
     CURSOR_HIDE_DELAY_MS,
+    CHANNEL_INPUT_CONFIG,
 } from './constants';
 
 /**
@@ -75,13 +76,17 @@ export class NavigationManager
     private _focusManager: FocusManager;
     private _remoteHandler: RemoteHandler;
     private _pointerHideTimer: number | null = null;
-    private _keyEventDisposable: IDisposable | null = null;
+    private _keyDownDisposable: IDisposable | null = null;
+    private _keyUpDisposable: IDisposable | null = null;
     private _isInitialized: boolean = false;
     private _clickHandlers: Map<string, () => void> = new Map();
+    private _dpadRepeatDelayTimer: number | null = null;
+    private _dpadRepeatIntervalTimer: number | null = null;
+    private _activeDpadButton: 'up' | 'down' | 'left' | 'right' | null = null;
     private _channelInput: ChannelNumberInput = {
         digits: '',
-        timeoutMs: 2000,
-        maxDigits: 3,
+        timeoutMs: CHANNEL_INPUT_CONFIG.TIMEOUT_MS,
+        maxDigits: CHANNEL_INPUT_CONFIG.MAX_DIGITS,
         timer: null,
     };
 
@@ -116,8 +121,11 @@ export class NavigationManager
         this._remoteHandler.initialize(this._state.config.debugMode);
 
         // Subscribe to remote events
-        this._keyEventDisposable = this._remoteHandler.on('keyDown', (keyEvent) => {
+        this._keyDownDisposable = this._remoteHandler.on('keyDown', (keyEvent) => {
             this._handleKeyEvent(keyEvent);
+        });
+        this._keyUpDisposable = this._remoteHandler.on('keyUp', ({ button }) => {
+            this._handleKeyUp(button);
         });
 
         // Set up pointer mode if enabled
@@ -146,6 +154,9 @@ export class NavigationManager
             this._pointerHideTimer = null;
         }
 
+        // Clean up D-pad repeat timers
+        this._stopDpadRepeat();
+
         // Clean up channel input timer
         if (this._channelInput.timer !== null) {
             window.clearTimeout(this._channelInput.timer);
@@ -158,9 +169,13 @@ export class NavigationManager
         document.removeEventListener('click', this._handlePointerClick);
 
         // Clean up remote handler subscription
-        if (this._keyEventDisposable) {
-            this._keyEventDisposable.dispose();
-            this._keyEventDisposable = null;
+        if (this._keyDownDisposable) {
+            this._keyDownDisposable.dispose();
+            this._keyDownDisposable = null;
+        }
+        if (this._keyUpDisposable) {
+            this._keyUpDisposable.dispose();
+            this._keyUpDisposable = null;
         }
 
         // Clear click handlers map
@@ -601,8 +616,33 @@ export class NavigationManager
             return;
         }
 
+        // Any non-directional key press cancels D-pad repeat
+        if (
+            keyEvent.button !== 'up' &&
+            keyEvent.button !== 'down' &&
+            keyEvent.button !== 'left' &&
+            keyEvent.button !== 'right'
+        ) {
+            this._stopDpadRepeat();
+        }
+
         // Emit keyPress event
         this.emit('keyPress', keyEvent);
+
+        // Always log key for debugging in production builds
+        console.warn(`[NavigationManager] Key received: ${keyEvent.button} (repeat=${keyEvent.isRepeat})`);
+
+        // GLOBAL FOCUS SENTINEL: Check for focus desync (Browser vs App)
+        // This handles cases where buttons were disabled/enabled and browser focus dropped to body
+        if (typeof document !== 'undefined' && document.activeElement === document.body) {
+            const currentId = this._focusManager.getCurrentFocusId();
+            if (currentId) {
+                // App thinks we have focus, but browser is on body.
+                // Attempt to re-apply focus to the known element.
+                console.warn(`[NavigationManager] Focus Desync detected. Restoring to ${currentId}`);
+                this._focusManager.focus(currentId);
+            }
+        }
 
         // Handle navigation keys
         switch (keyEvent.button) {
@@ -611,7 +651,10 @@ export class NavigationManager
             case 'left':
             case 'right':
                 if (!keyEvent.isRepeat) {
-                    this.moveFocus(keyEvent.button);
+                    const moved = this.moveFocus(keyEvent.button);
+                    if (moved) {
+                        this._startDpadRepeat(keyEvent.button);
+                    }
                 }
                 break;
 
@@ -636,9 +679,66 @@ export class NavigationManager
                 this._handleNumberKey(keyEvent.button);
                 break;
 
+            case 'guide':
+            case 'yellow':
+                // Emit guide event for orchestrator to handle (toggle EPG)
+                // User requested moving to color button due to OS interception
+                this.emit('guide', undefined);
+                break;
+
             default:
                 // Other buttons are handled by event listeners
                 break;
+        }
+    }
+
+    /**
+     * Handle key up events from remote handler.
+     */
+    private _handleKeyUp(button: RemoteButton): void {
+        if (button === this._activeDpadButton) {
+            this._stopDpadRepeat();
+        }
+    }
+
+    /**
+     * Start D-pad repeat after configured delay, then at configured interval.
+     */
+    private _startDpadRepeat(button: 'up' | 'down' | 'left' | 'right'): void {
+        this._stopDpadRepeat();
+        this._activeDpadButton = button;
+
+        const delayMs = this._state.config.keyRepeatDelayMs;
+        const intervalMs = this._state.config.keyRepeatIntervalMs;
+
+        this._dpadRepeatDelayTimer = window.setTimeout(() => {
+            this._dpadRepeatDelayTimer = null;
+            this._dpadRepeatIntervalTimer = window.setInterval(() => {
+                if (!this._activeDpadButton) {
+                    this._stopDpadRepeat();
+                    return;
+                }
+                const moved = this.moveFocus(this._activeDpadButton);
+                if (!moved) {
+                    this._stopDpadRepeat();
+                }
+            }, intervalMs);
+        }, delayMs);
+    }
+
+    /**
+     * Stop D-pad repeat timers.
+     */
+    private _stopDpadRepeat(): void {
+        this._activeDpadButton = null;
+
+        if (this._dpadRepeatDelayTimer !== null) {
+            window.clearTimeout(this._dpadRepeatDelayTimer);
+            this._dpadRepeatDelayTimer = null;
+        }
+        if (this._dpadRepeatIntervalTimer !== null) {
+            window.clearInterval(this._dpadRepeatIntervalTimer);
+            this._dpadRepeatIntervalTimer = null;
         }
     }
 
@@ -680,14 +780,26 @@ export class NavigationManager
      * Commit the channel number and emit event.
      */
     private _commitChannelNumber(): void {
-        const channelNumber = parseInt(this._channelInput.digits, 10);
-
-        // Reset input state
-        this._channelInput.digits = '';
         if (this._channelInput.timer !== null) {
             window.clearTimeout(this._channelInput.timer);
         }
         this._channelInput.timer = null;
+
+        if (this._channelInput.digits.length === 0) {
+            // Nothing to commit; just clear UI
+            this.emit('channelInputUpdate', { digits: '', isComplete: true });
+            return;
+        }
+
+        const channelNumber = parseInt(this._channelInput.digits, 10);
+
+        // Reset input state
+        this._channelInput.digits = '';
+
+        if (!Number.isFinite(channelNumber)) {
+            this.emit('channelInputUpdate', { digits: '', isComplete: true });
+            return;
+        }
 
         // Emit events for orchestrator to handle
         this.emit('channelNumberEntered', { channelNumber });
@@ -699,8 +811,14 @@ export class NavigationManager
      */
     private _handleOkButton(): void {
         const focused = this._focusManager.getFocusedElement();
-        if (focused && focused.onSelect) {
-            focused.onSelect();
+        if (focused) {
+            // Priority: onSelect reference -> native click
+            if (focused.onSelect) {
+                focused.onSelect();
+            } else {
+                // If no direct callback, trigger native click which handles listener logic
+                focused.element.click();
+            }
         }
     }
 

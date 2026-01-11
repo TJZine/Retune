@@ -125,6 +125,14 @@ export function parseMediaItem(data: RawMediaItem): PlexMediaItem {
     if (data.rating !== undefined) item.rating = data.rating;
     if (data.audienceRating !== undefined) item.audienceRating = data.audienceRating;
     if (data.contentRating !== undefined) item.contentRating = data.contentRating;
+    if (data.Genre && data.Genre.length > 0) {
+        const genres = data.Genre.map((tag) => tag.tag).filter((tag): tag is string => !!tag);
+        if (genres.length > 0) item.genres = genres;
+    }
+    if (data.Director && data.Director.length > 0) {
+        const directors = data.Director.map((tag) => tag.tag).filter((tag): tag is string => !!tag);
+        if (directors.length > 0) item.directors = directors;
+    }
     if (data.grandparentTitle !== undefined) item.grandparentTitle = data.grandparentTitle;
     if (data.parentTitle !== undefined) item.parentTitle = data.parentTitle;
     if (data.parentIndex !== undefined) item.seasonNumber = data.parentIndex;

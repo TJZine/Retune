@@ -58,6 +58,8 @@ export interface PlexMediaItem {
     rating?: number;
     audienceRating?: number;
     contentRating?: string;
+    genres?: string[];
+    directors?: string[];
     grandparentTitle?: string;
     parentTitle?: string;
     seasonNumber?: number;
@@ -314,6 +316,8 @@ export interface RawMediaItem {
     rating?: number;
     audienceRating?: number;
     contentRating?: string;
+    Genre?: RawTag[];
+    Director?: RawTag[];
     grandparentTitle?: string;
     parentTitle?: string;
     parentIndex?: number;
@@ -322,6 +326,14 @@ export interface RawMediaItem {
     viewCount?: number;
     lastViewedAt?: number;
     Media?: RawMediaFile[];
+}
+
+/**
+ * Raw metadata tag from Plex API.
+ */
+export interface RawTag {
+    id?: number;
+    tag?: string;
 }
 
 /**

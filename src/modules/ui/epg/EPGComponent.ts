@@ -395,11 +395,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             previousFocus.cellElement.classList.remove(EPG_CLASSES.CELL_FOCUSED);
         }
 
-        // Ensure cell is visible FIRST (may trigger render)
-        this.ensureCellVisible(channelIndex, program);
+        // Ensure cell is visible (may require scrolling/render)
+        const didScroll = this.ensureCellVisible(channelIndex, program);
 
-        // THEN set focus on the now-rendered cell
+        // Try to focus immediately if the cell is already rendered; otherwise defer until renderGridInternal()
         const cellElement = this.virtualizer.setFocusedCell(channel.id, program.scheduledStartTime);
+        if (didScroll || !cellElement) {
+            this.renderGrid();
+        }
 
         this.state.focusedCell = {
             channelIndex,
@@ -508,23 +511,23 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * @param channelIndex - Channel index
      * @param program - Program to make visible
      */
-    private ensureCellVisible(channelIndex: number, program: ScheduledProgram): void {
+    private ensureCellVisible(channelIndex: number, program: ScheduledProgram): boolean {
         const { scrollPosition } = this.state;
         const { visibleChannels, visibleHours } = this.config;
-        let needsRender = false;
+        let didScroll = false;
 
         // Check vertical visibility
         if (channelIndex < scrollPosition.channelOffset) {
             const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
             this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
             this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            needsRender = true;
+            didScroll = true;
         } else if (channelIndex >= scrollPosition.channelOffset + visibleChannels) {
             const targetOffset = channelIndex - visibleChannels + 1;
             const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
             this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
             this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            needsRender = true;
+            didScroll = true;
         }
 
         // Check horizontal visibility
@@ -535,17 +538,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (programStartMinutes < scrollPosition.timeOffset) {
             this.state.scrollPosition.timeOffset = programStartMinutes;
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
-            needsRender = true;
+            didScroll = true;
         } else if (programEndMinutes > visibleEndMinutes) {
             this.state.scrollPosition.timeOffset = programEndMinutes - (visibleHours * 60);
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
-            needsRender = true;
+            didScroll = true;
         }
 
-        // Single render at end if any scroll occurred
-        if (needsRender) {
-            this.renderGrid();
-        }
+        return didScroll;
     }
 
     // ============================================
@@ -847,7 +847,21 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.errorBoundary.wrap('RENDER_ERROR', 'renderGrid', () => {
             const range = this.virtualizer.calculateVisibleRange(this.state.scrollPosition);
             const channelIds = this.state.channels.map((c) => c.id);
-            this.virtualizer.renderVisibleCells(channelIds, this.state.schedules, range);
+            const focused = this.state.focusedCell;
+            const focusedChannel = focused ? this.state.channels[focused.channelIndex] : undefined;
+            const focusedKey = focused && focusedChannel
+                ? `${focusedChannel.id}-${focused.program.scheduledStartTime}`
+                : undefined;
+
+            this.virtualizer.renderVisibleCells(channelIds, this.state.schedules, range, focusedKey);
+
+            // Ensure focus styling is applied after (re)rendering.
+            if (focused && focusedChannel) {
+                focused.cellElement = this.virtualizer.setFocusedCell(
+                    focusedChannel.id,
+                    focused.program.scheduledStartTime
+                );
+            }
         });
     }
 }

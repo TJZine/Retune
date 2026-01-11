@@ -9,7 +9,6 @@ import {
     PersistentState,
     UserPreferences,
     ChannelConfig,
-    PlexAuthData,
 } from './types';
 import {
     STORAGE_CONFIG,
@@ -206,8 +205,6 @@ export class StateManager implements IStateManager {
         const lastUpdated =
             typeof state['lastUpdated'] === 'number' ? state['lastUpdated'] : Date.now();
 
-        const plexAuth = this._normalizePlexAuthData(state['plexAuth']);
-
         const channelConfigs = this._filterValidChannelConfigs(state['channelConfigs']);
 
         const userPreferences = this._isValidUserPreferences(state['userPreferences'])
@@ -230,7 +227,7 @@ export class StateManager implements IStateManager {
 
         return {
             version,
-            plexAuth,
+            plexAuth: null,
             channelConfigs,
             currentChannelIndex,
             userPreferences,
@@ -284,74 +281,4 @@ export class StateManager implements IStateManager {
         return true;
     }
 
-    private _normalizePlexAuthData(value: unknown): PlexAuthData | null {
-        if (!this._isRecord(value)) {
-            return null;
-        }
-        const token = value['token'];
-        if (!this._isRecord(token)) {
-            return null;
-        }
-        if (typeof token['token'] !== 'string') {
-            return null;
-        }
-
-        const userId = typeof token['userId'] === 'string' ? token['userId'] : '';
-        const username = typeof token['username'] === 'string' ? token['username'] : '';
-        const email = typeof token['email'] === 'string' ? token['email'] : '';
-        const thumb = typeof token['thumb'] === 'string' ? token['thumb'] : '';
-
-        const expiresAt = token['expiresAt'];
-        let normalizedExpiresAt: Date | null = null;
-        if (expiresAt instanceof Date) {
-            normalizedExpiresAt = expiresAt;
-        } else if (typeof expiresAt === 'string' || typeof expiresAt === 'number') {
-            const parsed = new Date(expiresAt);
-            normalizedExpiresAt = isNaN(parsed.getTime()) ? null : parsed;
-        } else if (expiresAt !== null && expiresAt !== undefined) {
-            return null;
-        }
-
-        const issuedAt = token['issuedAt'];
-        let normalizedIssuedAt: Date = new Date();
-        if (issuedAt instanceof Date) {
-            normalizedIssuedAt = issuedAt;
-        } else if (typeof issuedAt === 'string' || typeof issuedAt === 'number') {
-            const parsed = new Date(issuedAt);
-            normalizedIssuedAt = isNaN(parsed.getTime()) ? new Date() : parsed;
-        } else if (issuedAt !== undefined) {
-            return null;
-        }
-
-        const selectedServerId = value['selectedServerId'];
-        if (
-            selectedServerId !== undefined &&
-            selectedServerId !== null &&
-            typeof selectedServerId !== 'string'
-        ) {
-            return null;
-        }
-        const selectedServerUri = value['selectedServerUri'];
-        if (
-            selectedServerUri !== undefined &&
-            selectedServerUri !== null &&
-            typeof selectedServerUri !== 'string'
-        ) {
-            return null;
-        }
-
-        return {
-            token: {
-                token: token['token'],
-                userId,
-                username,
-                email,
-                thumb,
-                expiresAt: normalizedExpiresAt,
-                issuedAt: normalizedIssuedAt,
-            },
-            selectedServerId: selectedServerId ?? null,
-            selectedServerUri: selectedServerUri ?? null,
-        };
-    }
 }

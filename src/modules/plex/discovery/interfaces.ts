@@ -33,6 +33,12 @@ export interface IPlexServerDiscovery {
      */
     refreshServers(): Promise<PlexServer[]>;
 
+    /**
+     * Initialize discovery by fetching servers and restoring selection.
+     * @returns Promise resolving when initialization completes
+     */
+    initialize(): Promise<void>;
+
     // Connection Testing
 
     /**
@@ -100,6 +106,12 @@ export interface IPlexServerDiscovery {
      * @returns Active connection URI or null
      */
     getActiveConnectionUri(): string | null;
+
+    /**
+     * Clear any saved server selection.
+     * Resets selected server and connection state.
+     */
+    clearSelection(): void;
 
     // State
 

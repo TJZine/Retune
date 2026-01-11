@@ -273,7 +273,18 @@ export async function fetchWithRetry(
 
     for (let attempt = 0; attempt < PLEX_AUTH_CONSTANTS.RETRY_ATTEMPTS; attempt++) {
         try {
-            const response = await fetch(url, options);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(
+                () => controller.abort(),
+                PLEX_AUTH_CONSTANTS.REQUEST_TIMEOUT_MS
+            );
+
+            let response: Response;
+            try {
+                response = await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timeoutId);
+            }
             handleResponseStatus(response);
             return response;
         } catch (error) {

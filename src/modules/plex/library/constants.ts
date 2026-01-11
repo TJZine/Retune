@@ -83,4 +83,6 @@ export const PLEX_MEDIA_TYPES = {
     ALBUM: 9,
     /** Track type code */
     TRACK: 10,
+    /** Collection type code */
+    COLLECTION: 18,
 } as const;

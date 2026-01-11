@@ -11,6 +11,7 @@ import { AppErrorCode } from '../../lifecycle/types';
 import type { IChannelManager, ChannelManagerConfig, IPlexLibraryMinimal } from './interfaces';
 import type {
     ChannelConfig,
+    ChannelContentSource,
     ResolvedChannelContent,
     ImportResult,
     ChannelManagerEventMap,
@@ -90,6 +91,41 @@ function isNetworkError(error: unknown): boolean {
     );
 }
 
+function isValidContentSource(source: ChannelContentSource): boolean {
+    switch (source.type) {
+        case 'library':
+            return (
+                typeof source.libraryId === 'string' &&
+                source.libraryId.length > 0 &&
+                source.libraryId !== 'undefined'
+            );
+        case 'collection':
+            return (
+                typeof source.collectionKey === 'string' &&
+                source.collectionKey.length > 0 &&
+                source.collectionKey !== 'undefined'
+            );
+        case 'show':
+            return (
+                typeof source.showKey === 'string' &&
+                source.showKey.length > 0 &&
+                source.showKey !== 'undefined'
+            );
+        case 'playlist':
+            return (
+                typeof source.playlistKey === 'string' &&
+                source.playlistKey.length > 0 &&
+                source.playlistKey !== 'undefined'
+            );
+        case 'manual':
+            return Array.isArray(source.items) && source.items.length > 0;
+        case 'mixed':
+            return Array.isArray(source.sources) && source.sources.every(isValidContentSource);
+        default:
+            return false;
+    }
+}
+
 /**
  * Check if error is a content-unavailable error that allows stale cache fallback.
  */
@@ -135,6 +171,7 @@ export class ChannelManager implements IChannelManager {
     private readonly _emitter: EventEmitter<ChannelManagerEventMap>;
     private readonly _contentResolver: ContentResolver;
     private readonly _library: IPlexLibraryMinimal;
+    private readonly _storageKey: string;
     private readonly _logger: {
         warn: (message: string, ...args: unknown[]) => void;
         error: (message: string, ...args: unknown[]) => void;
@@ -156,6 +193,7 @@ export class ChannelManager implements IChannelManager {
             warn: console.warn.bind(console),
             error: console.error.bind(console),
         };
+        this._storageKey = config.storageKey || STORAGE_KEY;
         this._contentResolver = new ContentResolver(this._library, this._logger);
 
         this._state = {
@@ -576,13 +614,14 @@ export class ChannelManager implements IChannelManager {
         const json = JSON.stringify(data);
 
         try {
-            localStorage.setItem(STORAGE_KEY, json);
+
+            localStorage.setItem(this._storageKey, json);
         } catch (e) {
             if (this._isQuotaExceeded(e)) {
                 // Issue 6: First clear content caches
                 this._state.resolvedContent.clear();
                 try {
-                    localStorage.setItem(STORAGE_KEY, json);
+                    localStorage.setItem(this._storageKey, json);
                     return;
                 } catch (e2) {
                     // Issue 6: If still failing, remove oldest channels until it fits
@@ -597,7 +636,7 @@ export class ChannelManager implements IChannelManager {
                             currentChannelId: this._state.currentChannelId,
                             savedAt: Date.now(),
                         };
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(compactedData));
+                        localStorage.setItem(this._storageKey, JSON.stringify(compactedData));
                         return;
                     }
                     this._logger.error('Failed to save channels after pruning cache', e2);
@@ -614,7 +653,7 @@ export class ChannelManager implements IChannelManager {
      */
     async loadChannels(): Promise<void> {
         try {
-            const json = localStorage.getItem(STORAGE_KEY);
+            const json = localStorage.getItem(this._storageKey);
             if (!json) {
                 return;
             }
@@ -622,14 +661,19 @@ export class ChannelManager implements IChannelManager {
             const data = JSON.parse(json) as StoredChannelData;
 
             // Validate version
-            if (typeof data.version !== 'number' || data.version > STORAGE_VERSION) {
-                this._logger.warn('Unknown storage version, skipping load');
+            if (typeof data.version !== 'number' || data.version !== STORAGE_VERSION) {
+                this._logger.warn(`Storage version mismatch (got ${data.version}, expected ${STORAGE_VERSION}), skipping load`);
                 return;
             }
 
             // Restore state
             this._state.channels.clear();
             for (const channel of data.channels) {
+                // Prune invalid channels (fix for seeding bug)
+                if (!isValidContentSource(channel.contentSource)) {
+                    this._logger.warn(`Pruning invalid channel ${channel.name} (${channel.id})`);
+                    continue;
+                }
                 this._state.channels.set(channel.id, channel);
             }
 
@@ -660,6 +704,85 @@ export class ChannelManager implements IChannelManager {
         handler: (payload: ChannelManagerEventMap[K]) => void
     ): void {
         this._emitter.on(event, handler);
+    }
+
+    /**
+     * Seed deterministic demo channels.
+     */
+    async seedDemoChannels(): Promise<void> {
+        this._logger.warn('[ChannelManager] Seeding Demo Channels');
+
+        // Clear existing channels
+        this._state.channels.clear();
+        this._state.channelOrder = [];
+        this._state.resolvedContent.clear();
+        this._state.currentChannelId = null;
+
+        const DEMO_CHANNELS = [
+            { name: 'Demo Movies', count: 20, type: 'movie' },
+            { name: 'Demo Cartoons', count: 30, type: 'episode' },
+            { name: 'Demo Classics', count: 15, type: 'movie' },
+            { name: 'Demo Action', count: 25, type: 'movie' },
+            { name: 'Demo Comedy', count: 20, type: 'episode' },
+            { name: 'Demo Docu', count: 10, type: 'movie' },
+            { name: 'Demo News', count: 40, type: 'episode' },
+            { name: 'Demo Sci-Fi', count: 15, type: 'movie' },
+            { name: 'Demo Horror', count: 15, type: 'movie' },
+            { name: 'Demo Kids', count: 50, type: 'episode' },
+        ];
+
+        const DEMO_ANCHOR_TIME = Date.UTC(2020, 0, 1, 0, 0, 0, 0);
+        const DEMO_CREATED_AT = DEMO_ANCHOR_TIME;
+
+        for (let idx = 0; idx < DEMO_CHANNELS.length; idx++) {
+            const cfg = DEMO_CHANNELS[idx];
+            if (!cfg) continue;
+
+            const chNum = idx + 1;
+            const channelId = `demo-channel-${String(chNum).padStart(3, '0')}`;
+
+            const items: Array<{ ratingKey: string; title: string; durationMs: number }> = [];
+            let totalDurationMs = 0;
+
+            for (let i = 0; i < cfg.count; i++) {
+                // Vary durations between 5 min and 120 min (deterministic)
+                const durationMs = 300000 + ((i * 1234567) % 6900000);
+                totalDurationMs += durationMs;
+                items.push({
+                    ratingKey: `demo-${chNum}-${i}`,
+                    title: `${cfg.name} Item ${i + 1}`,
+                    durationMs,
+                });
+            }
+
+            const channel: ChannelConfig = {
+                id: channelId,
+                number: chNum,
+                name: cfg.name,
+                contentSource: {
+                    type: 'manual',
+                    items,
+                },
+                playbackMode: 'shuffle',
+                shuffleSeed: 12345 + chNum,
+                startTimeAnchor: DEMO_ANCHOR_TIME,
+                skipIntros: false,
+                skipCredits: false,
+                createdAt: DEMO_CREATED_AT,
+                updatedAt: DEMO_CREATED_AT,
+                lastContentRefresh: 0,
+                itemCount: cfg.count,
+                totalDurationMs,
+            };
+
+            this._state.channels.set(channel.id, channel);
+            this._state.channelOrder.push(channel.id);
+        }
+
+        // Deterministic default: start on the first channel.
+        this._state.currentChannelId = this._state.channelOrder[0] ?? null;
+
+        await this.saveChannels();
     }
 
     // ============================================

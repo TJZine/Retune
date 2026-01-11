@@ -33,7 +33,7 @@
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true,
-        "outDir": "./dist",
+        "outDir": "./dist-ts",
         "rootDir": "./src",
         "baseUrl": "./src",
         "paths": {
@@ -61,6 +61,7 @@
     "exclude": [
         "node_modules",
         "dist",
+        "dist-ts",
         "**/*.test.ts",
         "**/__tests__/**"
     ],

@@ -93,22 +93,10 @@ describe('AppLifecycle', () => {
             expect(lifecycle.getPhase()).toBe('authenticating');
         });
 
-        it('should restore state and set phase to loading_data when state exists', async () => {
+        it('should restore state and set phase to authenticating when state exists', async () => {
             const savedState: PersistentState = {
                 version: 1,
-                plexAuth: {
-                    token: {
-                        token: 'test-token',
-                        userId: 'user1',
-                        username: 'testuser',
-                        email: 'test@example.com',
-                        thumb: '',
-                        expiresAt: null,
-                        issuedAt: new Date(),
-                    },
-                    selectedServerId: null,
-                    selectedServerUri: null,
-                },
+                plexAuth: null,
                 channelConfigs: [],
                 currentChannelIndex: 0,
                 userPreferences: { theme: 'dark', volume: 100, subtitleLanguage: null, audioLanguage: null },
@@ -118,25 +106,13 @@ describe('AppLifecycle', () => {
 
             await lifecycle.initialize();
 
-            expect(lifecycle.getPhase()).toBe('loading_data');
+            expect(lifecycle.getPhase()).toBe('authenticating');
         });
 
         it('should emit stateRestored event with saved state', async () => {
             const savedState: PersistentState = {
                 version: 1,
-                plexAuth: {
-                    token: {
-                        token: 'test-token',
-                        userId: 'user1',
-                        username: 'testuser',
-                        email: 'test@example.com',
-                        thumb: '',
-                        expiresAt: null,
-                        issuedAt: new Date(),
-                    },
-                    selectedServerId: null,
-                    selectedServerUri: null,
-                },
+                plexAuth: null,
                 channelConfigs: [],
                 currentChannelIndex: 0,
                 userPreferences: { theme: 'dark', volume: 100, subtitleLanguage: null, audioLanguage: null },
@@ -186,9 +162,9 @@ describe('AppLifecycle', () => {
             await lifecycle.initialize();
             // Follow valid transition path: authenticating -> loading_data -> ready
             lifecycle.setPhase('loading_data');
-            await new Promise(resolve => setTimeout(resolve, 0));
+            await Promise.resolve();
             lifecycle.setPhase('ready');
-            await new Promise(resolve => setTimeout(resolve, 0));
+            await Promise.resolve();
             await lifecycle.shutdown();
 
             expect(lifecycle.getPhase()).toBe('terminating');
@@ -198,9 +174,9 @@ describe('AppLifecycle', () => {
             await lifecycle.initialize();
             // Follow valid transition path: authenticating -> loading_data -> ready
             lifecycle.setPhase('loading_data');
-            await new Promise(resolve => setTimeout(resolve, 0));
+            await Promise.resolve();
             lifecycle.setPhase('ready');
-            await new Promise(resolve => setTimeout(resolve, 0));
+            await Promise.resolve();
 
             const handler = jest.fn();
             lifecycle.on('beforeTerminate', handler);
@@ -468,6 +444,74 @@ describe('AppLifecycle', () => {
             expect(typeof state.isVisible).toBe('boolean');
             expect(typeof state.isNetworkAvailable).toBe('boolean');
             expect(typeof state.lastActiveTime).toBe('number');
+        });
+
+        // ========================================
+        // LIFE-003: Invalid Phase Transitions
+        // ========================================
+
+        it('should reject invalid phase transition from authenticating to ready', async () => {
+            await lifecycle.initialize();
+            // Should be in 'authenticating' phase
+            expect(lifecycle.getPhase()).toBe('authenticating');
+
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            // Try to jump directly to 'ready' (invalid: should go through loading_data)
+            lifecycle.setPhase('ready');
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            // Phase should NOT have changed
+            expect(lifecycle.getPhase()).toBe('authenticating');
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid phase transition')
+            );
+
+            consoleWarnSpy.mockRestore();
+        });
+
+        it('should reject invalid phase transition from ready to authenticating', async () => {
+            await lifecycle.initialize();
+            // Progress through valid transitions to reach 'ready'
+            lifecycle.setPhase('loading_data');
+            await new Promise(resolve => setTimeout(resolve, 0));
+            lifecycle.setPhase('ready');
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(lifecycle.getPhase()).toBe('ready');
+
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            // Try to go back to 'authenticating' (invalid transition)
+            lifecycle.setPhase('authenticating');
+            await Promise.resolve();
+
+            // Phase should NOT have changed
+            expect(lifecycle.getPhase()).toBe('ready');
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Invalid phase transition')
+            );
+
+            consoleWarnSpy.mockRestore();
+        });
+
+        it('should reject transition from loading_data to authenticating', async () => {
+            await lifecycle.initialize();
+            lifecycle.setPhase('loading_data');
+            await Promise.resolve();
+
+            expect(lifecycle.getPhase()).toBe('loading_data');
+
+            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            // Try invalid backward transition
+            lifecycle.setPhase('authenticating');
+            await Promise.resolve();
+
+            expect(lifecycle.getPhase()).toBe('loading_data');
+            expect(consoleWarnSpy).toHaveBeenCalled();
+
+            consoleWarnSpy.mockRestore();
         });
     });
 });

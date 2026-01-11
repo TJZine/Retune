@@ -9,6 +9,8 @@ import type { StreamDescriptor, PlaybackError } from './types';
 import { MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_MS } from './constants';
 import { mapMediaErrorCodeToPlaybackError } from './ErrorHandler';
 
+const SYNTHETIC_MEDIA_ERROR_CODE_KEY = '__retuneSyntheticMediaErrorCode';
+
 /**
  * Callback for retry error handling.
  */
@@ -204,8 +206,10 @@ export class RetryManager {
         const onTimeout = (): void => {
             cleanup();
             console.warn('[RetryManager] Metadata timeout after 10s, treating as error');
-            // Trigger error path - the video element may be in a zombie state
-            // Emit a synthetic error event to let VideoPlayerEvents handle recovery
+            // Trigger error path - the video element may be in a zombie state.
+            // Emit a synthetic error event with a recoverable MediaError code hint (NETWORK)
+            // so VideoPlayerEvents can schedule retries and emit errors consistently.
+            (video as unknown as Record<string, unknown>)[SYNTHETIC_MEDIA_ERROR_CODE_KEY] = 2;
             video.dispatchEvent(new Event('error'));
         };
 

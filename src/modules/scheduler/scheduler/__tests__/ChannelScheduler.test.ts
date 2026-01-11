@@ -375,6 +375,84 @@ describe('ChannelScheduler', () => {
                 })
             );
         });
+
+        // ========================================
+        // SCHED-002: Long Pause Drift Correction
+        // ========================================
+
+        it('should correctly sync to wall-clock time after long pause (1 hour drift)', () => {
+            const programEndHandler = jest.fn();
+            const programStartHandler = jest.fn();
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content, // [a: 10s, b: 20s] = 30s total loop
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+
+            // Initially at start of item 'a'
+            expect(scheduler.getCurrentProgram().item.ratingKey).toBe('a');
+            expect(scheduler.getCurrentProgram().elapsedMs).toBe(0);
+
+            scheduler.on('programEnd', programEndHandler);
+            scheduler.on('programStart', programStartHandler);
+
+            // Simulate 1 hour pause (3,600,000 ms)
+            // 3,600,000 ms / 30,000 ms per loop = 120 complete loops
+            // Position in loop: 3,600,000 % 30,000 = 0 (exactly at start of loop)
+            // Actually let's use 1 hour + 15s to land in the middle of 'b'
+            const oneHourPlus15s = 3600000 + 15000;
+            jest.setSystemTime(now + oneHourPlus15s);
+
+            scheduler.syncToCurrentTime();
+
+            const current = scheduler.getCurrentProgram();
+
+            // After 1hr 15s: many loops completed, 15s into current loop
+            // 15s into loop = 5s into item 'b' (since 'a' is 10s)
+            expect(current.item.ratingKey).toBe('b');
+            expect(current.elapsedMs).toBe(5000);
+            // Loop count: floor(3615000 / 30000) = 120 loops, position 15s
+            expect(current.loopNumber).toBe(120);
+
+            // Should have emitted program change events
+            expect(programEndHandler).toHaveBeenCalled();
+            expect(programStartHandler).toHaveBeenCalled();
+        });
+
+        it('should handle multi-day drift correctly', () => {
+            const now = Date.now();
+            jest.setSystemTime(now);
+
+            const config: ScheduleConfig = {
+                channelId: 'c1',
+                anchorTime: now,
+                content, // [a: 10s, b: 20s] = 30s total loop
+                playbackMode: 'sequential',
+                shuffleSeed: 1,
+                loopSchedule: true,
+            };
+            scheduler.loadChannel(config);
+
+            // Simulate 24 hours (86,400,000 ms)
+            // 86,400,000 % 30,000 = 0 (exactly at start of loop again)
+            jest.setSystemTime(now + 86400000);
+            scheduler.syncToCurrentTime();
+
+            const current = scheduler.getCurrentProgram();
+
+            // Should be at start of item 'a' (loop position 0)
+            expect(current.item.ratingKey).toBe('a');
+            expect(current.elapsedMs).toBe(0);
+            // Loop count: 86,400,000 / 30,000 = 2880 loops
+            expect(current.loopNumber).toBe(2880);
+        });
     });
 
     describe('skipToNext', () => {

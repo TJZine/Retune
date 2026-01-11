@@ -180,23 +180,12 @@ export interface IPlexStreamResolver {
     // ========================================
 
     /**
-     * Register handler for session start events.
+     * Register handler for resolver events.
      * @param event - Event name
      * @param handler - Handler function
      */
-    on(event: 'sessionStart', handler: (session: SessionStartPayload) => void): void;
-
-    /**
-     * Register handler for session end events.
-     * @param event - Event name
-     * @param handler - Handler function
-     */
-    on(event: 'sessionEnd', handler: (session: SessionEndPayload) => void): void;
-
-    /**
-     * Register handler for error events.
-     * @param event - Event name
-     * @param handler - Handler function
-     */
-    on(event: 'error', handler: (error: StreamResolverError) => void): void;
+    on<K extends keyof StreamResolverEventMap>(
+        event: K,
+        handler: (payload: StreamResolverEventMap[K]) => void
+    ): void;
 }

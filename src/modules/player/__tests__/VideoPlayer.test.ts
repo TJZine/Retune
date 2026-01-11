@@ -231,7 +231,7 @@ describe('VideoPlayer', () => {
             expect(videoElement?.src).toContain('test.m3u8');
         });
 
-        it('should create source element for direct play', async () => {
+        it('should set video.src for direct play', async () => {
             const descriptor = createMockDescriptor({
                 protocol: 'direct',
                 mimeType: 'video/mp4',
@@ -240,9 +240,9 @@ describe('VideoPlayer', () => {
 
             await player.loadStream(descriptor);
 
-            const sourceElement = container.querySelector('source');
-            expect(sourceElement).not.toBeNull();
-            expect(sourceElement?.type).toBe('video/mp4');
+            const videoElement = container.querySelector('video');
+            expect(videoElement?.src).toContain('test.mp4');
+            expect(container.querySelector('source')).toBeNull();
         });
 
         it('should update status to loading', async () => {

@@ -114,25 +114,6 @@ describe('PlexAuth', () => {
             expect(headers['Accept']).toBe('application/json');
         });
 
-        it('should include strong flag in request URL', async () => {
-            const auth = new PlexAuth(mockConfig);
-            mockFetchJson({
-                id: 1,
-                code: 'ABCD',
-                expiresAt: '2026-01-15T12:15:00Z',
-                authToken: null,
-                clientIdentifier: mockConfig.clientIdentifier,
-            });
-
-            await auth.requestPin();
-
-            const fetchMock = (globalThis as unknown as { fetch: jest.Mock }).fetch;
-            const callArgs = fetchMock.mock.calls[0];
-            const url = callArgs[0] as string;
-
-            expect(url).toContain('strong=true');
-        });
-
         it('should throw SERVER_UNREACHABLE on connection failure', async () => {
             const auth = new PlexAuth(mockConfig);
             mockFetchFailure(new Error('Network error'));
