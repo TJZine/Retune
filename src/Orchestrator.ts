@@ -42,6 +42,9 @@ import {
 import {
     PlexLibrary,
     type IPlexLibrary,
+    type PlexLibraryType,
+    type PlexCollection,
+    type PlexMediaItem,
     type PlexLibraryConfig,
 } from './modules/plex/library';
 import {
@@ -80,7 +83,7 @@ import {
     type EPGConfig,
 } from './modules/ui/epg';
 import type { IDisposable } from './utils/interfaces';
-import { safeLocalStorageGet, safeLocalStorageSet } from './utils/storage';
+import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 
 // ============================================
 // Types
@@ -97,6 +100,23 @@ export interface ModuleStatus {
     error?: AppError;
     /** Placeholder for future memory diagnostics (per-module RAM usage tracking) */
     memoryUsageMB?: number;
+}
+
+export interface ChannelSetupConfig {
+    serverId: string;
+    selectedLibraryIds: string[];
+    enabledStrategies: {
+        collections: boolean;
+        libraryFallback: boolean;
+        playlists: boolean;
+        genres: boolean;
+        directors: boolean;
+    };
+}
+
+export interface ChannelSetupRecord extends ChannelSetupConfig {
+    createdAt: number;
+    updatedAt: number;
 }
 
 /**
@@ -141,6 +161,10 @@ export interface IAppOrchestrator {
     discoverServers(forceRefresh?: boolean): Promise<PlexServer[]>;
     selectServer(serverId: string): Promise<boolean>;
     clearSelectedServer(): void;
+    getLibrariesForSetup(): Promise<PlexLibraryType[]>;
+    createChannelsFromSetup(config: ChannelSetupConfig): Promise<{ created: number; skipped: number }>;
+    markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
+    requestChannelSetupRerun(): void;
     handleGlobalError(error: AppError, context: string): void;
     registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
     getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
@@ -194,6 +218,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _startupInProgress: boolean = false;
     private _authResumeDisposable: IDisposable | null = null;
     private _serverResumeDisposable: IDisposable | null = null;
+    private _channelSetupRerunRequested: boolean = false;
 
     // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
     private _playbackFailureWindowStartMs: number = 0;
@@ -518,6 +543,174 @@ export class AppOrchestrator implements IAppOrchestrator {
             throw new Error('PlexServerDiscovery not initialized');
         }
         this._plexDiscovery.clearSelection();
+    }
+
+    async getLibrariesForSetup(): Promise<PlexLibraryType[]> {
+        if (this._mode === 'demo') {
+            return [];
+        }
+        if (!this._plexLibrary) {
+            throw new Error('PlexLibrary not initialized');
+        }
+        const libraries = await this._plexLibrary.getLibraries();
+        return libraries.filter((lib) => lib.type === 'movie' || lib.type === 'show');
+    }
+
+    async createChannelsFromSetup(
+        config: ChannelSetupConfig
+    ): Promise<{ created: number; skipped: number }> {
+        if (!this._channelManager || !this._plexLibrary) {
+            throw new Error('Channel manager not initialized');
+        }
+
+        const libraries = await this.getLibrariesForSetup();
+        const selectedLibraries = libraries
+            .filter((lib) => config.selectedLibraryIds.includes(lib.id))
+            .sort((a, b) => a.title.localeCompare(b.title));
+
+        const existingChannels = this._channelManager.getAllChannels();
+        for (const channel of existingChannels) {
+            await this._channelManager.deleteChannel(channel.id);
+        }
+
+        let created = 0;
+        let skipped = 0;
+        const shuffleSeedFor = (value: string): number => this._hashSeed(value);
+        const MAX_SCAN_ITEMS = 500;
+
+        if (config.enabledStrategies.playlists) {
+            const playlists = await this._plexLibrary.getPlaylists();
+            const sortedPlaylists = [...playlists].sort((a, b) => a.title.localeCompare(b.title));
+            for (const playlist of sortedPlaylists) {
+                await this._channelManager.createChannel({
+                    name: `Playlist: ${playlist.title}`,
+                    contentSource: {
+                        type: 'playlist',
+                        playlistKey: playlist.ratingKey,
+                        playlistName: playlist.title,
+                    },
+                    playbackMode: 'shuffle',
+                    shuffleSeed: shuffleSeedFor(`playlist:${playlist.ratingKey}`),
+                });
+                created += 1;
+            }
+        }
+
+        for (const library of selectedLibraries) {
+            let collections: PlexCollection[] = [];
+            if (config.enabledStrategies.collections) {
+                collections = await this._plexLibrary.getCollections(library.id);
+                collections.sort((a, b) => a.title.localeCompare(b.title));
+            }
+
+            if (collections.length > 0) {
+                for (const collection of collections) {
+                    await this._channelManager.createChannel({
+                        name: collection.title,
+                        contentSource: {
+                            type: 'collection',
+                            collectionKey: collection.ratingKey,
+                            collectionName: collection.title,
+                        },
+                        playbackMode: 'shuffle',
+                        shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
+                    });
+                    created += 1;
+                }
+            } else if (config.enabledStrategies.libraryFallback) {
+                await this._channelManager.createChannel({
+                    name: library.title,
+                    contentSource: {
+                        type: 'library',
+                        libraryId: library.id,
+                        libraryType: library.type === 'movie' ? 'movie' : 'show',
+                        includeWatched: true,
+                    },
+                    playbackMode: 'shuffle',
+                    shuffleSeed: shuffleSeedFor(`library:${library.id}`),
+                });
+                created += 1;
+            } else {
+                skipped += 1;
+            }
+
+            if (config.enabledStrategies.genres || config.enabledStrategies.directors) {
+                const items = await this._plexLibrary.getLibraryItems(library.id, { limit: MAX_SCAN_ITEMS });
+                const uniqueGenres = config.enabledStrategies.genres
+                    ? this._collectUniqueTags(items, 'genres')
+                    : [];
+                const uniqueDirectors = config.enabledStrategies.directors
+                    ? this._collectUniqueTags(items, 'directors')
+                    : [];
+
+                for (const genre of uniqueGenres) {
+                    await this._channelManager.createChannel({
+                        name: `${library.title} - ${genre}`,
+                        contentSource: {
+                            type: 'library',
+                            libraryId: library.id,
+                            libraryType: library.type === 'movie' ? 'movie' : 'show',
+                            includeWatched: true,
+                        },
+                        contentFilters: [{ field: 'genre', operator: 'eq', value: genre }],
+                        playbackMode: 'shuffle',
+                        shuffleSeed: shuffleSeedFor(`genre:${library.id}:${genre}`),
+                    });
+                    created += 1;
+                }
+
+                for (const director of uniqueDirectors) {
+                    await this._channelManager.createChannel({
+                        name: `${library.title} - ${director}`,
+                        contentSource: {
+                            type: 'library',
+                            libraryId: library.id,
+                            libraryType: library.type === 'movie' ? 'movie' : 'show',
+                            includeWatched: true,
+                        },
+                        contentFilters: [{ field: 'director', operator: 'eq', value: director }],
+                        playbackMode: 'shuffle',
+                        shuffleSeed: shuffleSeedFor(`director:${library.id}:${director}`),
+                    });
+                    created += 1;
+                }
+            }
+        }
+
+        await this._channelManager.saveChannels();
+        this._primeEpgChannels();
+        await this._refreshEpgSchedules();
+
+        return { created, skipped };
+    }
+
+    markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void {
+        const storageKey = this._getChannelSetupStorageKey(serverId);
+        const existing = this._getChannelSetupRecord(serverId);
+        const createdAt = existing?.createdAt ?? Date.now();
+        const record: ChannelSetupRecord = {
+            serverId,
+            selectedLibraryIds: [...setupConfig.selectedLibraryIds],
+            enabledStrategies: { ...setupConfig.enabledStrategies },
+            createdAt,
+            updatedAt: Date.now(),
+        };
+        safeLocalStorageSet(storageKey, JSON.stringify(record));
+        safeLocalStorageSet(STORAGE_KEYS.CHANNELS_SERVER, serverId);
+        this._channelSetupRerunRequested = false;
+    }
+
+    requestChannelSetupRerun(): void {
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            console.warn('[Orchestrator] No server selected for setup rerun.');
+            return;
+        }
+        safeLocalStorageRemove(this._getChannelSetupStorageKey(serverId));
+        this._channelSetupRerunRequested = true;
+        if (this._navigation) {
+            this._navigation.goTo('channel-setup');
+        }
     }
 
     /**
@@ -1296,6 +1489,27 @@ export class AppOrchestrator implements IAppOrchestrator {
                 }
             }
 
+            if (this._mode === 'real') {
+                const serverId = this._getSelectedServerId();
+                const channelServerId = safeLocalStorageGet(STORAGE_KEYS.CHANNELS_SERVER);
+                const channels = this._channelManager.getAllChannels();
+                const hasChannels = channels.length > 0;
+                const setupRecord = serverId ? this._getChannelSetupRecord(serverId) : null;
+
+                if (
+                    serverId &&
+                    hasChannels &&
+                    ((channelServerId && channelServerId !== serverId) ||
+                        (!channelServerId && !setupRecord))
+                ) {
+                    console.warn('[Orchestrator] Server change detected. Clearing channels for setup.');
+                    await this._clearAllChannels();
+                    this._channelSetupRerunRequested = true;
+                } else if (serverId && hasChannels && !channelServerId && setupRecord) {
+                    safeLocalStorageSet(STORAGE_KEYS.CHANNELS_SERVER, serverId);
+                }
+            }
+
             this._updateModuleStatus(
                 'channel-manager',
                 'ready',
@@ -1333,122 +1547,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-    /**
-     * Seed default channels if none exist.
-     * Uses Plex libraries to create initial channels.
-     */
-    private async _seedDefaultChannels(): Promise<void> {
-        if (!this._channelManager) {
-            return;
-        }
-
-        // Demo Mode seeding
-        if (this._mode === 'demo') {
-            return this._channelManager.seedDemoChannels();
-        }
-
-        if (!this._plexLibrary) {
-            return;
-        }
-
-        try {
-            const libraries = await this._plexLibrary.getLibraries();
-            console.warn('[Orchestrator] Seeding: Found libraries:', JSON.stringify(libraries.map(l => l.title)));
-
-            // Exclusion and Priority Configuration
-            const EXCLUDED_TERMS = ['Anime', 'Private', 'Demo', 'Test', 'Pr0n', 'Adult'];
-            const PREFERRED_LIBRARIES = ['Movies Home', 'Movies', 'TV Shows', 'TV'];
-
-            // Filter for movie or movie-like libraries
-            const validLibraries = libraries.filter(
-                (lib) => {
-                    const isTypeValid = lib.type === 'movie' || lib.type === 'show';
-                    const isNotExcluded = !EXCLUDED_TERMS.some(term => lib.title.includes(term));
-                    return isTypeValid && isNotExcluded;
-                }
-            );
-
-            if (validLibraries.length === 0) {
-                console.warn('[Orchestrator] No suitable libraries found for seeding.');
-                return;
-            }
-
-            // Sort libraries by preference
-            validLibraries.sort((a, b) => {
-                const indexA = PREFERRED_LIBRARIES.indexOf(a.title);
-                const indexB = PREFERRED_LIBRARIES.indexOf(b.title);
-                // If both are in preference list, sort by index
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                // If only A is in preference list, A comes first
-                if (indexA !== -1) return -1;
-                // If only B is in preference list, B comes first
-                if (indexB !== -1) return 1;
-                // Otherwise sort standard alphabetically
-                return a.title.localeCompare(b.title);
-            });
-
-            console.warn('[Orchestrator] Seeding: Prioritized libraries:', validLibraries.map(l => l.title));
-
-            let channelsCreated = 0;
-            const MAX_DEFAULT_CHANNELS = 5;
-
-            // Iterate through valid libraries and try to seed from collections first
-            for (const library of validLibraries) {
-                if (channelsCreated >= MAX_DEFAULT_CHANNELS) break;
-
-                try {
-                    // Try to fetch collections
-                    const collections = await this._plexLibrary.getCollections(library.id);
-
-                    if (collections.length > 0) {
-                        // Use up to 3 collections from this library
-                        const collectionsToUse = collections.slice(0, 3);
-
-                        for (const collection of collectionsToUse) {
-                            if (channelsCreated >= MAX_DEFAULT_CHANNELS) break;
-
-                            console.warn(`[Orchestrator] Seeding channel from collection: ${collection.title} (${library.title})`);
-                            await this._channelManager.createChannel({
-                                name: collection.title,
-                                contentSource: {
-                                    type: 'collection',
-                                    collectionKey: collection.ratingKey,
-                                    collectionName: collection.title
-                                },
-                                playbackMode: 'shuffle',
-                            });
-                            channelsCreated++;
-                        }
-                    } else {
-                        // Fallback: Create channel from the library itself if it has no collections
-                        console.warn(`[Orchestrator] Seeding channel from library: ${library.title}`);
-                        await this._channelManager.createChannel({
-                            name: library.title,
-                            contentSource: {
-                                type: 'library',
-                                libraryId: library.id,
-                                libraryType: library.type === 'movie' ? 'movie' : 'show',
-                                includeWatched: true,
-                            },
-                            playbackMode: 'shuffle',
-                        });
-                        channelsCreated++;
-                    }
-                } catch (err) {
-                    console.warn(`[Orchestrator] Failed to seed from library ${library.title}`, err);
-                }
-            }
-
-            if (channelsCreated === 0) {
-                console.warn('[Orchestrator] Failed to create any default channels.');
-            } else {
-                console.warn(`[Orchestrator] Successfully seeded ${channelsCreated} default channels.`);
-            }
-
-        } catch (error) {
-            console.error('[Orchestrator] Failed to seed default channels:', error);
-        }
-    }
     /**
      * Phase 5: Initialize EPG
      */
@@ -1526,34 +1624,34 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
 
             if (this._navigation) {
-                console.warn('[Orchestrator] Navigating to player');
-                this._navigation.goTo('player');
-                if (this._channelManager) {
-                    console.warn('[Orchestrator] Switching to current channel');
+                const shouldRunSetup = this._shouldRunChannelSetup();
+                if (shouldRunSetup) {
+                    console.warn('[Orchestrator] Channel setup required. Navigating to setup wizard.');
+                    this._navigation.goTo('channel-setup');
+                } else {
+                    console.warn('[Orchestrator] Navigating to player');
+                    this._navigation.goTo('player');
+                    if (this._channelManager) {
+                        console.warn('[Orchestrator] Switching to current channel');
 
-                    // Auto-seed if empty
-                    if (this._channelManager.getAllChannels().length === 0) {
-                        console.warn('[Orchestrator] No channels found. Seeding default channels...');
-                        await this._seedDefaultChannels();
-                    }
+                        let channelToPlay = this._channelManager.getCurrentChannel();
 
-                    let channelToPlay = this._channelManager.getCurrentChannel();
-
-                    // Fallback: If no current channel but we have channels, pick the first one
-                    if (!channelToPlay) {
-                        const allChannels = this._channelManager.getAllChannels();
-                        const firstChannel = allChannels[0];
-                        if (firstChannel) {
-                            channelToPlay = firstChannel;
-                            console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
+                        // Fallback: If no current channel but we have channels, pick the first one
+                        if (!channelToPlay) {
+                            const allChannels = this._channelManager.getAllChannels();
+                            const firstChannel = allChannels[0];
+                            if (firstChannel) {
+                                channelToPlay = firstChannel;
+                                console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
+                            }
                         }
-                    }
 
-                    if (channelToPlay) {
-                        await this.switchToChannel(channelToPlay.id);
-                    } else {
-                        console.warn('[Orchestrator] No current channel found after seeding. Redirecting to Server Select.');
-                        this.openServerSelect();
+                        if (channelToPlay) {
+                            await this.switchToChannel(channelToPlay.id);
+                        } else {
+                            console.warn('[Orchestrator] No current channel found. Redirecting to Server Select.');
+                            this.openServerSelect();
+                        }
                     }
                 }
             }
@@ -1611,6 +1709,101 @@ export class AppOrchestrator implements IAppOrchestrator {
             });
         });
         this._serverResumeDisposable = disposable;
+    }
+
+    private _getSelectedServerId(): string | null {
+        if (!this._plexDiscovery) {
+            return null;
+        }
+        const server = this._plexDiscovery.getSelectedServer();
+        return server ? server.id : null;
+    }
+
+    private _getChannelSetupStorageKey(serverId: string): string {
+        return `retune_channel_setup_v1:${serverId}`;
+    }
+
+    private _getChannelSetupRecord(serverId: string): ChannelSetupRecord | null {
+        const stored = safeLocalStorageGet(this._getChannelSetupStorageKey(serverId));
+        if (!stored) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(stored) as Partial<ChannelSetupRecord>;
+            if (!parsed || parsed.serverId !== serverId) {
+                return null;
+            }
+            if (!Array.isArray(parsed.selectedLibraryIds)) {
+                return null;
+            }
+            if (!parsed.enabledStrategies) {
+                return null;
+            }
+            return parsed as ChannelSetupRecord;
+        } catch {
+            return null;
+        }
+    }
+
+    private _shouldRunChannelSetup(): boolean {
+        if (this._mode === 'demo') {
+            return false;
+        }
+        if (!this._channelManager) {
+            return false;
+        }
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            return false;
+        }
+        if (this._channelSetupRerunRequested) {
+            return true;
+        }
+        if (this._channelManager.getAllChannels().length === 0) {
+            return true;
+        }
+        const record = this._getChannelSetupRecord(serverId);
+        return record === null;
+    }
+
+    private _collectUniqueTags(items: PlexMediaItem[], field: 'genres' | 'directors'): string[] {
+        const unique = new Map<string, string>();
+        for (const item of items) {
+            const values = item[field];
+            if (!values) {
+                continue;
+            }
+            for (const value of values) {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                    continue;
+                }
+                const key = trimmed.toLowerCase();
+                if (!unique.has(key)) {
+                    unique.set(key, trimmed);
+                }
+            }
+        }
+        return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
+    }
+
+    private _hashSeed(value: string): number {
+        let hash = 2166136261;
+        for (let i = 0; i < value.length; i++) {
+            hash ^= value.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+    }
+
+    private async _clearAllChannels(): Promise<void> {
+        if (!this._channelManager) {
+            return;
+        }
+        const channels = this._channelManager.getAllChannels();
+        for (const channel of channels) {
+            await this._channelManager.deleteChannel(channel.id);
+        }
     }
 
     private _clearAuthResume(): void {
@@ -1846,6 +2039,13 @@ export class AppOrchestrator implements IAppOrchestrator {
      * @param to - New screen
      */
     private _handleScreenChange(from: string, to: string): void {
+        if (to === 'player' && this._shouldRunChannelSetup()) {
+            if (this._navigation) {
+                this._navigation.replaceScreen('channel-setup');
+            }
+            return;
+        }
+
         // Hide EPG when leaving guide
         if (from === 'guide' && to !== 'guide') {
             if (this._epg) {

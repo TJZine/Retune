@@ -16,6 +16,7 @@ import type { VideoPlayerConfig } from './modules/player';
 import type { EPGConfig } from './modules/ui/epg';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
+import { ChannelSetupScreen } from './modules/ui/channel-setup';
 import { ServerSelectScreen } from './modules/ui/server-select';
 import { SplashScreen } from './modules/ui/splash';
 import { STORAGE_KEYS } from './types';
@@ -85,8 +86,10 @@ export class App {
     private _lastToastAt: number = 0;
     private _authContainer: HTMLElement | null = null;
     private _serverSelectContainer: HTMLElement | null = null;
+    private _channelSetupContainer: HTMLElement | null = null;
     private _authScreen: AuthScreen | null = null;
     private _serverSelectScreen: ServerSelectScreen | null = null;
+    private _channelSetupScreen: ChannelSetupScreen | null = null;
 
     private _splashContainer: HTMLElement | null = null;
     private _splashScreen: SplashScreen | null = null;
@@ -237,6 +240,13 @@ export class App {
         root.appendChild(serverSelectContainer);
         this._serverSelectContainer = serverSelectContainer;
 
+        // Channel setup container
+        const channelSetupContainer = document.createElement('div');
+        channelSetupContainer.id = 'channel-setup-container';
+        channelSetupContainer.className = 'screen';
+        root.appendChild(channelSetupContainer);
+        this._channelSetupContainer = channelSetupContainer;
+
         // Error overlay container
         const errorOverlay = document.createElement('div');
         errorOverlay.id = 'error-overlay';
@@ -331,12 +341,16 @@ export class App {
         if (this._splashContainer) {
             this._splashScreen = new SplashScreen(this._splashContainer);
         }
-        if (!this._authContainer || !this._serverSelectContainer) {
+        if (!this._authContainer || !this._serverSelectContainer || !this._channelSetupContainer) {
             return;
         }
         this._authScreen = new AuthScreen(this._authContainer, this._orchestrator);
         this._serverSelectScreen = new ServerSelectScreen(
             this._serverSelectContainer,
+            this._orchestrator
+        );
+        this._channelSetupScreen = new ChannelSetupScreen(
+            this._channelSetupContainer,
             this._orchestrator
         );
     }
@@ -352,7 +366,8 @@ export class App {
 
         const phaseDisposable = this._orchestrator.onLifecycleEvent('phaseChange', ({ to }) => {
             if (to === 'ready') {
-                this._applyScreenVisibility('player');
+                const current = this._orchestrator?.getCurrentScreen();
+                this._applyScreenVisibility(current ?? 'player');
             }
         });
         this._phaseUnsubscribe = (): void => phaseDisposable.dispose();
@@ -365,15 +380,22 @@ export class App {
 
     private _applyScreenVisibility(screen: string): void {
         // Guard: If app is ready, we force player visibility unless explicitly navigating to an overlay
-        if (this._orchestrator && this._orchestrator.isReady() && screen !== 'server-select') {
+        if (
+            this._orchestrator &&
+            this._orchestrator.isReady() &&
+            screen !== 'server-select' &&
+            screen !== 'channel-setup'
+        ) {
             this._splashScreen?.hide();
             this._authScreen?.hide();
             this._serverSelectScreen?.hide();
+            this._channelSetupScreen?.hide();
             return;
         }
         const showSplash = screen === 'splash';
         const showAuth = screen === 'auth';
         const showServerSelect = screen === 'server-select';
+        const showChannelSetup = screen === 'channel-setup';
 
         if (this._splashScreen) {
             if (showSplash) {
@@ -396,6 +418,14 @@ export class App {
                 this._serverSelectScreen.show();
             } else {
                 this._serverSelectScreen.hide();
+            }
+        }
+
+        if (this._channelSetupScreen) {
+            if (showChannelSetup) {
+                this._channelSetupScreen.show();
+            } else {
+                this._channelSetupScreen.hide();
             }
         }
     }

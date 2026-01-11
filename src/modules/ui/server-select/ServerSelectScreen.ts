@@ -18,6 +18,7 @@ export class ServerSelectScreen {
     private _errorEl: HTMLElement;
     private _listEl: HTMLElement;
     private _refreshButton: HTMLButtonElement;
+    private _setupButton: HTMLButtonElement;
     private _clearButton: HTMLButtonElement;
     private _isLoading: boolean = false;
 
@@ -75,6 +76,16 @@ export class ServerSelectScreen {
         buttonRow.appendChild(refreshButton);
         this._refreshButton = refreshButton;
 
+        const setupButton = document.createElement('button');
+        setupButton.id = 'btn-server-setup';
+        setupButton.className = 'screen-button secondary';
+        setupButton.textContent = 'Re-run Setup';
+        setupButton.addEventListener('click', () => {
+            this._clearError();
+            this._orchestrator.requestChannelSetupRerun();
+        });
+        buttonRow.appendChild(setupButton);
+        this._setupButton = setupButton;
 
         const clearButton = document.createElement('button');
         clearButton.id = 'btn-server-forget';
@@ -121,6 +132,7 @@ export class ServerSelectScreen {
         this._clearError();
         this._setStatus('Discovering servers…', '');
         this._refreshButton.disabled = true;
+        this._setupButton.disabled = true;
         this._clearButton.disabled = true;
 
         try {
@@ -136,6 +148,7 @@ export class ServerSelectScreen {
             this._setStatus('Discovery failed.', '');
         } finally {
             this._refreshButton.disabled = false;
+            this._setupButton.disabled = false;
             this._clearButton.disabled = false;
             this._isLoading = false;
 
@@ -292,6 +305,16 @@ export class ServerSelectScreen {
             id: 'btn-server-refresh',
             element: this._refreshButton,
             neighbors: {
+                right: 'btn-server-setup',
+                // down will be linked dynamically when list renders
+            },
+        });
+
+        nav.registerFocusable({
+            id: 'btn-server-setup',
+            element: this._setupButton,
+            neighbors: {
+                left: 'btn-server-refresh',
                 right: 'btn-server-forget',
                 // down will be linked dynamically when list renders
             },
@@ -301,7 +324,7 @@ export class ServerSelectScreen {
             id: 'btn-server-forget',
             element: this._clearButton,
             neighbors: {
-                left: 'btn-server-refresh',
+                left: 'btn-server-setup',
                 // down will be linked dynamically when list renders
             },
         });
@@ -315,6 +338,7 @@ export class ServerSelectScreen {
         if (!nav) return;
 
         nav.unregisterFocusable('btn-server-refresh');
+        nav.unregisterFocusable('btn-server-setup');
         nav.unregisterFocusable('btn-server-forget');
 
         // Clear potential list items
@@ -334,7 +358,7 @@ export class ServerSelectScreen {
             id: 'btn-server-refresh',
             element: this._refreshButton,
             neighbors: {
-                right: 'btn-server-forget',
+                right: 'btn-server-setup',
             },
         };
         if (hasListItems) {
@@ -342,11 +366,24 @@ export class ServerSelectScreen {
         }
         nav.registerFocusable(refreshParams);
 
+        const setupParams: FocusableElement = {
+            id: 'btn-server-setup',
+            element: this._setupButton,
+            neighbors: {
+                left: 'btn-server-refresh',
+                right: 'btn-server-forget',
+            },
+        };
+        if (hasListItems) {
+            setupParams.neighbors!.down = 'btn-server-select-0';
+        }
+        nav.registerFocusable(setupParams);
+
         const clearParams: FocusableElement = {
             id: 'btn-server-forget',
             element: this._clearButton,
             neighbors: {
-                left: 'btn-server-refresh',
+                left: 'btn-server-setup',
             },
         };
         if (hasListItems) {
@@ -355,4 +392,3 @@ export class ServerSelectScreen {
         nav.registerFocusable(clearParams);
     }
 }
-

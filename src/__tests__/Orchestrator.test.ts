@@ -130,6 +130,7 @@ jest.mock('../modules/lifecycle', () => ({
 const mockNavigation = {
     initialize: jest.fn().mockResolvedValue(undefined),
     goTo: jest.fn(),
+    replaceScreen: jest.fn(),
     getCurrentScreen: jest.fn().mockReturnValue('player'),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
@@ -213,6 +214,7 @@ const mockChannelManager = {
     getNextChannel: jest.fn().mockReturnValue(mockChannel),
     getPreviousChannel: jest.fn().mockReturnValue(mockChannel),
     setCurrentChannel: jest.fn(),
+    deleteChannel: jest.fn().mockResolvedValue(undefined),
     resolveChannelContent: jest.fn().mockResolvedValue({
         channelId: 'ch1',
         orderedItems: [],
@@ -524,6 +526,49 @@ describe('AppOrchestrator', () => {
             expect(mockPlexAuth.validateToken).toHaveBeenCalledWith('valid-token');
             expect(mockNavigation.goTo).toHaveBeenCalledWith('player');
             expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
+        });
+
+        it('should navigate to channel-setup when channels are empty and setup is missing', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-1' });
+            mockChannelManager.getAllChannels.mockReturnValue([]);
+            mockLocalStorage.getItem.mockImplementation((key: string) => {
+                if (key === 'retune_channel_setup_v1:server-1') return null;
+                if (key === 'retune_channels_server_v1') return null;
+                return null;
+            });
+
+            await orchestrator.start();
+
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('player');
+        });
+
+        it('should clear channels and rerun setup when server selection changes', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-2' });
+            mockChannelManager.getAllChannels.mockReturnValue([mockChannel]);
+            mockLocalStorage.getItem.mockImplementation((key: string) => {
+                if (key === 'retune_channels_server_v1') return 'server-1';
+                return null;
+            });
+
+            await orchestrator.start();
+
+            expect(mockChannelManager.deleteChannel).toHaveBeenCalledWith(mockChannel.id);
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
         });
 
         it('should navigate to server-select when auth is valid but no selection restored', async () => {
@@ -860,6 +905,23 @@ describe('AppOrchestrator', () => {
             expect(mockLifecycle.reportError).toHaveBeenCalledWith(
                 expect.objectContaining({ code: 'CHANNEL_NOT_FOUND' })
             );
+        });
+    });
+
+    describe('channel setup rerun', () => {
+        beforeEach(async () => {
+            await orchestrator.initialize(mockConfig);
+        });
+
+        it('should clear setup record and navigate to channel-setup', () => {
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-3' });
+
+            orchestrator.requestChannelSetupRerun();
+
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith(
+                'retune_channel_setup_v1:server-3'
+            );
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
         });
     });
 

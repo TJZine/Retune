@@ -222,6 +222,7 @@ export interface PlexMediaItemMinimal {
     rating?: number;
     contentRating?: string;
     genres?: string[];
+    directors?: string[];
     addedAt: Date;
     viewCount?: number;
 }

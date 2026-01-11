@@ -165,7 +165,7 @@ describe('AudioTrackManager', () => {
             initializeWithVideo(manager);
         });
 
-        it.each(['aac', 'ac3', 'eac3'])('should accept supported codec: %s', async (codec) => {
+        it.each(['aac', 'ac3', 'eac3', 'flac', 'opus', 'mp3'])('should accept supported codec: %s', async (codec) => {
             const tracks = [createMockTrack({ id: `track-${codec}`, codec })];
             manager.setTracks(tracks);
 
@@ -173,7 +173,9 @@ describe('AudioTrackManager', () => {
             expect(manager.getActiveTrackId()).toBe(`track-${codec}`);
         });
 
-        it.each(['dts', 'mp3', 'truehd', 'flac', 'opus'])('should throw CODEC_UNSUPPORTED for: %s', async (codec) => {
+        it.each(['dts', 'truehd', 'dts-hd', 'wma', 'alac'])(
+            'should throw CODEC_UNSUPPORTED for: %s',
+            async (codec) => {
             const tracks = [createMockTrack({ id: `track-${codec}`, codec })];
             manager.setTracks(tracks);
 
@@ -181,7 +183,8 @@ describe('AudioTrackManager', () => {
                 code: PlayerErrorCode.CODEC_UNSUPPORTED,
                 message: expect.stringContaining(codec),
             });
-        });
+            }
+        );
 
         it('should handle case-insensitive codec matching (AAC, EAC3)', async () => {
             const tracks = [
