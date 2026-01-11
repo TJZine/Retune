@@ -187,12 +187,17 @@ export class EPGVirtualizer {
     renderVisibleCells(
         channelIds: string[],
         schedules: Map<string, ScheduleWindow>,
-        range: VirtualizedGridState
+        range: VirtualizedGridState,
+        focusedCellKey?: string
     ): void {
         if (!this.gridContainer || !this.config) return;
 
         const newVisibleCells = new Map<string, CellRenderData>();
         const now = Date.now();
+        const maxDomElements = EPG_CONSTANTS.MAX_DOM_ELEMENTS;
+        const visibleRowCount = Math.max(1, range.visibleRows.length);
+        const perRowLimit = Math.max(1, Math.ceil(maxDomElements / visibleRowCount));
+        const perRowCounts = new Map<number, number>();
 
         // Determine needed cells
         for (const rowIndex of range.visibleRows) {
@@ -206,6 +211,19 @@ export class EPGVirtualizer {
             for (const program of schedule.programs) {
                 if (this.overlapsTimeRange(program, range.visibleTimeRange)) {
                     const cellKey = `${channelId}-${program.scheduledStartTime}`;
+                    const isFocusedCell = focusedCellKey === cellKey;
+                    const currentRowCount = perRowCounts.get(rowIndex) ?? 0;
+
+                    // Hard cap: keep DOM under MAX_DOM_ELEMENTS (ADR-003)
+                    if (!isFocusedCell) {
+                        if (newVisibleCells.size >= maxDomElements) {
+                            continue;
+                        }
+                        if (currentRowCount >= perRowLimit) {
+                            continue;
+                        }
+                    }
+
                     const cell = positionCell(program, this.gridAnchorTime, this.config.pixelsPerMinute);
 
                     // Compute isPartial: true if program is clipped by visible window
@@ -225,7 +243,26 @@ export class EPGVirtualizer {
                         isCurrent: now >= program.scheduledStartTime && now < program.scheduledEndTime,
                         cellElement: null,
                     });
+
+                    if (!isFocusedCell) {
+                        perRowCounts.set(rowIndex, currentRowCount + 1);
+                    }
                 }
+            }
+        }
+
+        // Ensure we never exceed the DOM cap; preferentially keep focused cell if present.
+        while (newVisibleCells.size > maxDomElements) {
+            let removed = false;
+            for (const key of newVisibleCells.keys()) {
+                if (key !== focusedCellKey) {
+                    newVisibleCells.delete(key);
+                    removed = true;
+                    break;
+                }
+            }
+            if (!removed) {
+                break;
             }
         }
 

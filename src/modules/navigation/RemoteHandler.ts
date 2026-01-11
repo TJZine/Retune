@@ -147,6 +147,10 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
             return; // Unmapped key, ignore
         }
 
+        // CRITICAL: Prevent default browser/OS behavior for mapped keys
+        // This ensures the app handles "Guide", "Back", etc. exclusively.
+        event.preventDefault();
+
         const now = Date.now();
         const isRepeat = this._keyDownTimes.has(keyCode);
 

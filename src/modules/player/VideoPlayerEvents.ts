@@ -14,6 +14,8 @@ import type {
 } from './types';
 import type { RetryManager } from './RetryManager';
 
+const SYNTHETIC_MEDIA_ERROR_CODE_KEY = '__retuneSyntheticMediaErrorCode';
+
 /**
  * Callbacks for state updates.
  */
@@ -192,14 +194,27 @@ export class VideoPlayerEvents {
     }
 
     private _handleError(event: Event): void {
-        const videoElement = event.target as HTMLVideoElement;
-        const mediaError = videoElement.error;
-
-        if (!mediaError || !this._retryManager) {
+        const videoElement = event.target as HTMLVideoElement | null;
+        if (!videoElement || !this._retryManager) {
             return;
         }
 
-        const playbackError = this._retryManager.handleMediaError(mediaError.code);
+        const syntheticCode = (videoElement as unknown as Record<string, unknown>)[
+            SYNTHETIC_MEDIA_ERROR_CODE_KEY
+        ];
+        if (typeof syntheticCode === 'number') {
+            delete (videoElement as unknown as Record<string, unknown>)[SYNTHETIC_MEDIA_ERROR_CODE_KEY];
+        }
+
+        const mediaErrorCode = typeof syntheticCode === 'number'
+            ? syntheticCode
+            : videoElement.error?.code;
+
+        if (typeof mediaErrorCode !== 'number' || !isFinite(mediaErrorCode)) {
+            return;
+        }
+
+        const playbackError = this._retryManager.handleMediaError(mediaErrorCode);
 
         if (playbackError.recoverable) {
             // Update status to buffering to indicate retry is in progress

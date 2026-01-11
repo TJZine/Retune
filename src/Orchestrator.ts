@@ -16,25 +16,28 @@ import {
     AppErrorCode,
     type IAppLifecycle,
     type AppError,
-    type PersistentState,
     type LifecycleAppError,
     type AppPhase,
     type LifecycleEventMap,
 } from './modules/lifecycle';
+import { AppMode, STORAGE_KEYS } from './types';
 import {
     NavigationManager,
     type INavigationManager,
     type NavigationConfig,
+    type Screen,
     type KeyEvent,
 } from './modules/navigation';
 import {
     PlexAuth,
     type IPlexAuth,
     type PlexAuthConfig,
+    type PlexPinRequest,
 } from './modules/plex/auth';
 import {
     PlexServerDiscovery,
     type IPlexServerDiscovery,
+    type PlexServer,
 } from './modules/plex/discovery';
 import {
     PlexLibrary,
@@ -47,6 +50,7 @@ import {
     type PlexStreamResolverConfig,
     type StreamDecision,
 } from './modules/plex/stream';
+import { MIME_TYPES } from './modules/plex/stream/constants'; // Fix Direct Play MIME types
 import {
     ChannelManager,
     type IChannelManager,
@@ -59,6 +63,8 @@ import {
     type IChannelScheduler,
     type ScheduledProgram,
     type ScheduleConfig,
+    ShuffleGenerator,
+    ScheduleCalculator,
 } from './modules/scheduler/scheduler';
 import {
     VideoPlayer,
@@ -74,6 +80,7 @@ import {
     type EPGConfig,
 } from './modules/ui/epg';
 import type { IDisposable } from './utils/interfaces';
+import { safeLocalStorageGet, safeLocalStorageSet } from './utils/storage';
 
 // ============================================
 // Types
@@ -121,11 +128,19 @@ export interface IAppOrchestrator {
     shutdown(): Promise<void>;
     getModuleStatus(): Map<string, ModuleStatus>;
     isReady(): boolean;
+    getCurrentScreen(): Screen | null;
+    onScreenChange(handler: (from: string, to: string) => void): IDisposable;
     switchToChannel(channelId: string): Promise<void>;
     switchToChannelByNumber(number: number): Promise<void>;
     openEPG(): void;
     closeEPG(): void;
     toggleEPG(): void;
+    requestAuthPin(): Promise<PlexPinRequest>;
+    pollForPin(pinId: number): Promise<PlexPinRequest>;
+    cancelPin(pinId: number): Promise<void>;
+    discoverServers(forceRefresh?: boolean): Promise<PlexServer[]>;
+    selectServer(serverId: string): Promise<boolean>;
+    clearSelectedServer(): void;
     handleGlobalError(error: AppError, context: string): void;
     registerErrorHandler(moduleId: string, handler: (error: AppError) => boolean): void;
     getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[];
@@ -134,6 +149,8 @@ export interface IAppOrchestrator {
         event: K,
         handler: (payload: LifecycleEventMap[K]) => void
     ): IDisposable;
+    getNavigation(): INavigationManager | null;
+    toggleDemoMode(): void;
 }
 
 // Re-export AppErrorCode for consumers
@@ -164,14 +181,32 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _scheduler: IChannelScheduler | null = null;
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
+    private _epgScheduleLoadToken = 0;
 
     private _config: OrchestratorConfig | null = null;
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
     private _errorHandlers: Map<string, (error: AppError) => boolean> = new Map();
+    private _mode: AppMode = 'real';
     private _eventUnsubscribers: Array<() => void> = [];
     private _eventsWired: boolean = false;
     private _ready: boolean = false;
     private _isChannelSwitching: boolean = false;
+    private _startupInProgress: boolean = false;
+    private _authResumeDisposable: IDisposable | null = null;
+    private _serverResumeDisposable: IDisposable | null = null;
+
+    // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
+    private _playbackFailureWindowStartMs: number = 0;
+    private _playbackFailureCount: number = 0;
+    private _playbackFailureTripped: boolean = false;
+    private _playbackFailureWindowMs: number = 2000;
+    private _playbackFailureTripCount: number = 3;
+
+    // Playback fallback: when a Direct stream fails due to container/codec support, retry via HLS Direct Stream.
+    private _currentProgramForPlayback: ScheduledProgram | null = null;
+    private _currentStreamDescriptor: StreamDescriptor | null = null;
+    private _directFallbackAttemptedForItemKey: Set<string> = new Set();
+    private _streamRecoveryInProgress: boolean = false;
 
     constructor() {
         this._initializeModuleStatus();
@@ -185,11 +220,27 @@ export class AppOrchestrator implements IAppOrchestrator {
     async initialize(config: OrchestratorConfig): Promise<void> {
         this._config = config;
 
+        // Load mode
+        const storedMode = safeLocalStorageGet(STORAGE_KEYS.MODE) as AppMode | null;
+        if (storedMode === 'demo') {
+            this._mode = 'demo';
+            console.warn('[Orchestrator] Running in DEMO MODE');
+        } else {
+            this._mode = 'real';
+        }
+
         // Create module instances (not yet initialized)
         this._lifecycle = new AppLifecycle();
         this._navigation = new NavigationManager();
         this._plexAuth = new PlexAuth(config.plexConfig);
-        this._plexDiscovery = new PlexServerDiscovery(this._plexAuth);
+        this._plexDiscovery = new PlexServerDiscovery({
+            getAuthHeaders: (): Record<string, string> => {
+                if (this._plexAuth) {
+                    return this._plexAuth.getAuthHeaders();
+                }
+                return {};
+            },
+        });
 
         // PlexLibrary needs config with accessors
         const plexLibraryConfig: PlexLibraryConfig = {
@@ -230,31 +281,13 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return null;
             },
             getHttpsConnection: () => {
-                if (this._plexDiscovery) {
-                    const server = this._plexDiscovery.getSelectedServer();
-                    if (server && server.connections) {
-                        const httpsConn = server.connections.find(
-                            (c: { protocol: string }) => c.protocol === 'https'
-                        );
-                        if (httpsConn) {
-                            return { uri: httpsConn.uri };
-                        }
-                    }
-                }
+                const conn = this._plexDiscovery?.getHttpsConnection() ?? null;
+                if (conn) return { uri: conn.uri };
                 return null;
             },
             getRelayConnection: () => {
-                if (this._plexDiscovery) {
-                    const server = this._plexDiscovery.getSelectedServer();
-                    if (server && server.connections) {
-                        const relayConn = server.connections.find(
-                            (c: { relay: boolean }) => c.relay
-                        );
-                        if (relayConn) {
-                            return { uri: relayConn.uri };
-                        }
-                    }
-                }
+                const conn = this._plexDiscovery?.getRelayConnection() ?? null;
+                if (conn) return { uri: conn.uri };
                 return null;
             },
             getItem: async (ratingKey: string) => {
@@ -270,6 +303,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         // ChannelManager needs config
         const channelManagerConfig: ChannelManagerConfig = {
             plexLibrary: this._plexLibrary,
+            storageKey: this._mode === 'demo' ? STORAGE_KEYS.CHANNELS_DEMO : STORAGE_KEYS.CHANNELS_REAL,
         };
         this._channelManager = new ChannelManager(channelManagerConfig);
 
@@ -291,67 +325,8 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Follows 5-phase initialization order per spec.
      */
     async start(): Promise<void> {
-        if (!this._config) {
-            throw new Error('Orchestrator must be initialized before starting');
-        }
-
-        try {
-            // Phase 1: Core Infrastructure (Parallel)
-            await this._initPhase1();
-
-            // Check for saved state
-            const savedState = await this._restoreState();
-
-            // Phase 2: Authentication
-            const authValid = await this._initPhase2(savedState);
-            if (!authValid) {
-                return; // Navigation handled in _initPhase2
-            }
-
-            // Phase 3: Plex Services
-            const plexConnected = await this._initPhase3(savedState);
-            if (!plexConnected) {
-                return; // Navigation handled in _initPhase3
-            }
-
-            // Phase 4: Channel/Scheduler/Player
-            await this._initPhase4();
-
-            // Phase 5: EPG
-            await this._initPhase5();
-
-            // Setup event wiring
-            this._setupEventWiring();
-
-            // Mark as ready
-            this._ready = true;
-            if (this._lifecycle) {
-                this._lifecycle.setPhase('ready');
-            }
-
-            // Navigate to player
-            if (this._navigation) {
-                this._navigation.goTo('player');
-            }
-
-            // Start playback on last channel
-            if (this._channelManager) {
-                const currentChannel = this._channelManager.getCurrentChannel();
-                if (currentChannel) {
-                    await this.switchToChannel(currentChannel.id);
-                }
-            }
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.handleGlobalError(
-                {
-                    code: AppErrorCode.INITIALIZATION_FAILED,
-                    message,
-                    recoverable: true,
-                },
-                'start'
-            );
-        }
+        this._resetPlaybackFailureGuard();
+        await this._runStartup(1);
     }
 
     /**
@@ -365,6 +340,9 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
+        this._clearAuthResume();
+        this._clearServerResume();
+
         // Unregister all event subscriptions (resilient to throwing handlers)
         for (const unsubscribe of this._eventUnsubscribers) {
             try {
@@ -425,6 +403,124 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     /**
+     * Get the currently active navigation screen.
+     */
+    getCurrentScreen(): Screen | null {
+        if (!this._navigation) {
+            return null;
+        }
+        return this._navigation.getCurrentScreen();
+    }
+
+    /**
+     * Get the navigation manager instance.
+     */
+    getNavigation(): INavigationManager | null {
+        return this._navigation;
+    }
+
+    /**
+     * Subscribe to navigation screen change events.
+     */
+    onScreenChange(handler: (from: string, to: string) => void): IDisposable {
+        if (!this._navigation) {
+            return { dispose: (): void => undefined };
+        }
+        const wrapped = (payload: { from: string; to: string }): void => {
+            handler(payload.from, payload.to);
+        };
+        this._navigation.on('screenChange', wrapped);
+        return {
+            dispose: (): void => {
+                if (this._navigation) {
+                    this._navigation.off('screenChange', wrapped);
+                }
+            },
+        };
+    }
+
+    /**
+     * Request a Plex PIN for authentication.
+     */
+    async requestAuthPin(): Promise<PlexPinRequest> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex auth is disabled');
+        }
+        if (!this._plexAuth) {
+            throw new Error('PlexAuth not initialized');
+        }
+        return this._plexAuth.requestPin();
+    }
+
+    /**
+     * Poll for PIN claim status.
+     */
+    async pollForPin(pinId: number): Promise<PlexPinRequest> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex auth is disabled');
+        }
+        if (!this._plexAuth) {
+            throw new Error('PlexAuth not initialized');
+        }
+        return this._plexAuth.pollForPin(pinId);
+    }
+
+    /**
+     * Cancel an active PIN request.
+     */
+    async cancelPin(pinId: number): Promise<void> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex auth is disabled');
+        }
+        if (!this._plexAuth) {
+            throw new Error('PlexAuth not initialized');
+        }
+        await this._plexAuth.cancelPin(pinId);
+    }
+
+    /**
+     * Discover Plex servers (optionally forcing refresh).
+     */
+    async discoverServers(forceRefresh: boolean = false): Promise<PlexServer[]> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex discovery is disabled');
+        }
+        if (!this._plexDiscovery) {
+            throw new Error('PlexServerDiscovery not initialized');
+        }
+        if (forceRefresh) {
+            return this._plexDiscovery.refreshServers();
+        }
+        return this._plexDiscovery.discoverServers();
+    }
+
+    /**
+     * Select a Plex server to connect to.
+     */
+    async selectServer(serverId: string): Promise<boolean> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex discovery is disabled');
+        }
+        if (!this._plexDiscovery) {
+            throw new Error('PlexServerDiscovery not initialized');
+        }
+        return this._plexDiscovery.selectServer(serverId);
+    }
+
+    /**
+     * Clear saved server selection.
+     */
+    clearSelectedServer(): void {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: Plex discovery is disabled');
+        }
+        if (!this._plexDiscovery) {
+            throw new Error('PlexServerDiscovery not initialized');
+        }
+        this._plexDiscovery.clearSelection();
+    }
+
+    /**
      * Switch to a channel by ID.
      * Stops current playback, resolves content, configures scheduler, and syncs.
      * @param channelId - ID of channel to switch to
@@ -434,6 +530,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             console.error('Modules not initialized');
             return;
         }
+
+        // New channel = new playback attempt; unblock any prior fast-fail guard.
+        this._resetPlaybackFailureGuard();
 
         // Prevent concurrent channel switches from causing state corruption
         if (this._isChannelSwitching) {
@@ -528,10 +627,37 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Open the EPG overlay.
      */
     openEPG(): void {
-        if (this._epg) {
-            this._epg.show();
-            this._epg.focusNow();
+        if (!this._epg) {
+            return;
         }
+
+        // Prime data when EPG is already initialized.
+        if (this._moduleStatus.get('epg-ui')?.status === 'ready') {
+            this._primeEpgChannels();
+            void this._refreshEpgSchedules();
+        }
+
+        const show = (): void => {
+            this._epg?.show();
+            this._epg?.focusNow();
+        };
+
+        // Allow EPG to be opened even before full app initialization completes
+        // (e.g., during auth/server-select flows in the simulator).
+        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
+            // Best-effort attempt immediately (helps in tests/mocks and if already initialized).
+            show();
+            void this._initPhase5()
+                .then(() => {
+                    this._primeEpgChannels();
+                    void this._refreshEpgSchedules();
+                    show();
+                })
+                .catch((error) => console.error('[Orchestrator] Failed to init EPG:', error));
+            return;
+        }
+
+        show();
     }
 
     /**
@@ -544,6 +670,44 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     /**
+     * Open the server selection screen.
+     */
+    openServerSelect(): void {
+        if (!this._navigation) {
+            return;
+        }
+        if (this._mode === 'demo') {
+            // Demo Mode must not navigate into Plex flows.
+            this._navigation.goTo('player');
+            return;
+        }
+        this._navigation.goTo('server-select');
+    }
+
+    /**
+     * Toggle the server selection screen.
+     */
+    toggleServerSelect(): void {
+        if (!this._navigation) {
+            return;
+        }
+
+        const current = this._navigation.getCurrentScreen();
+        if (this._mode === 'demo' && current !== 'server-select') {
+            // In Demo Mode, allow closing server-select if already open, but never open it.
+            return;
+        }
+        if (current === 'server-select') {
+            // Attempt to go back; if stack is empty, force player
+            if (!this._navigation.goBack()) {
+                this._navigation.goTo('player');
+            }
+        } else {
+            this.openServerSelect();
+        }
+    }
+
+    /**
      * Toggle EPG visibility.
      */
     toggleEPG(): void {
@@ -552,6 +716,88 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this.closeEPG();
             } else {
                 this.openEPG();
+            }
+        }
+    }
+
+    private _primeEpgChannels(): void {
+        if (!this._epg || !this._channelManager) {
+            return;
+        }
+        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
+            return;
+        }
+        this._epg.loadChannels(this._channelManager.getAllChannels());
+    }
+
+    private _getEpgScheduleRangeMs(): { startTime: number; endTime: number } | null {
+        if (!this._config) {
+            return null;
+        }
+        const totalHours = this._config.epgConfig.totalHours;
+
+        const anchor = new Date();
+        anchor.setHours(0, 0, 0, 0);
+        const startTime = anchor.getTime();
+        const endTime = startTime + totalHours * 60 * 60 * 1000;
+
+        return { startTime, endTime };
+    }
+
+    private async _refreshEpgSchedules(): Promise<void> {
+        if (!this._epg || !this._channelManager) {
+            return;
+        }
+        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
+            return;
+        }
+
+        const range = this._getEpgScheduleRangeMs();
+        if (!range) {
+            return;
+        }
+
+        const { startTime, endTime } = range;
+        const channels = this._channelManager.getAllChannels();
+        if (channels.length === 0) {
+            return;
+        }
+
+        const loadToken = ++this._epgScheduleLoadToken;
+        const shuffler = new ShuffleGenerator();
+
+        // Safety limit to avoid long blocking loops on TV hardware.
+        const MAX_CHANNELS_TO_PRELOAD = 50;
+        const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
+
+        for (const channel of channelsToLoad) {
+            if (loadToken !== this._epgScheduleLoadToken) {
+                return;
+            }
+            try {
+                const resolved = await this._channelManager.resolveChannelContent(channel.id);
+
+                // Keep EPG schedule order aligned with playback order by treating orderedItems as sequential content.
+                const scheduleConfig: ScheduleConfig = {
+                    channelId: channel.id,
+                    anchorTime: channel.startTimeAnchor,
+                    content: resolved.orderedItems,
+                    playbackMode: 'sequential',
+                    shuffleSeed: 0,
+                    loopSchedule: true,
+                };
+
+                const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
+                const programs = ScheduleCalculator.generateScheduleWindow(
+                    startTime,
+                    endTime,
+                    index,
+                    scheduleConfig.anchorTime
+                );
+
+                this._epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
+            } catch (error) {
+                console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
             }
         }
     }
@@ -906,26 +1152,40 @@ export class AppOrchestrator implements IAppOrchestrator {
     /**
      * Phase 2: Validate authentication
      */
-    private async _initPhase2(
-        savedState: PersistentState | null
-    ): Promise<boolean> {
+    private async _initPhase2(): Promise<boolean> {
         const startTime = Date.now();
         this._updateModuleStatus('plex-auth', 'initializing');
+
+        if (this._mode === 'demo') {
+            console.warn('[Orchestrator] Phase 2: Skipping Auth (Demo Mode)');
+            this._updateModuleStatus('plex-auth', 'ready', undefined, 0);
+            if (this._lifecycle) {
+                this._lifecycle.setPhase('loading_data');
+            }
+            return true;
+        }
 
         if (!this._plexAuth || !this._navigation) {
             this._updateModuleStatus('plex-auth', 'error');
             return false;
         }
 
-        // Check for saved auth
-        if (savedState && savedState.plexAuth) {
+        // Check for stored auth credentials (SSOT: PlexAuth storage)
+        const storedCredentials = await this._plexAuth.getStoredCredentials();
+        if (storedCredentials) {
             try {
                 const isValid = await this._plexAuth.validateToken(
-                    savedState.plexAuth.token.token
+                    storedCredentials.token.token
                 );
 
                 if (isValid) {
-                    await this._plexAuth.storeCredentials(savedState.plexAuth);
+                    const currentToken =
+                        this._plexAuth.getCurrentUser() ?? storedCredentials.token;
+                    await this._plexAuth.storeCredentials({
+                        token: currentToken,
+                        selectedServerId: null,
+                        selectedServerUri: null,
+                    });
                     this._updateModuleStatus(
                         'plex-auth',
                         'ready',
@@ -945,6 +1205,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // No valid auth - navigate to auth screen
         this._updateModuleStatus('plex-auth', 'pending');
+        this._registerAuthResume();
         this._navigation.goTo('auth');
         return false;
     }
@@ -952,9 +1213,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     /**
      * Phase 3: Connect to Plex server and initialize Plex services
      */
-    private async _initPhase3(
-        savedState: PersistentState | null
-    ): Promise<boolean> {
+    private async _initPhase3(): Promise<boolean> {
         const startTime = Date.now();
 
         if (
@@ -966,10 +1225,18 @@ export class AppOrchestrator implements IAppOrchestrator {
             return false;
         }
 
-        // Discover servers
+        if (this._mode === 'demo') {
+            console.warn('[Orchestrator] Phase 3: Skipping Discovery (Demo Mode)');
+            this._updateModuleStatus('plex-server-discovery', 'ready', undefined, 0);
+            this._updateModuleStatus('plex-library', 'ready', undefined, 0);
+            this._updateModuleStatus('plex-stream-resolver', 'ready', undefined, 0);
+            return true;
+        }
+
+        // Discover servers and restore selection (SSOT: discovery storage)
         this._updateModuleStatus('plex-server-discovery', 'initializing');
         try {
-            await this._plexDiscovery.discoverServers();
+            await this._plexDiscovery.initialize();
             this._updateModuleStatus(
                 'plex-server-discovery',
                 'ready',
@@ -979,27 +1246,14 @@ export class AppOrchestrator implements IAppOrchestrator {
         } catch (error) {
             console.error('Server discovery failed:', error);
             this._updateModuleStatus('plex-server-discovery', 'error');
+            if (this._navigation) {
+                this._navigation.goTo('server-select');
+            }
             return false;
         }
 
-        // Connect to saved server
-        if (savedState?.plexAuth?.selectedServerId) {
-            try {
-                const connected = await this._plexDiscovery.selectServer(
-                    savedState.plexAuth.selectedServerId
-                );
-
-                if (!connected) {
-                    this._navigation.goTo('server-select');
-                    return false;
-                }
-            } catch (error) {
-                console.error('Failed to connect to saved server:', error);
-                this._updateModuleStatus('plex-server-discovery', 'error');
-                this._navigation.goTo('server-select');
-                return false;
-            }
-        } else {
+        if (!this._plexDiscovery.isConnected()) {
+            this._registerServerResume();
             this._navigation.goTo('server-select');
             return false;
         }
@@ -1031,6 +1285,17 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._channelManager) {
             this._updateModuleStatus('channel-manager', 'initializing');
             await this._channelManager.loadChannels();
+
+            // Demo Mode safety: demo storage must not allow Plex-backed sources.
+            if (this._mode === 'demo') {
+                const channels = this._channelManager.getAllChannels();
+                const allManual = channels.every((c) => c.contentSource?.type === 'manual');
+                if (!allManual) {
+                    console.warn('[Orchestrator] Demo Mode: pruning non-manual channels via re-seed');
+                    await this._channelManager.seedDemoChannels();
+                }
+            }
+
             this._updateModuleStatus(
                 'channel-manager',
                 'ready',
@@ -1050,7 +1315,10 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Video Player
         if (this._videoPlayer && this._config) {
             this._updateModuleStatus('video-player', 'initializing');
-            await this._videoPlayer.initialize(this._config.playerConfig);
+            await this._videoPlayer.initialize({
+                ...this._config.playerConfig,
+                demoMode: this._mode === 'demo',
+            });
 
             // Request Media Session integration (once per app lifetime)
             // Enables Now Playing metadata and transport controls on supported platforms
@@ -1065,6 +1333,122 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
+    /**
+     * Seed default channels if none exist.
+     * Uses Plex libraries to create initial channels.
+     */
+    private async _seedDefaultChannels(): Promise<void> {
+        if (!this._channelManager) {
+            return;
+        }
+
+        // Demo Mode seeding
+        if (this._mode === 'demo') {
+            return this._channelManager.seedDemoChannels();
+        }
+
+        if (!this._plexLibrary) {
+            return;
+        }
+
+        try {
+            const libraries = await this._plexLibrary.getLibraries();
+            console.warn('[Orchestrator] Seeding: Found libraries:', JSON.stringify(libraries.map(l => l.title)));
+
+            // Exclusion and Priority Configuration
+            const EXCLUDED_TERMS = ['Anime', 'Private', 'Demo', 'Test', 'Pr0n', 'Adult'];
+            const PREFERRED_LIBRARIES = ['Movies Home', 'Movies', 'TV Shows', 'TV'];
+
+            // Filter for movie or movie-like libraries
+            const validLibraries = libraries.filter(
+                (lib) => {
+                    const isTypeValid = lib.type === 'movie' || lib.type === 'show';
+                    const isNotExcluded = !EXCLUDED_TERMS.some(term => lib.title.includes(term));
+                    return isTypeValid && isNotExcluded;
+                }
+            );
+
+            if (validLibraries.length === 0) {
+                console.warn('[Orchestrator] No suitable libraries found for seeding.');
+                return;
+            }
+
+            // Sort libraries by preference
+            validLibraries.sort((a, b) => {
+                const indexA = PREFERRED_LIBRARIES.indexOf(a.title);
+                const indexB = PREFERRED_LIBRARIES.indexOf(b.title);
+                // If both are in preference list, sort by index
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                // If only A is in preference list, A comes first
+                if (indexA !== -1) return -1;
+                // If only B is in preference list, B comes first
+                if (indexB !== -1) return 1;
+                // Otherwise sort standard alphabetically
+                return a.title.localeCompare(b.title);
+            });
+
+            console.warn('[Orchestrator] Seeding: Prioritized libraries:', validLibraries.map(l => l.title));
+
+            let channelsCreated = 0;
+            const MAX_DEFAULT_CHANNELS = 5;
+
+            // Iterate through valid libraries and try to seed from collections first
+            for (const library of validLibraries) {
+                if (channelsCreated >= MAX_DEFAULT_CHANNELS) break;
+
+                try {
+                    // Try to fetch collections
+                    const collections = await this._plexLibrary.getCollections(library.id);
+
+                    if (collections.length > 0) {
+                        // Use up to 3 collections from this library
+                        const collectionsToUse = collections.slice(0, 3);
+
+                        for (const collection of collectionsToUse) {
+                            if (channelsCreated >= MAX_DEFAULT_CHANNELS) break;
+
+                            console.warn(`[Orchestrator] Seeding channel from collection: ${collection.title} (${library.title})`);
+                            await this._channelManager.createChannel({
+                                name: collection.title,
+                                contentSource: {
+                                    type: 'collection',
+                                    collectionKey: collection.ratingKey,
+                                    collectionName: collection.title
+                                },
+                                playbackMode: 'shuffle',
+                            });
+                            channelsCreated++;
+                        }
+                    } else {
+                        // Fallback: Create channel from the library itself if it has no collections
+                        console.warn(`[Orchestrator] Seeding channel from library: ${library.title}`);
+                        await this._channelManager.createChannel({
+                            name: library.title,
+                            contentSource: {
+                                type: 'library',
+                                libraryId: library.id,
+                                libraryType: library.type === 'movie' ? 'movie' : 'show',
+                                includeWatched: true,
+                            },
+                            playbackMode: 'shuffle',
+                        });
+                        channelsCreated++;
+                    }
+                } catch (err) {
+                    console.warn(`[Orchestrator] Failed to seed from library ${library.title}`, err);
+                }
+            }
+
+            if (channelsCreated === 0) {
+                console.warn('[Orchestrator] Failed to create any default channels.');
+            } else {
+                console.warn(`[Orchestrator] Successfully seeded ${channelsCreated} default channels.`);
+            }
+
+        } catch (error) {
+            console.error('[Orchestrator] Failed to seed default channels:', error);
+        }
+    }
     /**
      * Phase 5: Initialize EPG
      */
@@ -1083,19 +1467,163 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-    /**
-     * Restore persisted state from lifecycle module.
-     */
-    private async _restoreState(): Promise<PersistentState | null> {
-        if (!this._lifecycle) {
-            return null;
+    private async _runStartup(startPhase: 1 | 2 | 3 | 4 | 5): Promise<void> {
+        if (!this._config) {
+            throw new Error('Orchestrator must be initialized before starting');
+        }
+
+        if (this._startupInProgress) {
+            console.warn('[Orchestrator] Startup already in progress');
+            return;
+        }
+
+        this._startupInProgress = true;
+        this._ready = false;
+
+        // Force phase to initializing to ensure 'ready' event is emitted at the end
+        // even if we were already ready (e.g. changing server via 'I' key).
+        if (this._lifecycle) {
+            this._lifecycle.setPhase('initializing');
         }
 
         try {
-            return await this._lifecycle.restoreState();
-        } catch (error) {
-            console.error('Failed to restore state:', error);
-            return null;
+            if (startPhase <= 1) {
+                await this._initPhase1();
+            }
+
+            if (startPhase <= 2) {
+                const authValid = await this._initPhase2();
+                if (!authValid) {
+                    console.warn('[Orchestrator] Phase 2 failed (auth not valid)');
+                    return;
+                }
+            }
+
+            if (startPhase <= 3) {
+                console.warn('[Orchestrator] Starting Phase 3 (Plex Connection)');
+                const plexConnected = await this._initPhase3();
+                if (!plexConnected) {
+                    console.warn('[Orchestrator] Phase 3 failed (not connected)');
+                    return;
+                }
+            }
+
+            if (startPhase <= 4) {
+                console.warn('[Orchestrator] Starting Phase 4 (Channels & Player)');
+                await this._initPhase4();
+            }
+
+            if (startPhase <= 5) {
+                console.warn('[Orchestrator] Starting Phase 5 (EPG)');
+                await this._initPhase5();
+            }
+
+            console.warn('[Orchestrator] Phases complete. Setting up wiring.');
+            this._setupEventWiring();
+            this._ready = true;
+            if (this._lifecycle) {
+                this._lifecycle.setPhase('ready');
+            }
+
+            if (this._navigation) {
+                console.warn('[Orchestrator] Navigating to player');
+                this._navigation.goTo('player');
+                if (this._channelManager) {
+                    console.warn('[Orchestrator] Switching to current channel');
+
+                    // Auto-seed if empty
+                    if (this._channelManager.getAllChannels().length === 0) {
+                        console.warn('[Orchestrator] No channels found. Seeding default channels...');
+                        await this._seedDefaultChannels();
+                    }
+
+                    let channelToPlay = this._channelManager.getCurrentChannel();
+
+                    // Fallback: If no current channel but we have channels, pick the first one
+                    if (!channelToPlay) {
+                        const allChannels = this._channelManager.getAllChannels();
+                        const firstChannel = allChannels[0];
+                        if (firstChannel) {
+                            channelToPlay = firstChannel;
+                            console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
+                        }
+                    }
+
+                    if (channelToPlay) {
+                        await this.switchToChannel(channelToPlay.id);
+                    } else {
+                        console.warn('[Orchestrator] No current channel found after seeding. Redirecting to Server Select.');
+                        this.openServerSelect();
+                    }
+                }
+            }
+
+            console.warn('[Orchestrator] Startup sequence finished successfully');
+
+            this._clearAuthResume();
+            this._clearServerResume();
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.handleGlobalError(
+                {
+                    code: AppErrorCode.INITIALIZATION_FAILED,
+                    message,
+                    recoverable: true,
+                },
+                'start'
+            );
+        } finally {
+            this._startupInProgress = false;
+        }
+    }
+
+    private _registerAuthResume(): void {
+        if (!this._plexAuth) {
+            return;
+        }
+
+        this._clearAuthResume();
+        const disposable = this._plexAuth.on('authChange', (isAuthenticated) => {
+            if (!isAuthenticated) {
+                return;
+            }
+            this._clearAuthResume();
+            this._runStartup(2).catch((error) => {
+                console.error('[Orchestrator] Auth resume failed:', error);
+            });
+        });
+        this._authResumeDisposable = disposable;
+    }
+
+    private _registerServerResume(): void {
+        if (!this._plexDiscovery) {
+            return;
+        }
+
+        this._clearServerResume();
+        const disposable = this._plexDiscovery.on('connectionChange', (uri) => {
+            if (!uri) {
+                return;
+            }
+            this._clearServerResume();
+            this._runStartup(3).catch((error) => {
+                console.error('[Orchestrator] Server resume failed:', error);
+            });
+        });
+        this._serverResumeDisposable = disposable;
+    }
+
+    private _clearAuthResume(): void {
+        if (this._authResumeDisposable) {
+            this._authResumeDisposable.dispose();
+            this._authResumeDisposable = null;
+        }
+    }
+
+    private _clearServerResume(): void {
+        if (this._serverResumeDisposable) {
+            this._serverResumeDisposable.dispose();
+            this._serverResumeDisposable = null;
         }
     }
 
@@ -1176,10 +1704,13 @@ export class AppOrchestrator implements IAppOrchestrator {
                     'video-player'
                 );
             } else {
-                // Unrecoverable -> skip to next
-                if (this._scheduler) {
-                    this._scheduler.skipToNext();
+                // Special case: if Direct playback fails due to container/codec support, retry via HLS Direct Stream.
+                // This is critical for MKV-heavy libraries on older webOS versions.
+                if (error.code === 'PLAYBACK_FORMAT_UNSUPPORTED') {
+                    void this._attemptTranscodeFallbackForCurrentProgram('PLAYBACK_FORMAT_UNSUPPORTED');
+                    return;
                 }
+                this._handlePlaybackFailure('video-player', error);
             }
         };
         this._videoPlayer.on('error', errorHandler);
@@ -1188,6 +1719,70 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._videoPlayer.off('error', errorHandler);
             }
         });
+    }
+
+    private _resetPlaybackFailureGuard(): void {
+        this._playbackFailureWindowStartMs = 0;
+        this._playbackFailureCount = 0;
+        this._playbackFailureTripped = false;
+        if (this._scheduler) {
+            this._scheduler.resumeSyncTimer();
+        }
+    }
+
+    private _handlePlaybackFailure(context: string, error: unknown): void {
+        if (this._playbackFailureTripped) {
+            return;
+        }
+
+        const now = Date.now();
+
+        // Reset window if stale
+        if (
+            this._playbackFailureWindowStartMs === 0 ||
+            now - this._playbackFailureWindowStartMs > this._playbackFailureWindowMs
+        ) {
+            this._playbackFailureWindowStartMs = now;
+            this._playbackFailureCount = 0;
+        }
+
+        this._playbackFailureCount++;
+
+        // Trip guard: stop auto-skipping and surface the error to the user
+        if (this._playbackFailureCount >= this._playbackFailureTripCount) {
+            this._playbackFailureTripped = true;
+            if (this._scheduler) {
+                this._scheduler.pauseSyncTimer();
+            }
+            const message = ((): string => {
+                if (error instanceof Error) {
+                    return error.message;
+                }
+                if (
+                    error &&
+                    typeof error === 'object' &&
+                    'message' in error &&
+                    typeof (error as { message?: unknown }).message === 'string'
+                ) {
+                    return (error as { message: string }).message;
+                }
+                return String(error);
+            })();
+            this.handleGlobalError(
+                {
+                    code: AppErrorCode.PLAYBACK_FAILED,
+                    message: `Playback failed repeatedly (${context}): ${message}`,
+                    recoverable: true,
+                },
+                'playback'
+            );
+            return;
+        }
+
+        // Single/rare failure: skip as before
+        if (this._scheduler) {
+            this._scheduler.skipToNext();
+        }
     }
 
     /**
@@ -1204,6 +1799,32 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._eventUnsubscribers.push(() => {
             if (this._navigation) {
                 this._navigation.off('keyPress', keyHandler);
+            }
+        });
+
+        // Channel number entry handler
+        const channelNumberHandler = (payload: { channelNumber: number }): void => {
+            if (!Number.isFinite(payload.channelNumber)) {
+                return;
+            }
+            this.switchToChannelByNumber(payload.channelNumber).catch(console.error);
+        };
+        this._navigation.on('channelNumberEntered', channelNumberHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('channelNumberEntered', channelNumberHandler);
+            }
+        });
+
+        // Guide/EPG Toggle Handler
+        const guideHandler = (): void => {
+            // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
+            this.toggleEPG();
+        };
+        this._navigation.on('guide', guideHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('guide', guideHandler);
             }
         });
 
@@ -1308,19 +1929,114 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Handle program start event from scheduler.
      */
     private async _handleProgramStart(program: ScheduledProgram): Promise<void> {
-        if (!this._videoPlayer || !this._plexStreamResolver) {
+        if (!this._videoPlayer) {
             return;
         }
 
+        this._currentProgramForPlayback = program;
+
         try {
-            const stream = await this._resolveStreamForProgram(program);
+            const stream =
+                this._mode === 'demo'
+                    ? this._buildDemoStreamForProgram(program)
+                    : await this._resolveStreamForProgram(program);
+            this._currentStreamDescriptor = stream;
             await this._videoPlayer.loadStream(stream);
             await this._videoPlayer.play();
+            this._resetPlaybackFailureGuard();
         } catch (error) {
             console.error('Failed to load stream:', error);
-            if (this._scheduler) {
-                this._scheduler.skipToNext();
+            // Demo Mode must not auto-skip on failures.
+            if (this._mode === 'demo') {
+                this.handleGlobalError(
+                    {
+                        code: AppErrorCode.PLAYBACK_FAILED,
+                        message: `Demo Mode playback simulation failed: ${error instanceof Error ? error.message : String(error)}`,
+                        recoverable: true,
+                    },
+                    'demo-playback'
+                );
+                return;
             }
+            this._handlePlaybackFailure('programStart', error);
+        }
+    }
+
+    private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
+        if (this._mode === 'demo') {
+            return false;
+        }
+        if (this._streamRecoveryInProgress) {
+            return false;
+        }
+        const program = this._currentProgramForPlayback;
+        if (!program || !this._videoPlayer || !this._plexStreamResolver) {
+            return false;
+        }
+        const currentProtocol = this._currentStreamDescriptor?.protocol ?? null;
+        if (currentProtocol !== 'direct') {
+            return false;
+        }
+        const itemKey = program.item.ratingKey;
+        if (this._directFallbackAttemptedForItemKey.has(itemKey)) {
+            return false;
+        }
+
+        this._directFallbackAttemptedForItemKey.add(itemKey);
+        this._streamRecoveryInProgress = true;
+
+        try {
+            console.warn('[Orchestrator] Direct playback failed, retrying via HLS Direct Stream:', {
+                reason,
+                itemKey,
+            });
+
+            const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
+            const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
+                itemKey: itemKey,
+                startOffsetMs: clampedOffset,
+                directPlay: false,
+            });
+
+            const metadata: StreamDescriptor['mediaMetadata'] = {
+                title: program.item.title,
+                durationMs: program.item.durationMs,
+            };
+            if (program.item.type === 'episode' && program.item.fullTitle) {
+                metadata.subtitle = program.item.fullTitle;
+            }
+            if (program.item.thumb) {
+                const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
+                if (thumbUrl) {
+                    metadata.thumb = thumbUrl;
+                }
+            }
+            if (program.item.year !== undefined) {
+                metadata.year = program.item.year;
+            }
+
+            const descriptor: StreamDescriptor = {
+                url: decision.playbackUrl,
+                protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
+                mimeType: this._getMimeType(decision),
+                startPositionMs: clampedOffset,
+                mediaMetadata: metadata,
+                subtitleTracks: [],
+                audioTracks: [],
+                durationMs: program.item.durationMs,
+                isLive: false,
+            };
+
+            this._currentStreamDescriptor = descriptor;
+            await this._videoPlayer.loadStream(descriptor);
+            await this._videoPlayer.play();
+            this._resetPlaybackFailureGuard();
+            return true;
+        } catch (error) {
+            console.error('[Orchestrator] Transcode fallback failed:', error);
+            return false;
+        } finally {
+            this._streamRecoveryInProgress = false;
         }
     }
 
@@ -1330,6 +2046,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private async _resolveStreamForProgram(
         program: ScheduledProgram
     ): Promise<StreamDescriptor> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: stream resolution is disabled');
+        }
         if (!this._plexStreamResolver) {
             throw new Error('Stream resolver not initialized');
         }
@@ -1352,7 +2071,10 @@ export class AppOrchestrator implements IAppOrchestrator {
             metadata.subtitle = program.item.fullTitle;
         }
         if (program.item.thumb) {
-            metadata.thumb = program.item.thumb;
+            const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
+            if (thumbUrl) {
+                metadata.thumb = thumbUrl;
+            }
         }
         if (program.item.year !== undefined) {
             metadata.year = program.item.year;
@@ -1371,14 +2093,67 @@ export class AppOrchestrator implements IAppOrchestrator {
         };
     }
 
+    private _buildDemoStreamForProgram(program: ScheduledProgram): StreamDescriptor {
+        // Demo Mode: no network / no real media. VideoPlayer simulates playback when demoMode=true.
+        const clampedOffset = Math.max(
+            0,
+            Math.min(program.elapsedMs, program.item.durationMs)
+        );
+        return {
+            url: 'about:blank',
+            protocol: 'direct',
+            mimeType: 'video/mp4',
+            startPositionMs: clampedOffset,
+            mediaMetadata: {
+                title: program.item.title,
+                durationMs: program.item.durationMs,
+            },
+            subtitleTracks: [],
+            audioTracks: [],
+            durationMs: program.item.durationMs,
+            isLive: false,
+        };
+    }
+
+    private _buildPlexResourceUrl(pathOrUrl: string): string | null {
+        try {
+            // If already absolute http(s), return as-is.
+            if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+                return pathOrUrl;
+            }
+
+            const baseUri = this._plexDiscovery?.getServerUri() ?? null;
+            if (!baseUri) {
+                return null;
+            }
+
+            const url = new URL(pathOrUrl, baseUri);
+            const headers = this._plexAuth?.getAuthHeaders() ?? {};
+            const token = headers['X-Plex-Token'];
+            if (typeof token === 'string' && token.length > 0) {
+                url.searchParams.set('X-Plex-Token', token);
+            }
+            return url.toString();
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Get MIME type from stream decision.
+     */
     /**
      * Get MIME type from stream decision.
      */
     private _getMimeType(decision: StreamDecision): string {
         if (decision.protocol === 'hls') {
-            return 'application/x-mpegURL';
+            return MIME_TYPES.hls || 'application/x-mpegURL';
         }
-        // Default to MP4 for direct play
+        if (decision.container) {
+            const mime = MIME_TYPES[decision.container];
+            if (mime) return mime;
+        }
+        // Fallback
         return 'video/mp4';
     }
 
@@ -1393,8 +2168,19 @@ export class AppOrchestrator implements IAppOrchestrator {
             case 'channelDown':
                 this._switchToPreviousChannel();
                 break;
-            case 'guide':
-                this.toggleEPG();
+            case 'info':
+            case 'blue':
+                if (this._mode === 'demo') {
+                    console.warn('[Orchestrator] Demo Mode: Plex screens disabled');
+                    break;
+                }
+                if (this._navigation) {
+                    if (this._plexAuth && !this._plexAuth.isAuthenticated()) {
+                        this._navigation.goTo('auth');
+                    } else {
+                        this._navigation.goTo('server-select');
+                    }
+                }
                 break;
             case 'play':
                 if (this._videoPlayer) {
@@ -1437,5 +2223,14 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (prevChannel) {
             this.switchToChannel(prevChannel.id).catch(console.error);
         }
+    }
+
+    /**
+     * Toggle Demo Mode and reload.
+     */
+    toggleDemoMode(): void {
+        const newMode: AppMode = this._mode === 'real' ? 'demo' : 'real';
+        safeLocalStorageSet(STORAGE_KEYS.MODE, newMode);
+        window.location.reload();
     }
 }

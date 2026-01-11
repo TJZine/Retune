@@ -69,6 +69,15 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * @throws PlexApiError on connection failure
      */
     public discoverServers(): Promise<PlexServer[]> {
+        // Return cached servers if still fresh (avoid unnecessary plex.tv calls)
+        if (
+            this._state.lastRefreshAt !== null &&
+            this._state.servers.length > 0 &&
+            Date.now() - this._state.lastRefreshAt < PLEX_DISCOVERY_CONSTANTS.SERVER_CACHE_DURATION_MS
+        ) {
+            return Promise.resolve(this._state.servers);
+        }
+
         // Return pending promise if discovery already in progress
         if (this._discoveryPromise) {
             return this._discoveryPromise;
@@ -88,23 +97,96 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      */
     private async _doDiscoverServers(): Promise<PlexServer[]> {
         this._state.isDiscovering = true;
+        let lastUrl = '';
 
         try {
-            const url = PLEX_DISCOVERY_CONSTANTS.PLEX_TV_BASE_URL +
+            const baseUrl = PLEX_DISCOVERY_CONSTANTS.PLEX_TV_BASE_URL +
                 PLEX_DISCOVERY_CONSTANTS.RESOURCES_ENDPOINT +
                 '?' + PLEX_DISCOVERY_CONSTANTS.RESOURCES_PARAMS;
 
             const headers = this._getAuthHeaders();
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: headers,
-            });
+            const token = headers['X-Plex-Token'];
+            const urlWithToken = token
+                ? baseUrl + '&X-Plex-Token=' + encodeURIComponent(token)
+                : baseUrl;
+            const clientsBaseUrl = 'https://clients.plex.tv/api/v2/resources' +
+                '?' + PLEX_DISCOVERY_CONSTANTS.RESOURCES_PARAMS +
+                (token ? '&X-Plex-Token=' + encodeURIComponent(token) : '');
 
+            const variants: Array<{ url: string; headers?: Record<string, string> }> = [
+                { url: baseUrl, headers: headers },
+            ];
+            if (token) {
+                variants.push({ url: urlWithToken });
+                variants.push({ url: clientsBaseUrl });
+            }
+
+            const maxAttempts = 2;
+            let response: Response | null = null;
+            let lastError: unknown = null;
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                let retryScheduled = false;
+                for (const variant of variants) {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(
+                        () => controller.abort(),
+                        PLEX_DISCOVERY_CONSTANTS.DISCOVERY_TIMEOUT_MS
+                    );
+                    try {
+                        lastUrl = variant.url;
+                        const init: RequestInit = {
+                            method: 'GET',
+                            signal: controller.signal,
+                        };
+                        if (variant.headers) {
+                            init.headers = variant.headers;
+                        }
+                        response = await fetch(variant.url, init);
+                    } catch (error) {
+                        lastError = error;
+                        continue;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+
+                    if (response.status === 429 && attempt < maxAttempts - 1) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        const parsed = retryAfter ? parseInt(retryAfter, 10) : NaN;
+                        const delayMs = Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : 2000;
+                        await new Promise((resolve) => setTimeout(resolve, delayMs));
+                        response = null;
+                        retryScheduled = true;
+                        break;
+                    }
+
+                    break;
+                }
+
+                if (response) {
+                    break;
+                }
+                if (retryScheduled) {
+                    continue;
+                }
+            }
+
+            if (!response) {
+                const message = lastError instanceof Error
+                    ? lastError.message
+                    : 'unknown error';
+                throw new PlexApiError(
+                    AppErrorCode.SERVER_UNREACHABLE,
+                    `Failed to discover servers: ${message} (last url: ${lastUrl || 'unknown'})`,
+                    undefined,
+                    true
+                );
+            }
             if (!response.ok) {
                 this._handleResponseError(response);
             }
 
-            const resources = await response.json() as PlexApiResource[];
+            const resources = await this._parseResourcesResponse(response);
             const servers = this._parseResources(resources);
 
             this._state.servers = servers;
@@ -112,12 +194,16 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
             return servers;
         } catch (error) {
+            const lastUrlInfo = lastUrl || 'unknown';
             if (error instanceof PlexApiError) {
+                console.error(`[Discovery] Discovery failed (API Error): ${error.message} (last url: ${lastUrlInfo})`);
                 throw error;
             }
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[Discovery] Discovery failed (Network/Other): ${message} (last url: ${lastUrlInfo})`);
             throw new PlexApiError(
                 AppErrorCode.SERVER_UNREACHABLE,
-                'Failed to discover servers: network error',
+                `Failed to discover servers: ${message} (last url: ${lastUrlInfo})`,
                 undefined,
                 true
             );
@@ -131,6 +217,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * @returns Promise resolving to list of servers
      */
     public async refreshServers(): Promise<PlexServer[]> {
+        this._state.lastRefreshAt = null;
         return this.discoverServers();
     }
 
@@ -148,7 +235,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         _server: PlexServer,
         connection: PlexConnection
     ): Promise<number | null> {
-        const url = connection.uri + PLEX_DISCOVERY_CONSTANTS.IDENTITY_ENDPOINT;
+        const url = new URL(PLEX_DISCOVERY_CONSTANTS.IDENTITY_ENDPOINT, connection.uri).toString();
         const headers = this._getAuthHeaders();
         const startTime = Date.now();
 
@@ -172,8 +259,10 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
             const latency = Date.now() - startTime;
             return latency;
-        } catch {
+        } catch (error) {
             clearTimeout(timeoutId);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[Discovery] Connection test failed for ${url}:`, errorMsg);
             return null;
         }
     }
@@ -404,6 +493,22 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         return this.getServerUri();
     }
 
+    /**
+     * Clear the current server selection and persisted ID.
+     */
+    public clearSelection(): void {
+        this._state.selectedServer = null;
+        this._state.selectedConnection = null;
+        this._pendingServerId = undefined as unknown as string;
+        try {
+            localStorage.removeItem(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+        } catch {
+            // localStorage may be unavailable, continue anyway
+        }
+        this._emitter.emit('serverChange', null);
+        this._emitter.emit('connectionChange', null);
+    }
+
     // ============================================
     // State Methods
     // ============================================
@@ -481,7 +586,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 continue;
             }
 
-            const connections = this._parseConnections(resource.connections);
+            const connections = this._parseConnections(resource.connections || []);
             const capabilities = resource.provides.split(',');
 
             servers.push({
@@ -499,6 +604,92 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         return servers;
     }
 
+    private async _parseResourcesResponse(response: Response): Promise<PlexApiResource[]> {
+        const contentType =
+            response.headers && typeof response.headers.get === 'function'
+                ? response.headers.get('Content-Type') || ''
+                : '';
+        if (typeof response.text !== 'function') {
+            if (typeof response.json === 'function') {
+                const parsed = await response.json();
+                return Array.isArray(parsed) ? (parsed as PlexApiResource[]) : [];
+            }
+            return [];
+        }
+
+        const text = await response.text();
+        if (!text) {
+            return [];
+        }
+
+        // Prefer JSON parsing but tolerate XML payloads from plex.tv.
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) {
+                return parsed as PlexApiResource[];
+            }
+        } catch {
+            // Fall through to XML parsing.
+        }
+
+        if (!contentType.includes('xml') && !text.trim().startsWith('<')) {
+            throw new PlexApiError(
+                AppErrorCode.SERVER_UNREACHABLE,
+                'Failed to parse server discovery response',
+                response.status,
+                false
+            );
+        }
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'application/xml');
+        if (doc.getElementsByTagName('parsererror').length > 0) {
+            throw new PlexApiError(
+                AppErrorCode.SERVER_UNREACHABLE,
+                'Invalid XML response from server discovery',
+                response.status,
+                false
+            );
+        }
+
+        const devices = Array.from(doc.getElementsByTagName('Device'));
+        const resources: PlexApiResource[] = [];
+        for (const device of devices) {
+            const provides = device.getAttribute('provides') || '';
+            const connections: PlexApiConnection[] = [];
+            const connectionNodes = Array.from(device.getElementsByTagName('Connection'));
+            for (const conn of connectionNodes) {
+                const portRaw = conn.getAttribute('port');
+                const port = portRaw ? Number(portRaw) : 0;
+                connections.push({
+                    uri: conn.getAttribute('uri') || '',
+                    protocol: conn.getAttribute('protocol') || '',
+                    address: conn.getAttribute('address') || '',
+                    port: Number.isFinite(port) ? port : 0,
+                    local: this._parseXmlBoolean(conn.getAttribute('local')),
+                    relay: this._parseXmlBoolean(conn.getAttribute('relay')),
+                });
+            }
+
+            resources.push({
+                clientIdentifier: device.getAttribute('clientIdentifier') || '',
+                name: device.getAttribute('name') || '',
+                sourceTitle: device.getAttribute('sourceTitle') || '',
+                ownerId: device.getAttribute('ownerId') || '',
+                owned: this._parseXmlBoolean(device.getAttribute('owned')),
+                provides: provides,
+                connections: connections,
+            });
+        }
+
+        return resources;
+    }
+
+    private _parseXmlBoolean(value: string | null): boolean {
+        if (!value) return false;
+        return value === '1' || value.toLowerCase() === 'true';
+    }
+
     /**
      * Parse API connections into PlexConnection objects.
      */
@@ -506,18 +697,17 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         const connections: PlexConnection[] = [];
 
         for (const conn of apiConnections) {
-            let protocol: 'https' | 'http';
-            if (conn.protocol === 'https') {
-                protocol = 'https';
-            } else if (conn.protocol === 'http') {
-                protocol = 'http';
-            } else {
-                console.warn(`[Discovery] Unexpected protocol: ${conn.protocol}, defaulting to http`);
-                protocol = 'http';
+            const normalizedUri = this._normalizeConnectionUri(conn.uri);
+            if (!normalizedUri) {
+                console.warn('[Discovery] Skipping invalid connection URI:', conn.uri);
+                continue;
             }
 
+            const parsed = new URL(normalizedUri);
+            const protocol: 'https' | 'http' = parsed.protocol === 'https:' ? 'https' : 'http';
+
             connections.push({
-                uri: conn.uri,
+                uri: normalizedUri,
                 protocol,
                 address: conn.address,
                 port: conn.port,
@@ -530,6 +720,24 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         return connections;
     }
 
+    private _normalizeConnectionUri(uri: string): string | null {
+        try {
+            const parsed = new URL(uri);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                return null;
+            }
+            if (parsed.username || parsed.password) {
+                return null;
+            }
+            if (!parsed.hostname) {
+                return null;
+            }
+            // Normalize to origin to avoid path/query surprises and to strip trailing slashes.
+            return parsed.origin;
+        } catch {
+            return null;
+        }
+    }
 
     /**
      * Find a server by ID in the cached list.

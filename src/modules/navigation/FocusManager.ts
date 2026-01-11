@@ -431,17 +431,19 @@ export class FocusManager implements IFocusManager {
         }
 
         const fromRect = fromElement.element.getBoundingClientRect();
-        const candidates: Array<{ id: string; score: number }> = [];
+        let bestCandidateId: string | null = null;
+        let bestScore = -Infinity;
 
         this._state.focusableElements.forEach((element, id) => {
             if (id === fromId) {
                 return;
             }
-            if (!this._isVisible(element.element)) {
-                return;
-            }
 
             const rect = element.element.getBoundingClientRect();
+
+            if (!this._isVisible(element.element, rect)) {
+                return;
+            }
 
             // Check if element is in the correct direction
             if (!this._isInDirection(fromRect, rect, direction)) {
@@ -458,27 +460,23 @@ export class FocusManager implements IFocusManager {
             // Higher overlap = better, lower distance = better
             const score = overlap * 1000 - distance;
 
-            candidates.push({ id, score });
+            if (score > bestScore) {
+                bestScore = score;
+                bestCandidateId = id;
+            }
         });
 
-        // Return candidate with highest score
-        if (candidates.length === 0) {
-            return null;
-        }
-
-        candidates.sort((a, b) => b.score - a.score);
-        const bestCandidate = candidates[0];
-        return bestCandidate !== undefined ? bestCandidate.id : null;
+        return bestCandidateId;
     }
 
     /**
      * Check if an element is visible.
      */
-    private _isVisible(element: HTMLElement): boolean {
-        const rect = element.getBoundingClientRect();
+    private _isVisible(element: HTMLElement, rect?: DOMRect): boolean {
+        const resolvedRect = rect ?? element.getBoundingClientRect();
         return (
-            rect.width > 0 &&
-            rect.height > 0 &&
+            resolvedRect.width > 0 &&
+            resolvedRect.height > 0 &&
             element.offsetParent !== null
         );
     }

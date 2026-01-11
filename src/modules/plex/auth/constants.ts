@@ -33,6 +33,9 @@ export const PLEX_AUTH_CONSTANTS = {
     /** Token validation timeout */
     TOKEN_VALIDATION_TIMEOUT_MS: 5000,
 
+    /** Per-request timeout for Plex auth network calls */
+    REQUEST_TIMEOUT_MS: 10000,
+
     /** Number of retry attempts for network requests */
     RETRY_ATTEMPTS: 3,
 

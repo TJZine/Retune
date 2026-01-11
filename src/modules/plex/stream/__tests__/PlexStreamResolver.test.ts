@@ -4,6 +4,7 @@
  */
 
 import { PlexStreamResolver } from '../PlexStreamResolver';
+import { PROGRESS_TIMEOUT_MS } from '../constants';
 import type { PlexStreamResolverConfig } from '../interfaces';
 import type { PlexMediaItem, PlexMediaFile, PlexStream } from '../types';
 
@@ -339,6 +340,9 @@ describe('PlexStreamResolver', () => {
             const url = resolver.getTranscodeUrl('12345', {});
 
             expect(url).toContain('protocol=hls');
+            expect(url).toContain('offset=0');
+            expect(url).toContain('session=');
+            expect(url).toContain('X-Plex-Session-Identifier=');
             expect(url).toContain('X-Plex-Token=mock-token');
             expect(url).toContain('X-Plex-Client-Identifier=test-client-id');
             expect(url).toContain('X-Plex-Platform=webOS');
@@ -361,6 +365,16 @@ describe('PlexStreamResolver', () => {
             const url = resolver.getTranscodeUrl('12345', {});
 
             expect(url).toContain('maxVideoBitrate=20000');
+        });
+
+        it('should honor provided sessionId for transcoder binding', () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            const url = resolver.getTranscodeUrl('12345', { sessionId: 'test-session-id' });
+
+            expect(url).toContain('session=test-session-id');
+            expect(url).toContain('X-Plex-Session-Identifier=test-session-id');
         });
 
         it('should throw when no server URI is available', () => {
@@ -398,6 +412,77 @@ describe('PlexStreamResolver', () => {
             expect(callUrl).toContain('time=60000');
             expect(callUrl).toContain('state=playing');
             expect(callUrl).toContain('ratingKey=12345');
+        });
+
+        // ========================================
+        // STREAM-002: Progress Timeout Tests
+        // ========================================
+
+        it('should emit progressTimeout when request exceeds budget', async () => {
+            jest.useFakeTimers();
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            const timeoutHandler = jest.fn();
+            resolver.on('progressTimeout', timeoutHandler);
+
+            mockFetch.mockImplementation((_url: string, options: RequestInit) => {
+                return new Promise((_resolve, reject) => {
+                    if (options.signal) {
+                        options.signal.addEventListener('abort', () => {
+                            const abortError = new Error('The operation was aborted');
+                            abortError.name = 'AbortError';
+                            reject(abortError);
+                        });
+                    }
+                });
+            });
+
+            // Start session and call updateProgress
+            const sessionId = await resolver.startSession('12345');
+            const progressPromise = resolver.updateProgress(sessionId, '12345', 60000, 'playing');
+            await jest.advanceTimersByTimeAsync(PROGRESS_TIMEOUT_MS + 1);
+            await progressPromise;
+
+            expect(timeoutHandler).toHaveBeenCalledWith({
+                sessionId,
+                itemKey: '12345',
+            });
+            jest.useRealTimers();
+        });
+
+        it('should not emit progressTimeout when request succeeds within budget', async () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            // Mock fetch that resolves immediately
+            mockFetch.mockResolvedValue({
+                ok: true,
+                status: 200,
+                json: async () => ({}),
+            });
+
+            const timeoutHandler = jest.fn();
+            resolver.on('progressTimeout', timeoutHandler);
+
+            const sessionId = await resolver.startSession('12345');
+            await resolver.updateProgress(sessionId, '12345', 60000, 'playing');
+
+            expect(timeoutHandler).not.toHaveBeenCalled();
+        });
+
+        it('should not emit progressTimeout on non-abort failures', async () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+            const timeoutHandler = jest.fn();
+
+            resolver.on('progressTimeout', timeoutHandler);
+            mockFetch.mockRejectedValue(new Error('Network down'));
+
+            const sessionId = await resolver.startSession('12345');
+            await resolver.updateProgress(sessionId, '12345', 60000, 'playing');
+
+            expect(timeoutHandler).not.toHaveBeenCalled();
         });
     });
 

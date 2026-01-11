@@ -24,8 +24,11 @@ export const PLEX_DISCOVERY_CONSTANTS = {
     /** localStorage key for selected server ID */
     SELECTED_SERVER_KEY: 'retune_selected_server',
 
-    /** Connection test timeout (5 seconds) */
-    CONNECTION_TEST_TIMEOUT_MS: 5000,
+    /** Connection test timeout (10 seconds) */
+    CONNECTION_TEST_TIMEOUT_MS: 10000,
+
+    /** Discovery request timeout (10 seconds) */
+    DISCOVERY_TIMEOUT_MS: 10000,
 
     /** Maximum concurrent connection tests */
     MAX_CONCURRENT_TESTS: 3,

@@ -9,13 +9,13 @@
 // ============================================
 
 /** localStorage key for channel configurations */
-export const STORAGE_KEY = 'retune_channels';
+export const STORAGE_KEY = 'retune_channels_v4';
 
 /** localStorage key for current channel ID */
-export const CURRENT_CHANNEL_KEY = 'retune_current_channel';
+export const CURRENT_CHANNEL_KEY = 'retune_current_channel_v4';
 
 /** Storage schema version for migrations */
-export const STORAGE_VERSION = 1;
+export const STORAGE_VERSION = 2;
 
 // ============================================
 // Caching

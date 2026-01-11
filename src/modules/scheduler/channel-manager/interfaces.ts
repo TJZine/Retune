@@ -47,6 +47,13 @@ export interface IChannelManager {
      */
     deleteChannel(id: string): Promise<void>;
 
+    // Demo Mode support
+    /**
+     * seedDemoChannels.
+     * Creates deterministic channels for Demo Mode.
+     */
+    seedDemoChannels(): Promise<void>;
+
     // Retrieval
 
     /**
@@ -179,6 +186,11 @@ export interface ChannelManagerConfig {
         warn: (message: string, ...args: unknown[]) => void;
         error: (message: string, ...args: unknown[]) => void;
     };
+
+    /**
+     * Storage key to use for channel persistence.
+     */
+    storageKey?: string;
 }
 
 /**

@@ -73,7 +73,7 @@ export class PlexAuth implements IPlexAuth {
      */
     public async requestPin(): Promise<PlexPinRequest> {
         const url = PLEX_AUTH_CONSTANTS.PLEX_TV_BASE_URL +
-            PLEX_AUTH_CONSTANTS.PIN_ENDPOINT + '?strong=true';
+            PLEX_AUTH_CONSTANTS.PIN_ENDPOINT;
         const headers = buildRequestHeaders(this._state.config);
 
         const response = await fetchWithRetry(url, {

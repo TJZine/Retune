@@ -291,6 +291,12 @@ export interface HlsOptions {
     subtitleSize?: number;
     /** Audio boost percentage */
     audioBoost?: number;
+    /**
+     * Optional Plex session identifier to bind the transcode session to.
+     * When provided, `getTranscodeUrl()` will use this value for both
+     * `session` and `X-Plex-Session-Identifier` query params.
+     */
+    sessionId?: string;
 }
 
 // ============================================
