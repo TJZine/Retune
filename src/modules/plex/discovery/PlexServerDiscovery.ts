@@ -75,7 +75,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             this._state.servers.length > 0 &&
             Date.now() - this._state.lastRefreshAt < PLEX_DISCOVERY_CONSTANTS.SERVER_CACHE_DURATION_MS
         ) {
-            return Promise.resolve(this._state.servers);
+            return Promise.resolve([...this._state.servers]);
         }
 
         // Return pending promise if discovery already in progress
@@ -124,6 +124,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             const maxAttempts = PLEX_DISCOVERY_CONSTANTS.MAX_DISCOVERY_ATTEMPTS;
             let response: Response | null = null;
             let lastError: unknown = null;
+            let lastNonOkResponse: Response | null = null;
 
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 let retryScheduled = false;
@@ -162,6 +163,14 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                         break;
                     }
 
+                    // If one variant is temporarily unhealthy (5xx), try the next variant in the same attempt.
+                    if (response.status >= 500 && response.status <= 599) {
+                        lastNonOkResponse = response;
+                        lastError = new Error(`Request failed with status ${response.status}`);
+                        response = null;
+                        continue;
+                    }
+
                     break;
                 }
 
@@ -174,6 +183,9 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             }
 
             if (!response) {
+                if (lastNonOkResponse) {
+                    this._handleResponseError(lastNonOkResponse);
+                }
                 const message = lastError instanceof Error
                     ? lastError.message
                     : 'unknown error';

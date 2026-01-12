@@ -21,6 +21,7 @@ export class ServerSelectScreen {
     private _setupButton: HTMLButtonElement;
     private _clearButton: HTMLButtonElement;
     private _isLoading: boolean = false;
+    private _restoreFocusTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
         this._container = container;
@@ -119,6 +120,10 @@ export class ServerSelectScreen {
 
     hide(): void {
         this._unregisterFocusables();
+        if (this._restoreFocusTimeoutId !== null) {
+            clearTimeout(this._restoreFocusTimeoutId);
+            this._restoreFocusTimeoutId = null;
+        }
         this._container.style.display = 'none';
         this._container.classList.remove('visible');
     }
@@ -157,7 +162,15 @@ export class ServerSelectScreen {
             if (nav) {
                 // Slight delay to ensure browser acknowledges the button is enabled again
                 // before attempting to focus it.
-                setTimeout(() => {
+                if (this._restoreFocusTimeoutId !== null) {
+                    clearTimeout(this._restoreFocusTimeoutId);
+                    this._restoreFocusTimeoutId = null;
+                }
+                this._restoreFocusTimeoutId = setTimeout(() => {
+                    this._restoreFocusTimeoutId = null;
+                    if (!this._container.classList.contains('visible')) {
+                        return;
+                    }
                     nav.setFocus('btn-server-refresh');
                 }, 50);
             }
@@ -180,7 +193,7 @@ export class ServerSelectScreen {
             buttons.forEach(btn => nav.unregisterFocusable(btn.id));
         }
 
-        this._listEl.innerHTML = '';
+        this._listEl.replaceChildren();
 
         if (servers.length === 0) {
             const empty = document.createElement('div');

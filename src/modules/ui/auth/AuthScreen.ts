@@ -24,6 +24,8 @@ export class AuthScreen {
     private _pollStartedAt: number | null = null;
     private _activePinId: number | null = null;
     private _activeCode: string | null = null;
+    private _retryFocusableRegistered: boolean = false;
+    private _cancelHasRetryNeighbor: boolean = false;
 
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
         this._container = container;
@@ -145,6 +147,8 @@ export class AuthScreen {
                 console.warn('[AuthScreen] Failed to cancel PIN before requesting a new one:', error);
             }
         }
+        this._activePinId = null;
+        this._activeCode = null;
 
         try {
             const pin = await this._orchestrator.requestAuthPin();
@@ -212,6 +216,47 @@ export class AuthScreen {
         this._requestButton.disabled = !state.request;
         this._cancelButton.disabled = !state.cancel;
         this._retryButton.style.display = state.retry ? 'inline-flex' : 'none';
+
+        const nav = this._orchestrator.getNavigation();
+        if (!nav) {
+            return;
+        }
+
+        if (state.retry) {
+            if (!this._retryFocusableRegistered) {
+                // Ensure we don't double-register and leak click handlers.
+                nav.unregisterFocusable('btn-auth-retry');
+                nav.registerFocusable({
+                    id: 'btn-auth-retry',
+                    element: this._retryButton,
+                    neighbors: {
+                        left: 'btn-auth-cancel',
+                    },
+                });
+                this._retryFocusableRegistered = true;
+            }
+        } else if (this._retryFocusableRegistered) {
+            nav.unregisterFocusable('btn-auth-retry');
+            this._retryFocusableRegistered = false;
+        }
+
+        const shouldHaveRetryNeighbor = this._retryFocusableRegistered;
+        if (this._cancelHasRetryNeighbor !== shouldHaveRetryNeighbor) {
+            const focusedId = nav.getFocusedElement()?.id ?? null;
+            nav.unregisterFocusable('btn-auth-cancel');
+            nav.registerFocusable({
+                id: 'btn-auth-cancel',
+                element: this._cancelButton,
+                neighbors: {
+                    left: 'btn-auth-request',
+                    ...(shouldHaveRetryNeighbor ? { right: 'btn-auth-retry' } : {}),
+                },
+            });
+            if (focusedId === 'btn-auth-cancel') {
+                nav.setFocus('btn-auth-cancel');
+            }
+            this._cancelHasRetryNeighbor = shouldHaveRetryNeighbor;
+        }
     }
 
     private _renderPin(code: string): void {
@@ -265,22 +310,30 @@ export class AuthScreen {
             },
         });
 
+        const retryVisible = this._retryButton.style.display !== 'none';
         nav.registerFocusable({
             id: 'btn-auth-cancel',
             element: this._cancelButton,
             neighbors: {
                 left: 'btn-auth-request',
-                right: 'btn-auth-retry',
+                ...(retryVisible ? { right: 'btn-auth-retry' } : {}),
             },
         });
+        this._cancelHasRetryNeighbor = retryVisible;
 
-        nav.registerFocusable({
-            id: 'btn-auth-retry',
-            element: this._retryButton,
-            neighbors: {
-                left: 'btn-auth-cancel',
-            },
-        });
+        if (retryVisible) {
+            nav.registerFocusable({
+                id: 'btn-auth-retry',
+                element: this._retryButton,
+                neighbors: {
+                    left: 'btn-auth-cancel',
+                },
+            });
+            this._retryFocusableRegistered = true;
+        } else {
+            nav.unregisterFocusable('btn-auth-retry');
+            this._retryFocusableRegistered = false;
+        }
 
         // Set initial focus
         if (!this._requestButton.disabled) {
@@ -297,5 +350,7 @@ export class AuthScreen {
         nav.unregisterFocusable('btn-auth-request');
         nav.unregisterFocusable('btn-auth-cancel');
         nav.unregisterFocusable('btn-auth-retry');
+        this._retryFocusableRegistered = false;
+        this._cancelHasRetryNeighbor = false;
     }
 }

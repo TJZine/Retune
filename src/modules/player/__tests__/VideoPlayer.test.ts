@@ -691,14 +691,17 @@ describe('VideoPlayer', () => {
             const playerAny = player as unknown as {
                 _simulationTimer: ReturnType<typeof setInterval> | null;
                 _statusUpdateInterval: ReturnType<typeof setInterval> | null;
+                _demoLoadTimeoutId: ReturnType<typeof setTimeout> | null;
             };
             playerAny._simulationTimer = setInterval(() => undefined, 1000);
             playerAny._statusUpdateInterval = setInterval(() => undefined, 1000);
+            playerAny._demoLoadTimeoutId = setTimeout(() => undefined, 1000);
 
             player.destroy();
 
             expect(playerAny._simulationTimer).toBeNull();
             expect(playerAny._statusUpdateInterval).toBeNull();
+            expect(playerAny._demoLoadTimeoutId).toBeNull();
         });
     });
 

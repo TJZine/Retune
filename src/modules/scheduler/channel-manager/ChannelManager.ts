@@ -253,6 +253,7 @@ export class ChannelManager implements IChannelManager {
      * Does not implicitly load; caller should invoke loadChannels().
      */
     setStorageKeys(storageKey: string, currentChannelKey: string): void {
+        this.cancelPendingRetries();
         this._storageKey = storageKey;
         this._currentChannelKey = currentChannelKey;
         this._state.channels.clear();
@@ -268,6 +269,7 @@ export class ChannelManager implements IChannelManager {
         channels: ChannelConfig[],
         options?: { currentChannelId?: string | null }
     ): Promise<void> {
+        this.cancelPendingRetries();
         this._state.channels.clear();
         this._state.resolvedContent.clear();
         this._state.channelOrder = [];
@@ -770,12 +772,24 @@ export class ChannelManager implements IChannelManager {
             this._state.channelOrder = data.channelOrder.filter((id) =>
                 this._state.channels.has(id)
             );
+
+            // Fallback: if stored order is corrupt/empty but channels exist, rebuild a stable order.
+            if (this._state.channelOrder.length === 0 && this._state.channels.size > 0) {
+                this._state.channelOrder = [...this._state.channels.values()]
+                    .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))
+                    .map((c) => c.id);
+            }
             this._state.currentChannelId = data.currentChannelId;
 
             // Also restore current channel from separate key
             const savedCurrent = localStorage.getItem(this._currentChannelKey);
             if (savedCurrent && this._state.channels.has(savedCurrent)) {
                 this._state.currentChannelId = savedCurrent;
+            }
+
+            // Ensure current channel is valid; fallback to first channel if needed.
+            if (this._state.currentChannelId && !this._state.channels.has(this._state.currentChannelId)) {
+                this._state.currentChannelId = this._state.channelOrder[0] ?? null;
             }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);

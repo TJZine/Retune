@@ -214,6 +214,11 @@ export class VideoPlayer implements IVideoPlayer {
             clearInterval(this._statusUpdateInterval);
             this._statusUpdateInterval = null;
         }
+        if (this._demoLoadTimeoutId !== null) {
+            clearTimeout(this._demoLoadTimeoutId);
+            this._demoLoadTimeoutId = null;
+        }
+        this._demoLoadToken += 1;
 
         // Release media session before tearing down event emitters
         this.releaseMediaSession();

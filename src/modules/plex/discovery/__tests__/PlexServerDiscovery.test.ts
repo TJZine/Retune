@@ -873,213 +873,225 @@ describe('PlexServerDiscovery', () => {
     describe('connection URI sanitization', () => {
         it('should reject file:// URIs', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    sourceTitle: 'testuser',
-                    ownerId: 'owner1',
-                    owned: true,
-                    provides: 'server',
-                    connections: [
-                        {
-                            uri: 'file:///etc/passwd',
-                            protocol: 'file',
-                            address: 'localhost',
-                            port: 0,
-                            local: true,
-                            relay: false,
-                        },
-                        {
-                            uri: 'https://valid:32400',
-                            protocol: 'https',
-                            address: 'valid',
-                            port: 32400,
-                            local: true,
-                            relay: false,
-                        },
-                    ],
-                },
-            ];
-            mockFetchJson(mockServers);
-            const discovery = new PlexServerDiscovery(mockConfig);
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        sourceTitle: 'testuser',
+                        ownerId: 'owner1',
+                        owned: true,
+                        provides: 'server',
+                        connections: [
+                            {
+                                uri: 'file:///etc/passwd',
+                                protocol: 'file',
+                                address: 'localhost',
+                                port: 0,
+                                local: true,
+                                relay: false,
+                            },
+                            {
+                                uri: 'https://valid:32400',
+                                protocol: 'https',
+                                address: 'valid',
+                                port: 32400,
+                                local: true,
+                                relay: false,
+                            },
+                        ],
+                    },
+                ];
+                mockFetchJson(mockServers);
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            const result = await discovery.discoverServers();
+                const result = await discovery.discoverServers();
 
-            // file:// connection should be filtered out
-            const server = result[0];
-            expect(server).toBeDefined();
-            if (!server) {
-                throw new Error('Expected server to be defined');
+                // file:// connection should be filtered out
+                const server = result[0];
+                expect(server).toBeDefined();
+                if (!server) {
+                    throw new Error('Expected server to be defined');
+                }
+                expect(server.connections).toHaveLength(1);
+                expect(server.connections[0]?.uri).toBe('https://valid:32400');
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'file:///etc/passwd'
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
             }
-            expect(server.connections).toHaveLength(1);
-            expect(server.connections[0]?.uri).toBe('https://valid:32400');
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'file:///etc/passwd'
-            );
-            consoleWarnSpy.mockRestore();
         });
 
         it('should reject URIs with embedded credentials', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    sourceTitle: 'testuser',
-                    ownerId: 'owner1',
-                    owned: true,
-                    provides: 'server',
-                    connections: [
-                        {
-                            uri: 'https://user:pass@server:32400',
-                            protocol: 'https',
-                            address: 'server',
-                            port: 32400,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: 'https://clean:32400',
-                            protocol: 'https',
-                            address: 'clean',
-                            port: 32400,
-                            local: true,
-                            relay: false,
-                        },
-                    ],
-                },
-            ];
-            mockFetchJson(mockServers);
-            const discovery = new PlexServerDiscovery(mockConfig);
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        sourceTitle: 'testuser',
+                        ownerId: 'owner1',
+                        owned: true,
+                        provides: 'server',
+                        connections: [
+                            {
+                                uri: 'https://user:pass@server:32400',
+                                protocol: 'https',
+                                address: 'server',
+                                port: 32400,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: 'https://clean:32400',
+                                protocol: 'https',
+                                address: 'clean',
+                                port: 32400,
+                                local: true,
+                                relay: false,
+                            },
+                        ],
+                    },
+                ];
+                mockFetchJson(mockServers);
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            const result = await discovery.discoverServers();
+                const result = await discovery.discoverServers();
 
-            // Credentialed URI should be filtered out
-            const server = result[0];
-            expect(server).toBeDefined();
-            if (!server) {
-                throw new Error('Expected server to be defined');
+                // Credentialed URI should be filtered out
+                const server = result[0];
+                expect(server).toBeDefined();
+                if (!server) {
+                    throw new Error('Expected server to be defined');
+                }
+                expect(server.connections).toHaveLength(1);
+                expect(server.connections[0]?.uri).toBe('https://clean:32400');
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'https://user:pass@server:32400'
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
             }
-            expect(server.connections).toHaveLength(1);
-            expect(server.connections[0]?.uri).toBe('https://clean:32400');
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'https://user:pass@server:32400'
-            );
-            consoleWarnSpy.mockRestore();
         });
 
         it('should reject non-standard protocol schemes', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    sourceTitle: 'testuser',
-                    ownerId: 'owner1',
-                    owned: true,
-                    provides: 'server',
-                    connections: [
-                        {
-                            uri: 'ftp://server:21',
-                            protocol: 'ftp',
-                            address: 'server',
-                            port: 21,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: 'javascript:alert(1)',
-                            protocol: 'javascript',
-                            address: '',
-                            port: 0,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: 'http://valid:32400',
-                            protocol: 'http',
-                            address: 'valid',
-                            port: 32400,
-                            local: true,
-                            relay: false,
-                        },
-                    ],
-                },
-            ];
-            mockFetchJson(mockServers);
-            const discovery = new PlexServerDiscovery(mockConfig);
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        sourceTitle: 'testuser',
+                        ownerId: 'owner1',
+                        owned: true,
+                        provides: 'server',
+                        connections: [
+                            {
+                                uri: 'ftp://server:21',
+                                protocol: 'ftp',
+                                address: 'server',
+                                port: 21,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: 'javascript:alert(1)',
+                                protocol: 'javascript',
+                                address: '',
+                                port: 0,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: 'http://valid:32400',
+                                protocol: 'http',
+                                address: 'valid',
+                                port: 32400,
+                                local: true,
+                                relay: false,
+                            },
+                        ],
+                    },
+                ];
+                mockFetchJson(mockServers);
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            const result = await discovery.discoverServers();
+                const result = await discovery.discoverServers();
 
-            // Only http:// connection should remain
-            const server = result[0];
-            expect(server).toBeDefined();
-            if (!server) {
-                throw new Error('Expected server to be defined');
+                // Only http:// connection should remain
+                const server = result[0];
+                expect(server).toBeDefined();
+                if (!server) {
+                    throw new Error('Expected server to be defined');
+                }
+                expect(server.connections).toHaveLength(1);
+                expect(server.connections[0]?.protocol).toBe('http');
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'ftp://server:21'
+                );
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'javascript:alert(1)'
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
             }
-            expect(server.connections).toHaveLength(1);
-            expect(server.connections[0]?.protocol).toBe('http');
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'ftp://server:21'
-            );
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'javascript:alert(1)'
-            );
-            consoleWarnSpy.mockRestore();
         });
 
         it('should reject data: URIs', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    sourceTitle: 'testuser',
-                    ownerId: 'owner1',
-                    owned: true,
-                    provides: 'server',
-                    connections: [
-                        {
-                            uri: 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
-                            protocol: 'data',
-                            address: '',
-                            port: 0,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: 'https://valid:32400',
-                            protocol: 'https',
-                            address: 'valid',
-                            port: 32400,
-                            local: true,
-                            relay: false,
-                        },
-                    ],
-                },
-            ];
-            mockFetchJson(mockServers);
-            const discovery = new PlexServerDiscovery(mockConfig);
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        sourceTitle: 'testuser',
+                        ownerId: 'owner1',
+                        owned: true,
+                        provides: 'server',
+                        connections: [
+                            {
+                                uri: 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+                                protocol: 'data',
+                                address: '',
+                                port: 0,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: 'https://valid:32400',
+                                protocol: 'https',
+                                address: 'valid',
+                                port: 32400,
+                                local: true,
+                                relay: false,
+                            },
+                        ],
+                    },
+                ];
+                mockFetchJson(mockServers);
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            const result = await discovery.discoverServers();
+                const result = await discovery.discoverServers();
 
-            const server = result[0];
-            expect(server).toBeDefined();
-            if (!server) {
-                throw new Error('Expected server to be defined');
+                const server = result[0];
+                expect(server).toBeDefined();
+                if (!server) {
+                    throw new Error('Expected server to be defined');
+                }
+                expect(server.connections).toHaveLength(1);
+                expect(server.connections[0]?.uri).toBe('https://valid:32400');
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
             }
-            expect(server.connections).toHaveLength(1);
-            expect(server.connections[0]?.uri).toBe('https://valid:32400');
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='
-            );
-            consoleWarnSpy.mockRestore();
         });
 
         it('should normalize URIs to origin (strip paths and query strings)', async () => {
@@ -1119,64 +1131,67 @@ describe('PlexServerDiscovery', () => {
 
         it('should handle malformed URIs gracefully', async () => {
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    sourceTitle: 'testuser',
-                    ownerId: 'owner1',
-                    owned: true,
-                    provides: 'server',
-                    connections: [
-                        {
-                            uri: 'not-a-valid-uri',
-                            protocol: 'unknown',
-                            address: '',
-                            port: 0,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: '://missing-protocol',
-                            protocol: 'unknown',
-                            address: '',
-                            port: 0,
-                            local: false,
-                            relay: false,
-                        },
-                        {
-                            uri: 'https://valid:32400',
-                            protocol: 'https',
-                            address: 'valid',
-                            port: 32400,
-                            local: true,
-                            relay: false,
-                        },
-                    ],
-                },
-            ];
-            mockFetchJson(mockServers);
-            const discovery = new PlexServerDiscovery(mockConfig);
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        sourceTitle: 'testuser',
+                        ownerId: 'owner1',
+                        owned: true,
+                        provides: 'server',
+                        connections: [
+                            {
+                                uri: 'not-a-valid-uri',
+                                protocol: 'unknown',
+                                address: '',
+                                port: 0,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: '://missing-protocol',
+                                protocol: 'unknown',
+                                address: '',
+                                port: 0,
+                                local: false,
+                                relay: false,
+                            },
+                            {
+                                uri: 'https://valid:32400',
+                                protocol: 'https',
+                                address: 'valid',
+                                port: 32400,
+                                local: true,
+                                relay: false,
+                            },
+                        ],
+                    },
+                ];
+                mockFetchJson(mockServers);
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            const result = await discovery.discoverServers();
+                const result = await discovery.discoverServers();
 
-            // Only valid URI should remain
-            const server = result[0];
-            expect(server).toBeDefined();
-            if (!server) {
-                throw new Error('Expected server to be defined');
+                // Only valid URI should remain
+                const server = result[0];
+                expect(server).toBeDefined();
+                if (!server) {
+                    throw new Error('Expected server to be defined');
+                }
+                expect(server.connections).toHaveLength(1);
+                expect(server.connections[0]?.uri).toBe('https://valid:32400');
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    'not-a-valid-uri'
+                );
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    '[Discovery] Skipping invalid connection URI:',
+                    '://missing-protocol'
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
             }
-            expect(server.connections).toHaveLength(1);
-            expect(server.connections[0]?.uri).toBe('https://valid:32400');
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                'not-a-valid-uri'
-            );
-            expect(consoleWarnSpy).toHaveBeenCalledWith(
-                '[Discovery] Skipping invalid connection URI:',
-                '://missing-protocol'
-            );
-            consoleWarnSpy.mockRestore();
         });
     });
 

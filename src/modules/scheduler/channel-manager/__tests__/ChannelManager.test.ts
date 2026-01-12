@@ -472,6 +472,39 @@ describe('ChannelManager', () => {
             expect(newManager.getAllChannels()).toHaveLength(0);
         });
 
+        it('should rebuild channelOrder when persisted order is empty', async () => {
+            const ch1 = await manager.createChannel({
+                name: 'Ch 10',
+                number: 10,
+                contentSource: createMockContentSource(),
+            });
+            const ch2 = await manager.createChannel({
+                name: 'Ch 2',
+                number: 2,
+                contentSource: createMockContentSource(),
+            });
+
+            mockLocalStorage.clear();
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [ch1, ch2],
+                channelOrder: [],
+                currentChannelId: 'missing',
+                savedAt: Date.now(),
+            });
+
+            const newManager = new ChannelManager({ plexLibrary: mockLibrary });
+            await newManager.loadChannels();
+
+            const loaded = newManager.getAllChannels();
+            expect(loaded).toHaveLength(2);
+            // Rebuilt order is by channel number.
+            expect(loaded[0]?.number).toBe(2);
+            expect(loaded[1]?.number).toBe(10);
+            // Current channel is sanitized to first if invalid.
+            expect(newManager.getCurrentChannel()?.id).toBe(loaded[0]?.id);
+        });
+
         it('should export channels as JSON', async () => {
             await manager.createChannel({
                 name: 'Export Test',
