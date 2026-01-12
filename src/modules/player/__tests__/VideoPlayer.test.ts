@@ -683,7 +683,6 @@ describe('VideoPlayer', () => {
         let clearTimeoutSpy: jest.SpyInstance;
 
         beforeEach(async () => {
-            jest.useFakeTimers();
             setIntervalSpy = jest.spyOn(globalThis, 'setInterval');
             clearIntervalSpy = jest.spyOn(globalThis, 'clearInterval');
             setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');

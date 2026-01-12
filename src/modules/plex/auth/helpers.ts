@@ -72,13 +72,22 @@ function generateUUID(): string {
  * @returns Client identifier string
  */
 export function getOrCreateClientId(): string {
-    const stored = localStorage.getItem(PLEX_AUTH_CONSTANTS.CLIENT_ID_KEY);
-    if (stored) {
-        return stored;
+    try {
+        const stored = localStorage.getItem(PLEX_AUTH_CONSTANTS.CLIENT_ID_KEY);
+        if (stored) {
+            return stored;
+        }
+        const newId = generateUUID();
+        try {
+            localStorage.setItem(PLEX_AUTH_CONSTANTS.CLIENT_ID_KEY, newId);
+        } catch {
+            // Best-effort; return ephemeral ID if storage is blocked.
+        }
+        return newId;
+    } catch {
+        // Storage may be blocked (webOS/privacy mode); fall back to ephemeral ID.
+        return generateUUID();
     }
-    const newId = generateUUID();
-    localStorage.setItem(PLEX_AUTH_CONSTANTS.CLIENT_ID_KEY, newId);
-    return newId;
 }
 
 // ============================================

@@ -161,6 +161,7 @@ function isValidContentSource(source: unknown, depth: number = 0): source is Cha
         case 'mixed':
             return (
                 Array.isArray(src['sources']) &&
+                (src['sources'] as unknown[]).length > 0 &&
                 (src['sources'] as unknown[]).every((s) => isValidContentSource(s, depth + 1))
             );
         default:
@@ -828,6 +829,7 @@ export class ChannelManager implements IChannelManager {
 
         if (version !== STORAGE_VERSION) {
             this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
+            // TODO: Implement explicit schema transformations when STORAGE_VERSION increments.
         }
 
         return {
@@ -858,6 +860,8 @@ export class ChannelManager implements IChannelManager {
      */
     async seedDemoChannels(): Promise<void> {
         this._logger.warn('[ChannelManager] Seeding Demo Channels');
+
+        this.cancelPendingRetries();
 
         // Clear existing channels
         this._state.channels.clear();

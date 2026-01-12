@@ -286,6 +286,12 @@ export class VideoPlayer implements IVideoPlayer {
                 this._state.currentTimeMs = descriptor.startPositionMs;
             }
 
+            // Keep the demo-mode contract aligned with real mode:
+            // - Use descriptor-provided tracks for UI
+            // - Let AudioTrackManager pick a default/active track ID
+            this._audioTrackManager.setTracks(descriptor.audioTracks);
+            this._state.activeAudioId = this._audioTrackManager.getActiveTrackId();
+
             this._demoLoadToken += 1;
             const token = this._demoLoadToken;
             if (this._demoLoadTimeoutId !== null) {
@@ -304,18 +310,20 @@ export class VideoPlayer implements IVideoPlayer {
                 this._demoLoadTimeoutId = null;
 
                 this._state.durationMs = descriptor.durationMs;
-                this._state.activeAudioId = 'english'; // Fake audio track
                 this._emitter.emit('mediaLoaded', {
                     durationMs: descriptor.durationMs,
                     tracks: {
-                        audio: [{ id: 'english', title: 'English', language: 'English', languageCode: 'en', codec: 'aac', channels: 2, index: 0 }],
-                        subtitle: []
-                    }
+                        audio: descriptor.audioTracks,
+                        subtitle: descriptor.subtitleTracks,
+                    },
                 });
 
                 if (descriptor.startPositionMs > 0) {
                     this._state.currentTimeMs = descriptor.startPositionMs;
                 }
+
+                // Sync media session metadata if enabled
+                this._syncMediaSessionMetadata();
 
                 // Simulate 'canplay' equivalent state
                 if (this._state.status === 'loading') {
@@ -436,6 +444,11 @@ export class VideoPlayer implements IVideoPlayer {
     public async play(): Promise<void> {
         if (!this._videoElement) {
             throw new Error('VideoPlayer not initialized');
+        }
+
+        if (this._config?.demoMode && !this._state.currentDescriptor) {
+            // No-op to avoid emitting ended/skip loops when nothing is loaded.
+            return;
         }
 
         // If the caller tries to play after a stream is loaded, ensure visibility.
@@ -1156,6 +1169,11 @@ export class VideoPlayer implements IVideoPlayer {
 
             // Check for end
             if (this._state.currentTimeMs >= this._state.durationMs) {
+                this._state.currentTimeMs = this._state.durationMs;
+                this._emitter.emit('timeUpdate', {
+                    currentTimeMs: this._state.currentTimeMs,
+                    durationMs: this._state.durationMs,
+                });
                 console.warn('[VideoPlayer] Simulation ended');
                 this._stopSimulation();
                 this._updateStatus('ended');

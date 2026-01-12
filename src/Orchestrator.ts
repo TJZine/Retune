@@ -228,6 +228,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _ready: boolean = false;
     private _isChannelSwitching: boolean = false;
     private _startupInProgress: boolean = false;
+    private _startupQueuedPhase: (1 | 2 | 3 | 4 | 5) | null = null;
+    private _startupQueuedWaiters: Array<() => void> = [];
     private _authResumeDisposable: IDisposable | null = null;
     private _serverResumeDisposable: IDisposable | null = null;
     private _channelSetupRerunRequested: boolean = false;
@@ -258,11 +260,16 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._config = config;
 
         // Load mode
-        const storedMode = safeLocalStorageGet(STORAGE_KEYS.MODE) as AppMode | null;
+        const storedMode = safeLocalStorageGet(STORAGE_KEYS.MODE);
         if (storedMode === 'demo') {
             this._mode = 'demo';
             console.warn('[Orchestrator] Running in DEMO MODE');
+        } else if (storedMode === 'real') {
+            this._mode = 'real';
         } else {
+            if (storedMode !== null) {
+                console.warn('[Orchestrator] Ignoring invalid persisted mode value:', storedMode);
+            }
             this._mode = 'real';
         }
 
@@ -588,6 +595,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     async createChannelsFromSetup(
         config: ChannelSetupConfig
     ): Promise<ChannelBuildSummary> {
+        if (this._mode === 'demo') {
+            throw new Error('Demo Mode: channel setup is disabled');
+        }
         if (!this._channelManager || !this._plexLibrary) {
             throw new Error('Channel manager not initialized');
         }
@@ -777,6 +787,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
             throw e;
         } finally {
+            builder.cancelPendingRetries();
             safeLocalStorageRemove(tmpStorageKey);
             safeLocalStorageRemove(tmpCurrentKey);
         }
@@ -1679,95 +1690,120 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         if (this._startupInProgress) {
-            console.warn('[Orchestrator] Startup already in progress');
-            return;
+            console.warn('[Orchestrator] Startup already in progress; queuing follow-up run');
+            this._startupQueuedPhase = this._startupQueuedPhase === null
+                ? startPhase
+                : (Math.min(this._startupQueuedPhase, startPhase) as 1 | 2 | 3 | 4 | 5);
+            return new Promise((resolve) => {
+                this._startupQueuedWaiters.push(resolve);
+            });
         }
 
         this._startupInProgress = true;
-        this._ready = false;
-
-        // Force phase to initializing to ensure 'ready' event is emitted at the end
-        // even if we were already ready (e.g. changing server via 'I' key).
-        if (this._lifecycle) {
-            this._lifecycle.setPhase('initializing');
-        }
+        let phaseToRun: 1 | 2 | 3 | 4 | 5 = startPhase;
 
         try {
-            if (startPhase <= 1) {
-                await this._initPhase1();
-            }
+            while (true) {
+                this._ready = false;
 
-            if (startPhase <= 2) {
-                const authValid = await this._initPhase2();
-                if (!authValid) {
-                    console.warn('[Orchestrator] Phase 2 failed (auth not valid)');
-                    return;
+                // Force phase to initializing to ensure 'ready' event is emitted at the end
+                // even if we were already ready (e.g. changing server via 'I' key).
+                if (this._lifecycle) {
+                    this._lifecycle.setPhase('initializing');
                 }
-            }
 
-            if (startPhase <= 3) {
-                console.warn('[Orchestrator] Starting Phase 3 (Plex Connection)');
-                const plexConnected = await this._initPhase3();
-                if (!plexConnected) {
-                    console.warn('[Orchestrator] Phase 3 failed (not connected)');
-                    return;
+                if (phaseToRun <= 1) {
+                    await this._initPhase1();
                 }
-            }
 
-            if (startPhase <= 4) {
-                console.warn('[Orchestrator] Starting Phase 4 (Channels & Player)');
-                await this._initPhase4();
-            }
-
-            if (startPhase <= 5) {
-                console.warn('[Orchestrator] Starting Phase 5 (EPG)');
-                await this._initPhase5();
-            }
-
-            console.warn('[Orchestrator] Phases complete. Setting up wiring.');
-            this._setupEventWiring();
-            this._ready = true;
-            if (this._lifecycle) {
-                this._lifecycle.setPhase('ready');
-            }
-
-            if (this._navigation) {
-                const shouldRunSetup = this._shouldRunChannelSetup();
-                if (shouldRunSetup) {
-                    console.warn('[Orchestrator] Channel setup required. Navigating to setup wizard.');
-                    this._navigation.goTo('channel-setup');
-                } else {
-                    console.warn('[Orchestrator] Navigating to player');
-                    this._navigation.goTo('player');
-                    if (this._channelManager) {
-                        console.warn('[Orchestrator] Switching to current channel');
-
-                        let channelToPlay = this._channelManager.getCurrentChannel();
-
-                        // Fallback: If no current channel but we have channels, pick the first one
-                        if (!channelToPlay) {
-                            const allChannels = this._channelManager.getAllChannels();
-                            const firstChannel = allChannels[0];
-                            if (firstChannel) {
-                                channelToPlay = firstChannel;
-                                console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
-                            }
+                if (phaseToRun <= 2) {
+                    const authValid = await this._initPhase2();
+                    if (!authValid) {
+                        console.warn('[Orchestrator] Phase 2 failed (auth not valid)');
+                        if (this._startupQueuedPhase === null) {
+                            break;
                         }
+                        phaseToRun = this._startupQueuedPhase;
+                        this._startupQueuedPhase = null;
+                        continue;
+                    }
+                }
 
-                        if (channelToPlay) {
-                            await this.switchToChannel(channelToPlay.id);
-                        } else {
-                            console.warn('[Orchestrator] No current channel found. Redirecting to Server Select.');
-                            this.openServerSelect();
+                if (phaseToRun <= 3) {
+                    console.warn('[Orchestrator] Starting Phase 3 (Plex Connection)');
+                    const plexConnected = await this._initPhase3();
+                    if (!plexConnected) {
+                        console.warn('[Orchestrator] Phase 3 failed (not connected)');
+                        if (this._startupQueuedPhase === null) {
+                            break;
+                        }
+                        phaseToRun = this._startupQueuedPhase;
+                        this._startupQueuedPhase = null;
+                        continue;
+                    }
+                }
+
+                if (phaseToRun <= 4) {
+                    console.warn('[Orchestrator] Starting Phase 4 (Channels & Player)');
+                    await this._initPhase4();
+                }
+
+                if (phaseToRun <= 5) {
+                    console.warn('[Orchestrator] Starting Phase 5 (EPG)');
+                    await this._initPhase5();
+                }
+
+                console.warn('[Orchestrator] Phases complete. Setting up wiring.');
+                this._setupEventWiring();
+                this._ready = true;
+                if (this._lifecycle) {
+                    this._lifecycle.setPhase('ready');
+                }
+
+                if (this._navigation) {
+                    const shouldRunSetup = this._shouldRunChannelSetup();
+                    if (shouldRunSetup) {
+                        console.warn('[Orchestrator] Channel setup required. Navigating to setup wizard.');
+                        this._navigation.goTo('channel-setup');
+                    } else {
+                        console.warn('[Orchestrator] Navigating to player');
+                        this._navigation.goTo('player');
+                        if (this._channelManager) {
+                            console.warn('[Orchestrator] Switching to current channel');
+
+                            let channelToPlay = this._channelManager.getCurrentChannel();
+
+                            // Fallback: If no current channel but we have channels, pick the first one
+                            if (!channelToPlay) {
+                                const allChannels = this._channelManager.getAllChannels();
+                                const firstChannel = allChannels[0];
+                                if (firstChannel) {
+                                    channelToPlay = firstChannel;
+                                    console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
+                                }
+                            }
+
+                            if (channelToPlay) {
+                                await this.switchToChannel(channelToPlay.id);
+                            } else {
+                                console.warn('[Orchestrator] No current channel found. Redirecting to Server Select.');
+                                this.openServerSelect();
+                            }
                         }
                     }
                 }
+
+                console.warn('[Orchestrator] Startup sequence finished successfully');
+
+                this._clearAuthResume();
+                this._clearServerResume();
+
+                if (this._startupQueuedPhase === null) {
+                    break;
+                }
+                phaseToRun = this._startupQueuedPhase;
+                this._startupQueuedPhase = null;
             }
-
-            console.warn('[Orchestrator] Startup sequence finished successfully');
-
-            this._clearAuthResume();
-            this._clearServerResume();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
             this.handleGlobalError(
@@ -1780,6 +1816,16 @@ export class AppOrchestrator implements IAppOrchestrator {
             );
         } finally {
             this._startupInProgress = false;
+            this._startupQueuedPhase = null;
+            const waiters = this._startupQueuedWaiters;
+            this._startupQueuedWaiters = [];
+            for (const resolve of waiters) {
+                try {
+                    resolve();
+                } catch {
+                    // Ignore waiter failures
+                }
+            }
         }
     }
 
@@ -1873,10 +1919,34 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (!parsed || parsed.serverId !== serverId) {
                 return null;
             }
-            if (!Array.isArray(parsed.selectedLibraryIds)) {
+            if (
+                !Array.isArray(parsed.selectedLibraryIds) ||
+                !parsed.selectedLibraryIds.every((id) => typeof id === 'string')
+            ) {
                 return null;
             }
-            if (!parsed.enabledStrategies) {
+            const strategies = parsed.enabledStrategies;
+            if (!strategies || typeof strategies !== 'object') {
+                return null;
+            }
+
+            const requiredKeys: Array<keyof ChannelSetupConfig['enabledStrategies']> = [
+                'collections',
+                'libraryFallback',
+                'playlists',
+                'genres',
+                'directors',
+            ];
+            for (const key of requiredKeys) {
+                if (typeof (strategies as Record<string, unknown>)[key] !== 'boolean') {
+                    return null;
+                }
+            }
+
+            if (typeof parsed.createdAt !== 'number' || !Number.isFinite(parsed.createdAt)) {
+                return null;
+            }
+            if (typeof parsed.updatedAt !== 'number' || !Number.isFinite(parsed.updatedAt)) {
                 return null;
             }
             return parsed as ChannelSetupRecord;
@@ -2030,7 +2100,18 @@ export class AppOrchestrator implements IAppOrchestrator {
                 // Special case: if Direct playback fails due to container/codec support, retry via HLS Direct Stream.
                 // This is critical for MKV-heavy libraries on older webOS versions.
                 if (error.code === 'PLAYBACK_FORMAT_UNSUPPORTED') {
-                    void this._attemptTranscodeFallbackForCurrentProgram('PLAYBACK_FORMAT_UNSUPPORTED');
+                    void (async (): Promise<void> => {
+                        try {
+                            const ok = await this._attemptTranscodeFallbackForCurrentProgram(
+                                'PLAYBACK_FORMAT_UNSUPPORTED'
+                            );
+                            if (!ok) {
+                                this._handlePlaybackFailure('video-player', error);
+                            }
+                        } catch (fallbackError) {
+                            this._handlePlaybackFailure('video-player', fallbackError);
+                        }
+                    })();
                     return;
                 }
                 this._handlePlaybackFailure('video-player', error);
@@ -2561,6 +2642,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     toggleDemoMode(): void {
         const newMode: AppMode = this._mode === 'real' ? 'demo' : 'real';
         safeLocalStorageSet(STORAGE_KEYS.MODE, newMode);
-        window.location.reload();
+        if (typeof window !== 'undefined') {
+            window.location.reload();
+        }
     }
 }

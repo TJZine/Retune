@@ -182,7 +182,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             };
         } catch (error) {
             // Avoid leaking sessions when stream resolution fails mid-flight
+            const session = this._state.activeSessions.get(sessionId);
+            const positionMs = session ? session.lastReportedPositionMs : 0;
             this._state.activeSessions.delete(sessionId);
+
+            // Ensure sessionStart has a corresponding sessionEnd for consumers.
+            this._emitter.emit('sessionEnd', {
+                sessionId,
+                itemKey: request.itemKey,
+                positionMs,
+            });
             throw error;
         }
     }
@@ -714,6 +723,17 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const url = new URL('/video/:/transcode/universal/start.m3u8', baseUri);
         url.search = params.toString();
         try {
+            const shouldLogTranscodeDebug = ((): boolean => {
+                try {
+                    return localStorage.getItem('retune_debug_transcode') === '1';
+                } catch {
+                    return false;
+                }
+            })();
+            if (!shouldLogTranscodeDebug) {
+                return url.toString();
+            }
+
             const debugUrl = new URL(url.toString());
             if (debugUrl.searchParams.has('X-Plex-Token')) {
                 debugUrl.searchParams.set('X-Plex-Token', 'REDACTED');
