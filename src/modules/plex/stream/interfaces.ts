@@ -86,6 +86,11 @@ export interface PlexStreamResolverConfig {
     getAuthHeaders: () => Record<string, string>;
     /** Function to get current server URI */
     getServerUri: () => string | null;
+    /**
+     * Optional: Function to get the currently selected server connection metadata.
+     * Used to classify transcode requests as LAN vs WAN when possible.
+     */
+    getSelectedConnection?: () => { uri: string; local: boolean; relay: boolean } | null;
     /** Function to get an HTTPS connection (for mixed content fallback) */
     getHttpsConnection: () => { uri: string } | null;
     /** Function to get a relay connection (for mixed content fallback) */

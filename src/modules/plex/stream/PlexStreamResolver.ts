@@ -491,7 +491,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 return null;
             }
         })();
-        const location = relayOrigin && baseOrigin && relayOrigin === baseOrigin ? 'wan' : 'lan';
+        const location = ((): 'lan' | 'wan' | null => {
+            const selectedConn = this._config.getSelectedConnection?.() ?? null;
+            if (selectedConn) {
+                if (selectedConn.relay) return 'wan';
+                return selectedConn.local ? 'lan' : 'wan';
+            }
+            // Fallback: only classify as WAN if we are clearly using a relay origin.
+            if (relayOrigin && baseOrigin && relayOrigin === baseOrigin) {
+                return 'wan';
+            }
+            // Unknown: avoid misclassifying WAN as LAN.
+            return null;
+        })();
 
         const params = new URLSearchParams();
         params.set('path', metadataPath);
@@ -513,7 +525,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('subtitleSize', String(subtitleSize));
             params.set('audioBoost', String(audioBoost));
             params.set('maxVideoBitrate', String(maxBitrate));
-            params.set('location', location);
+            if (location) {
+                params.set('location', location);
+            }
             params.set('addDebugOverlay', '0');
             params.set('autoAdjustQuality', '0');
             params.set('mediaBufferSize', '102400');
@@ -525,7 +539,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('directPlay', '0');
             params.set('directStream', '1');
             params.set('maxVideoBitrate', String(maxBitrate));
-            params.set('location', location);
+            if (location) {
+                params.set('location', location);
+            }
         }
 
         // Explicitly declare capabilities to improve Direct Stream decisions (audio-only transcode, no video transcode).

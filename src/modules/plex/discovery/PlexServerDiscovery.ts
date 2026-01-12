@@ -180,6 +180,10 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (retryScheduled) {
                     continue;
                 }
+                // Brief backoff if all variants in this attempt failed with 5xx to avoid hammering plex.tv.
+                if (lastNonOkResponse && attempt < maxAttempts - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                }
             }
 
             if (!response) {

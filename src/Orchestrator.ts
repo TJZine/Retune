@@ -317,6 +317,11 @@ export class AppOrchestrator implements IAppOrchestrator {
                 }
                 return null;
             },
+            getSelectedConnection: () => {
+                const conn = this._plexDiscovery?.getSelectedConnection() ?? null;
+                if (!conn) return null;
+                return { uri: conn.uri, local: conn.local, relay: conn.relay };
+            },
             getHttpsConnection: () => {
                 const conn = this._plexDiscovery?.getHttpsConnection() ?? null;
                 if (conn) return { uri: conn.uri };

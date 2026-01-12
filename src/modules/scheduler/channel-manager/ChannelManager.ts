@@ -91,7 +91,12 @@ function isNetworkError(error: unknown): boolean {
     );
 }
 
-function isValidContentSource(source: unknown): source is ChannelContentSource {
+function isValidContentSource(source: unknown, depth: number = 0): source is ChannelContentSource {
+    // Guard against excessive nesting in corrupted storage (mixed sources can be recursive).
+    // JSON cannot represent cyclic references, so a depth limit is sufficient here.
+    if (depth > 25) {
+        return false;
+    }
     if (!source || typeof source !== 'object') {
         return false;
     }
@@ -154,7 +159,10 @@ function isValidContentSource(source: unknown): source is ChannelContentSource {
                 (src['items'] as unknown[]).every((item) => isValidManualItem(item))
             );
         case 'mixed':
-            return Array.isArray(src['sources']) && (src['sources'] as unknown[]).every((s) => isValidContentSource(s));
+            return (
+                Array.isArray(src['sources']) &&
+                (src['sources'] as unknown[]).every((s) => isValidContentSource(s, depth + 1))
+            );
         default:
             return false;
     }
@@ -286,7 +294,12 @@ export class ChannelManager implements IChannelManager {
                 ? requestedCurrent
                 : fallbackCurrent;
 
-        await this.saveChannels();
+        try {
+            await this.saveChannels();
+        } catch (e) {
+            // Best-effort persistence: keep in-memory state and warn rather than failing the operation.
+            this._logger.warn('Failed to persist channels during replaceAllChannels', e);
+        }
 
         if (this._state.currentChannelId) {
             try {
@@ -814,7 +827,7 @@ export class ChannelManager implements IChannelManager {
             typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
 
         if (version !== STORAGE_VERSION) {
-            this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), attempting migration`);
+            this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
         }
 
         return {

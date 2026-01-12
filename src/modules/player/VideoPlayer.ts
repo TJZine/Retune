@@ -117,7 +117,6 @@ export class VideoPlayer implements IVideoPlayer {
 
     /** Simulation timer for Demo Mode */
     private _simulationTimer: ReturnType<typeof setInterval> | null = null;
-    private _statusUpdateInterval: ReturnType<typeof setInterval> | null = null;
     private _demoLoadTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private _demoLoadToken: number = 0;
 
@@ -209,10 +208,6 @@ export class VideoPlayer implements IVideoPlayer {
         if (this._simulationTimer) {
             clearInterval(this._simulationTimer);
             this._simulationTimer = null;
-        }
-        if (this._statusUpdateInterval) {
-            clearInterval(this._statusUpdateInterval);
-            this._statusUpdateInterval = null;
         }
         if (this._demoLoadTimeoutId !== null) {
             clearTimeout(this._demoLoadTimeoutId);
@@ -423,10 +418,6 @@ export class VideoPlayer implements IVideoPlayer {
         if (this._simulationTimer) {
             clearInterval(this._simulationTimer);
             this._simulationTimer = null;
-        }
-        if (this._statusUpdateInterval) {
-            clearInterval(this._statusUpdateInterval);
-            this._statusUpdateInterval = null;
         }
 
         // Sync media session metadata if enabled (clears metadata)

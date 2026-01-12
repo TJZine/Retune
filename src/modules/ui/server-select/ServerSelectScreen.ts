@@ -267,13 +267,22 @@ export class ServerSelectScreen {
         this._setStatus(`Connecting to ${server.name}…`, '');
         this._detailEl.textContent = '';
 
-        const success = await this._orchestrator.selectServer(server.id);
-        if (success) {
-            this._setStatus(`Connected to ${server.name}.`, 'Continuing startup…');
-            return;
+        try {
+            const success = await this._orchestrator.selectServer(server.id);
+            if (success) {
+                this._setStatus(`Connected to ${server.name}.`, 'Continuing startup…');
+                return;
+            }
+            this._setStatus('Connection failed.', '');
+            this._detailEl.textContent = '';
+            this._errorEl.textContent = 'Unable to use the selected server.';
+        } catch (error) {
+            this._clearError();
+            this._setStatus('Connection failed.', '');
+            this._detailEl.textContent = '';
+            this._handleError(error, 'Unable to use the selected server.');
+            console.error('[ServerSelect] Failed to select server:', error);
         }
-        this._setStatus('Connection failed.', '');
-        this._errorEl.textContent = 'Unable to use the selected server.';
     }
 
     private _buildServerMeta(server: PlexServer): string {

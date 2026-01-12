@@ -26,6 +26,9 @@ export class AuthScreen {
     private _activeCode: string | null = null;
     private _retryFocusableRegistered: boolean = false;
     private _cancelHasRetryNeighbor: boolean = false;
+    private readonly _handleRequestClick: () => void;
+    private readonly _handleCancelClick: () => void;
+    private readonly _handleRetryClick: () => void;
 
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
         this._container = container;
@@ -53,24 +56,30 @@ export class AuthScreen {
         const pin = document.createElement('div');
         pin.className = 'pin-code';
         pin.textContent = '----';
+        pin.setAttribute('aria-live', 'polite');
+        pin.setAttribute('aria-label', 'PIN code');
         panel.appendChild(pin);
         this._pinEl = pin;
 
         const status = document.createElement('div');
         status.className = 'screen-status';
         status.textContent = 'Ready to request a PIN.';
+        status.setAttribute('aria-live', 'polite');
         panel.appendChild(status);
         this._statusEl = status;
 
         const detail = document.createElement('div');
         detail.className = 'screen-detail';
         detail.textContent = '';
+        detail.setAttribute('aria-live', 'polite');
         panel.appendChild(detail);
         this._detailEl = detail;
 
         const error = document.createElement('div');
         error.className = 'screen-error';
         error.textContent = '';
+        error.setAttribute('role', 'alert');
+        error.setAttribute('aria-live', 'assertive');
         panel.appendChild(error);
         this._errorEl = error;
 
@@ -81,9 +90,10 @@ export class AuthScreen {
         requestButton.id = 'btn-auth-request';
         requestButton.className = 'screen-button';
         requestButton.textContent = 'Request PIN';
-        requestButton.addEventListener('click', () => {
+        this._handleRequestClick = (): void => {
             this._handleRequestPin().catch(console.error);
-        });
+        };
+        requestButton.addEventListener('click', this._handleRequestClick);
         buttonRow.appendChild(requestButton);
         this._requestButton = requestButton;
 
@@ -93,9 +103,10 @@ export class AuthScreen {
         cancelButton.className = 'screen-button secondary';
         cancelButton.textContent = 'Cancel';
         cancelButton.disabled = true;
-        cancelButton.addEventListener('click', () => {
+        this._handleCancelClick = (): void => {
             this._handleCancel().catch(console.error);
-        });
+        };
+        cancelButton.addEventListener('click', this._handleCancelClick);
         buttonRow.appendChild(cancelButton);
         this._cancelButton = cancelButton;
 
@@ -105,15 +116,23 @@ export class AuthScreen {
         retryButton.className = 'screen-button secondary';
         retryButton.textContent = 'Retry';
         retryButton.style.display = 'none';
-        retryButton.addEventListener('click', () => {
+        this._handleRetryClick = (): void => {
             this._handleRequestPin().catch(console.error);
-        });
+        };
+        retryButton.addEventListener('click', this._handleRetryClick);
         buttonRow.appendChild(retryButton);
         this._retryButton = retryButton;
 
 
         panel.appendChild(buttonRow);
         this._container.appendChild(panel);
+    }
+
+    destroy(): void {
+        this.hide();
+        this._requestButton.removeEventListener('click', this._handleRequestClick);
+        this._cancelButton.removeEventListener('click', this._handleCancelClick);
+        this._retryButton.removeEventListener('click', this._handleRetryClick);
     }
 
     show(): void {
