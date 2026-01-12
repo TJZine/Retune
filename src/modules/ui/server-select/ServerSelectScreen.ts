@@ -260,7 +260,7 @@ export class ServerSelectScreen {
             return;
         }
         this._setStatus('Connection failed.', '');
-        this._errorEl.textContent = 'Unable to connect to the selected server.';
+        this._errorEl.textContent = 'Unable to use the selected server.';
     }
 
     private _buildServerMeta(server: PlexServer): string {

@@ -118,6 +118,8 @@ export class VideoPlayer implements IVideoPlayer {
     /** Simulation timer for Demo Mode */
     private _simulationTimer: ReturnType<typeof setInterval> | null = null;
     private _statusUpdateInterval: ReturnType<typeof setInterval> | null = null;
+    private _demoLoadTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    private _demoLoadToken: number = 0;
 
     /** Whether Media Session is enabled */
     private _mediaSessionEnabled: boolean = false;
@@ -278,8 +280,29 @@ export class VideoPlayer implements IVideoPlayer {
             // We simulate the ready state and metadata loading.
             this._videoElement.style.display = 'none'; // Ensure video is hidden
 
+            // Ensure duration/currentTime are available immediately for the simulation timer.
+            this._state.durationMs = descriptor.durationMs;
+            if (descriptor.startPositionMs > 0) {
+                this._state.currentTimeMs = descriptor.startPositionMs;
+            }
+
+            this._demoLoadToken += 1;
+            const token = this._demoLoadToken;
+            if (this._demoLoadTimeoutId !== null) {
+                clearTimeout(this._demoLoadTimeoutId);
+                this._demoLoadTimeoutId = null;
+            }
+
             // Simulate async load delay
-            setTimeout(() => {
+            this._demoLoadTimeoutId = setTimeout(() => {
+                if (token !== this._demoLoadToken) {
+                    return;
+                }
+                if (this._state.currentDescriptor !== descriptor) {
+                    return;
+                }
+                this._demoLoadTimeoutId = null;
+
                 this._state.durationMs = descriptor.durationMs;
                 this._state.activeAudioId = 'english'; // Fake audio track
                 this._emitter.emit('mediaLoaded', {
@@ -295,7 +318,12 @@ export class VideoPlayer implements IVideoPlayer {
                 }
 
                 // Simulate 'canplay' equivalent state
-                this._updateStatus('paused');
+                if (this._state.status === 'loading') {
+                    this._updateStatus('paused');
+                } else {
+                    // Avoid clobbering active playback state (e.g., playing) due to stale demo-load completion.
+                    this._emitStateChange();
+                }
             }, 500);
 
             return;
@@ -345,6 +373,13 @@ export class VideoPlayer implements IVideoPlayer {
     public unloadStream(): void {
         if (!this._videoElement) {
             return;
+        }
+
+        // Cancel any pending demo-load completion callback.
+        this._demoLoadToken += 1;
+        if (this._demoLoadTimeoutId !== null) {
+            clearTimeout(this._demoLoadTimeoutId);
+            this._demoLoadTimeoutId = null;
         }
 
         // Cancel pending retries to prevent stream resurrection

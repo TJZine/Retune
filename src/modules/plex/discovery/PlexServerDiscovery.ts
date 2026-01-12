@@ -121,7 +121,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 variants.push({ url: clientsBaseUrl });
             }
 
-            const maxAttempts = 2;
+            const maxAttempts = PLEX_DISCOVERY_CONSTANTS.MAX_DISCOVERY_ATTEMPTS;
             let response: Response | null = null;
             let lastError: unknown = null;
 
@@ -153,7 +153,9 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                     if (response.status === 429 && attempt < maxAttempts - 1) {
                         const retryAfter = response.headers.get('Retry-After');
                         const parsed = retryAfter ? parseInt(retryAfter, 10) : NaN;
-                        const delayMs = Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : 2000;
+                        const delayMs = Number.isFinite(parsed) && parsed > 0
+                            ? parsed * 1000
+                            : PLEX_DISCOVERY_CONSTANTS.RATE_LIMIT_DEFAULT_DELAY_MS;
                         await new Promise((resolve) => setTimeout(resolve, delayMs));
                         response = null;
                         retryScheduled = true;

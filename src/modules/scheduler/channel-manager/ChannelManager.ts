@@ -101,6 +101,27 @@ function isValidContentSource(source: unknown): source is ChannelContentSource {
         return false;
     }
 
+    const isValidManualItem = (item: unknown): boolean => {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+        const obj = item as Record<string, unknown>;
+        const ratingKey = obj['ratingKey'];
+        const title = obj['title'];
+        const durationMs = obj['durationMs'];
+
+        return (
+            typeof ratingKey === 'string' &&
+            ratingKey.length > 0 &&
+            ratingKey !== 'undefined' &&
+            typeof title === 'string' &&
+            title.length > 0 &&
+            typeof durationMs === 'number' &&
+            Number.isFinite(durationMs) &&
+            durationMs > 0
+        );
+    };
+
     switch (type) {
         case 'library':
             return (
@@ -127,7 +148,11 @@ function isValidContentSource(source: unknown): source is ChannelContentSource {
                 src['playlistKey'] !== 'undefined'
             );
         case 'manual':
-            return Array.isArray(src['items']) && (src['items'] as unknown[]).length > 0;
+            return (
+                Array.isArray(src['items']) &&
+                (src['items'] as unknown[]).length > 0 &&
+                (src['items'] as unknown[]).every((item) => isValidManualItem(item))
+            );
         case 'mixed':
             return Array.isArray(src['sources']) && (src['sources'] as unknown[]).every((s) => isValidContentSource(s));
         default:

@@ -30,6 +30,12 @@ export const PLEX_DISCOVERY_CONSTANTS = {
     /** Discovery request timeout (10 seconds) */
     DISCOVERY_TIMEOUT_MS: 10000,
 
+    /** Maximum attempts for the discovery loop (variant set per attempt) */
+    MAX_DISCOVERY_ATTEMPTS: 2,
+
+    /** Default delay (ms) when rate-limited without Retry-After */
+    RATE_LIMIT_DEFAULT_DELAY_MS: 2000,
+
     /** Maximum concurrent connection tests */
     MAX_CONCURRENT_TESTS: 3,
 

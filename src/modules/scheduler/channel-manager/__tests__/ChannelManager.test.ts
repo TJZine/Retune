@@ -442,6 +442,36 @@ describe('ChannelManager', () => {
             expect(newManager.getAllChannels()).toHaveLength(0);
         });
 
+        it('should prune channels with malformed manual item shapes on load', async () => {
+            await manager.createChannel({
+                name: 'Bad Manual Channel',
+                contentSource: createMockContentSource(),
+            });
+            const channel = manager.getAllChannels()[0]!;
+
+            mockLocalStorage.clear();
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [{
+                    ...channel,
+                    contentSource: {
+                        type: 'manual',
+                        items: [
+                            // durationMs has wrong type
+                            { ratingKey: 'rk1', title: 'Manual Item', durationMs: '1000' },
+                        ],
+                    },
+                }],
+                channelOrder: [channel.id],
+                currentChannelId: channel.id,
+                savedAt: Date.now(),
+            });
+
+            const newManager = new ChannelManager({ plexLibrary: mockLibrary });
+            await newManager.loadChannels();
+            expect(newManager.getAllChannels()).toHaveLength(0);
+        });
+
         it('should export channels as JSON', async () => {
             await manager.createChannel({
                 name: 'Export Test',

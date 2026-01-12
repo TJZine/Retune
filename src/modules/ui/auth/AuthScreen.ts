@@ -136,7 +136,14 @@ export class AuthScreen {
         this._renderPin('----');
 
         if (this._activePinId !== null) {
-            await this._orchestrator.cancelPin(this._activePinId);
+            // Cancel any in-flight poll and best-effort cancel server-side PIN.
+            this._pollToken += 1;
+            this._stopElapsedTimer();
+            try {
+                await this._orchestrator.cancelPin(this._activePinId);
+            } catch (error) {
+                console.warn('[AuthScreen] Failed to cancel PIN before requesting a new one:', error);
+            }
         }
 
         try {

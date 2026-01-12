@@ -228,6 +228,17 @@ export class ContentResolver {
         for (let i = 0; i < source.items.length; i++) {
             const manualItem = source.items[i];
             if (!manualItem) continue;
+            if (
+                typeof manualItem.ratingKey !== 'string' ||
+                manualItem.ratingKey.length === 0 ||
+                typeof manualItem.title !== 'string' ||
+                manualItem.title.length === 0 ||
+                typeof manualItem.durationMs !== 'number' ||
+                !Number.isFinite(manualItem.durationMs) ||
+                manualItem.durationMs <= 0
+            ) {
+                continue;
+            }
 
             // Build resolved item from cached manual metadata
             results.push({

@@ -1275,7 +1275,7 @@ describe('PlexServerDiscovery', () => {
                 const discoverPromise = discovery.discoverServers();
 
                 // Advance past the 2-second default delay
-                await jest.advanceTimersByTimeAsync(2000);
+                await jest.advanceTimersByTimeAsync(PLEX_DISCOVERY_CONSTANTS.RATE_LIMIT_DEFAULT_DELAY_MS);
 
                 const result = await discoverPromise;
 
@@ -1308,7 +1308,7 @@ describe('PlexServerDiscovery', () => {
                 });
 
                 // Advance past retry delay to allow both attempts
-                await jest.advanceTimersByTimeAsync(2000);
+                await jest.advanceTimersByTimeAsync(PLEX_DISCOVERY_CONSTANTS.RATE_LIMIT_DEFAULT_DELAY_MS);
                 await discoverPromise;
 
                 // Should throw after max attempts (2 attempts per code)

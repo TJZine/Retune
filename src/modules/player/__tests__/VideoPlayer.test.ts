@@ -245,6 +245,28 @@ describe('VideoPlayer', () => {
             expect(container.querySelector('source')).toBeNull();
         });
 
+        it('should not overwrite playing state after demo-mode load delay', async () => {
+            const demoPlayer = new VideoPlayer();
+            await demoPlayer.initialize(createMockConfig({ demoMode: true }));
+
+            const descriptor = createMockDescriptor({
+                startPositionMs: 0,
+                durationMs: 10000,
+                mediaMetadata: { title: 'Demo', durationMs: 10000 },
+            });
+
+            await demoPlayer.loadStream(descriptor);
+            await demoPlayer.play();
+
+            expect(demoPlayer.getState().status).toBe('playing');
+
+            await jest.advanceTimersByTimeAsync(500);
+
+            expect(demoPlayer.getState().status).toBe('playing');
+
+            demoPlayer.destroy();
+        });
+
         it('should update status to loading', async () => {
             const descriptor = createMockDescriptor();
             const stateChangeHandler = jest.fn();

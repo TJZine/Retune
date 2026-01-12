@@ -550,9 +550,8 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (ok) {
             // If we're already running (or resuming from the server-select screen),
             // re-run the channel/player/EPG phases to swap to the selected server.
-            this._runStartup(4).catch((e) => {
-                console.error('[Orchestrator] Server select startup continuation failed:', e);
-            });
+            await this._runStartup(4);
+            return this._ready;
         }
         return ok;
     }
