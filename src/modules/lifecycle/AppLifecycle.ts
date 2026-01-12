@@ -109,14 +109,12 @@ export class AppLifecycle implements IAppLifecycle {
         // Restore state
         const savedState = await this.restoreState();
 
-        if (savedState !== null && savedState.plexAuth !== null) {
-            // Have credentials, try to resume
-            await this._transitionPhase('loading_data');
+        if (savedState !== null) {
             this._emitter.emit('stateRestored', savedState);
-        } else {
-            // No credentials, need auth
-            await this._transitionPhase('authenticating');
         }
+
+        // Auth is managed by PlexAuth storage; default to authenticating here.
+        await this._transitionPhase('authenticating');
     }
 
     /**
@@ -245,12 +243,15 @@ export class AppLifecycle implements IAppLifecycle {
                 TIMING_CONFIG.NETWORK_CHECK_TIMEOUT_MS
             ) as unknown as number;
 
-            const response = await fetch('https://plex.tv/api/v2/ping', {
+            const response = await fetch('https://plex.tv', {
                 method: 'HEAD',
                 signal: controller.signal,
+                mode: 'no-cors' // Use no-cors to avoid CORS errors on opaque network check
             });
 
-            const available = response.ok;
+            // With no-cors, response is typically opaque (type: 'opaque', ok: false, status: 0).
+            // A successful fetch that does not throw is sufficient to treat the network as available.
+            const available = response.type === 'opaque' || response.ok;
             if (available !== this._isNetworkAvailable) {
                 this._isNetworkAvailable = available;
                 this._emitter.emit('networkChange', { isAvailable: available });

@@ -73,7 +73,7 @@ export class PlexAuth implements IPlexAuth {
      */
     public async requestPin(): Promise<PlexPinRequest> {
         const url = PLEX_AUTH_CONSTANTS.PLEX_TV_BASE_URL +
-            PLEX_AUTH_CONSTANTS.PIN_ENDPOINT + '?strong=true';
+            PLEX_AUTH_CONSTANTS.PIN_ENDPOINT;
         const headers = buildRequestHeaders(this._state.config);
 
         const response = await fetchWithRetry(url, {
@@ -251,7 +251,12 @@ export class PlexAuth implements IPlexAuth {
             version: PLEX_AUTH_CONSTANTS.STORAGE_VERSION,
             data: auth,
         };
-        localStorage.setItem(PLEX_AUTH_CONSTANTS.STORAGE_KEY, JSON.stringify(stored));
+        try {
+            localStorage.setItem(PLEX_AUTH_CONSTANTS.STORAGE_KEY, JSON.stringify(stored));
+        } catch (error) {
+            // Storage can be blocked or quota-limited; keep the token in-memory for this session.
+            console.warn('[PlexAuth] Failed to persist credentials to localStorage:', error);
+        }
         this._state.currentToken = auth.token;
         this._state.isValidated = true;
         this._emitter.emit('authChange', true);
@@ -261,7 +266,11 @@ export class PlexAuth implements IPlexAuth {
      * Clear credentials from localStorage.
      */
     public async clearCredentials(): Promise<void> {
-        localStorage.removeItem(PLEX_AUTH_CONSTANTS.STORAGE_KEY);
+        try {
+            localStorage.removeItem(PLEX_AUTH_CONSTANTS.STORAGE_KEY);
+        } catch (error) {
+            console.warn('[PlexAuth] Failed to clear credentials from localStorage:', error);
+        }
         this._state.currentToken = null;
         this._state.isValidated = false;
         this._state.pendingPin = null;

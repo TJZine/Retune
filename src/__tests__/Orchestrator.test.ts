@@ -4,7 +4,18 @@
  * @version 1.0.0
  */
 
+
 import { AppOrchestrator, type OrchestratorConfig, AppErrorCode } from '../Orchestrator';
+
+// Mock localStorage
+const mockLocalStorage = {
+    getItem: jest.fn(),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+    clear: jest.fn(),
+};
+Object.defineProperty(global, 'localStorage', { value: mockLocalStorage, configurable: true });
+
 
 // ============================================
 // Test Configuration
@@ -16,7 +27,7 @@ const mockPlexConfig = {
     version: '1.0.0',
     platform: 'webOS',
     platformVersion: '6.0',
-    device: 'lgtv',
+    device: 'LG Smart TV',
     deviceName: 'Test TV',
 };
 
@@ -107,6 +118,11 @@ jest.mock('../modules/lifecycle', () => ({
         INITIALIZATION_FAILED: 'INITIALIZATION_FAILED',
         MODULE_INIT_FAILED: 'MODULE_INIT_FAILED',
         UNRECOVERABLE: 'UNRECOVERABLE',
+        TRACK_NOT_FOUND: 'TRACK_NOT_FOUND',
+        TRACK_SWITCH_FAILED: 'TRACK_SWITCH_FAILED',
+        TRACK_SWITCH_TIMEOUT: 'TRACK_SWITCH_TIMEOUT',
+        CODEC_UNSUPPORTED: 'CODEC_UNSUPPORTED',
+        UNKNOWN: 'UNKNOWN',
     },
 }));
 
@@ -114,6 +130,7 @@ jest.mock('../modules/lifecycle', () => ({
 const mockNavigation = {
     initialize: jest.fn().mockResolvedValue(undefined),
     goTo: jest.fn(),
+    replaceScreen: jest.fn(),
     getCurrentScreen: jest.fn().mockReturnValue('player'),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
@@ -132,7 +149,7 @@ const mockPlexAuth = {
     isAuthenticated: jest.fn().mockReturnValue(true),
     getAuthHeaders: jest.fn().mockReturnValue({}),
     getCurrentUser: jest.fn().mockReturnValue(null),
-    on: jest.fn(() => jest.fn()),
+    on: jest.fn(() => ({ dispose: jest.fn() })),
 };
 
 jest.mock('../modules/plex/auth', () => ({
@@ -145,7 +162,8 @@ const mockPlexDiscovery = {
     isConnected: jest.fn().mockReturnValue(true),
     getSelectedServer: jest.fn().mockReturnValue(null),
     getServerUri: jest.fn().mockReturnValue('http://localhost:32400'),
-    on: jest.fn(() => jest.fn()),
+    clearSelection: jest.fn(),
+    on: jest.fn(() => ({ dispose: jest.fn() })),
 };
 
 jest.mock('../modules/plex/discovery', () => ({
@@ -188,12 +206,17 @@ const mockChannel = {
 
 const mockChannelManager = {
     loadChannels: jest.fn().mockResolvedValue(undefined),
+    setStorageKeys: jest.fn(),
+    replaceAllChannels: jest.fn().mockResolvedValue(undefined),
+    seedDemoChannels: jest.fn().mockResolvedValue(undefined),
+    getAllChannels: jest.fn().mockReturnValue([mockChannel]),
     getCurrentChannel: jest.fn().mockReturnValue(mockChannel),
     getChannel: jest.fn().mockReturnValue(mockChannel),
     getChannelByNumber: jest.fn().mockReturnValue(mockChannel),
     getNextChannel: jest.fn().mockReturnValue(mockChannel),
     getPreviousChannel: jest.fn().mockReturnValue(mockChannel),
     setCurrentChannel: jest.fn(),
+    deleteChannel: jest.fn().mockResolvedValue(undefined),
     resolveChannelContent: jest.fn().mockResolvedValue({
         channelId: 'ch1',
         orderedItems: [],
@@ -284,9 +307,60 @@ jest.mock('../modules/ui/epg', () => ({
 
 describe('AppOrchestrator', () => {
     let orchestrator: AppOrchestrator;
+    let schedulerHandlers: { programStart?: (program: unknown) => void };
+    let playerHandlers: { ended?: () => void; error?: (error: unknown) => void };
+    let pauseHandler: (() => void | Promise<void>) | null;
+    let resumeHandler: (() => void | Promise<void>) | null;
 
     beforeEach(() => {
         jest.clearAllMocks();
+        schedulerHandlers = {};
+        playerHandlers = {};
+        pauseHandler = null;
+        resumeHandler = null;
+
+        (mockScheduler.on as jest.Mock).mockImplementation(
+            (event: string, handler: (payload: unknown) => void) => {
+                if (event === 'programStart') {
+                    schedulerHandlers.programStart = handler;
+                }
+                return jest.fn();
+            });
+        (mockScheduler.off as jest.Mock).mockImplementation(
+            (event: string, handler: (payload: unknown) => void) => {
+                if (event === 'programStart' && schedulerHandlers.programStart === handler) {
+                    delete schedulerHandlers.programStart;
+                }
+            });
+
+        (mockVideoPlayer.on as jest.Mock).mockImplementation(
+            (event: string, handler: (payload: unknown) => void) => {
+                if (event === 'ended') {
+                    playerHandlers.ended = handler as () => void;
+                }
+                if (event === 'error') {
+                    playerHandlers.error = handler;
+                }
+                return jest.fn();
+            });
+        (mockVideoPlayer.off as jest.Mock).mockImplementation(
+            (event: string, handler: (payload: unknown) => void) => {
+                if (event === 'ended' && playerHandlers.ended === handler) {
+                    delete playerHandlers.ended;
+                }
+                if (event === 'error' && playerHandlers.error === handler) {
+                    delete playerHandlers.error;
+                }
+            });
+
+        (mockLifecycle.onPause as jest.Mock).mockImplementation(
+            (handler: () => void | Promise<void>) => {
+                pauseHandler = handler;
+            });
+        (mockLifecycle.onResume as jest.Mock).mockImplementation(
+            (handler: () => void | Promise<void>) => {
+                resumeHandler = handler;
+            });
         orchestrator = new AppOrchestrator();
     });
 
@@ -311,6 +385,7 @@ describe('AppOrchestrator', () => {
     describe('start', () => {
         beforeEach(async () => {
             await orchestrator.initialize(mockConfig);
+            mockPlexAuth.getStoredCredentials.mockResolvedValue(null);
         });
 
         it('should initialize modules in correct phase order', async () => {
@@ -438,6 +513,280 @@ describe('AppOrchestrator', () => {
                 expect(initOrder).toBeLessThan(mediaSessionOrder);
             }
         });
+
+        it('should proceed without auth UI when stored credentials exist', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+
+            await orchestrator.start();
+
+            expect(mockPlexAuth.validateToken).toHaveBeenCalledWith('valid-token');
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('player');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
+        });
+
+        it('should navigate to channel-setup when channels are empty and setup is missing', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-1' });
+            mockChannelManager.getAllChannels.mockReturnValue([]);
+            mockLocalStorage.getItem.mockImplementation((key: string) => {
+                if (key === 'retune_channel_setup_v1:server-1') return null;
+                if (key === 'retune_channels_server_v1') return null;
+                return null;
+            });
+
+            await orchestrator.start();
+
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('player');
+        });
+
+        it('should rerun setup when switching to a new server without setup record', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-2' });
+            mockChannelManager.getAllChannels.mockReturnValue([mockChannel]);
+            mockLocalStorage.getItem.mockImplementation((key: string) => {
+                if (key === 'retune_channels_server_v1') return 'server-1';
+                return null;
+            });
+
+            await orchestrator.start();
+
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
+            expect(mockChannelManager.setStorageKeys).toHaveBeenCalledWith(
+                'retune_channels_server_v1:server-2',
+                'retune_current_channel_v4:server-2'
+            );
+        });
+
+        it('should navigate to server-select when auth is valid but no selection restored', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(false);
+
+            await orchestrator.start();
+
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('server-select');
+            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
+        });
+
+        it('should wire scheduler, player, and lifecycle events after start', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+
+            await orchestrator.start();
+
+            expect(schedulerHandlers.programStart).toBeDefined();
+            expect(playerHandlers.ended).toBeDefined();
+            expect(playerHandlers.error).toBeDefined();
+            expect(pauseHandler).toBeDefined();
+            expect(resumeHandler).toBeDefined();
+
+            const program = {
+                item: {
+                    ratingKey: 'item-1',
+                    title: 'Test Item',
+                    durationMs: 60000,
+                    type: 'movie',
+                },
+                elapsedMs: 5000,
+            };
+
+            schedulerHandlers.programStart?.(program);
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(mockPlexStreamResolver.resolveStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    itemKey: 'item-1',
+                    startOffsetMs: 5000,
+                    directPlay: true,
+                })
+            );
+            expect(mockVideoPlayer.loadStream).toHaveBeenCalled();
+            expect(mockVideoPlayer.play).toHaveBeenCalled();
+
+            playerHandlers.ended?.();
+            expect(mockScheduler.skipToNext).toHaveBeenCalledTimes(1);
+
+            playerHandlers.error?.({
+                recoverable: false,
+                code: 'PLAYBACK_FAILED',
+                message: 'boom',
+            });
+            expect(mockScheduler.skipToNext).toHaveBeenCalledTimes(2);
+
+            await pauseHandler?.();
+            expect(mockVideoPlayer.pause).toHaveBeenCalled();
+            expect(mockScheduler.pauseSyncTimer).toHaveBeenCalled();
+            expect(mockLifecycle.saveState).toHaveBeenCalled();
+
+            await resumeHandler?.();
+            expect(mockScheduler.resumeSyncTimer).toHaveBeenCalled();
+            expect(mockScheduler.syncToCurrentTime).toHaveBeenCalled();
+            expect(mockVideoPlayer.play).toHaveBeenCalled();
+        });
+
+        it('retries via HLS when direct playback is unsupported (Direct Stream fallback)', async () => {
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+
+            // First attempt: direct URL (e.g., MKV direct play on a legacy TV)
+            // Fallback attempt: HLS (remux / direct stream) URL
+            mockPlexStreamResolver.resolveStream
+                .mockResolvedValueOnce({
+                    playbackUrl: 'http://test/stream.mkv',
+                    protocol: 'direct',
+                    container: 'mkv',
+                })
+                .mockResolvedValueOnce({
+                    playbackUrl: 'http://test/stream.m3u8',
+                    protocol: 'hls',
+                    container: 'mpegts',
+                });
+
+            await orchestrator.start();
+
+            const program = {
+                item: {
+                    ratingKey: 'item-1',
+                    title: 'Test Item',
+                    durationMs: 60000,
+                    type: 'movie',
+                },
+                elapsedMs: 5000,
+            };
+
+            schedulerHandlers.programStart?.(program);
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(mockPlexStreamResolver.resolveStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    itemKey: 'item-1',
+                    startOffsetMs: 5000,
+                    directPlay: true,
+                })
+            );
+
+            // Simulate the TV refusing the container (MEDIA_ERR_SRC_NOT_SUPPORTED => PLAYBACK_FORMAT_UNSUPPORTED)
+            playerHandlers.error?.({
+                recoverable: false,
+                code: 'PLAYBACK_FORMAT_UNSUPPORTED',
+                message: 'Media format not supported',
+            });
+
+            // Allow async fallback attempt to run.
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(mockPlexStreamResolver.resolveStream).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    itemKey: 'item-1',
+                    startOffsetMs: 5000,
+                    directPlay: false,
+                })
+            );
+
+            // Fallback should reload and play, not skip.
+            expect(mockVideoPlayer.loadStream).toHaveBeenCalledTimes(2);
+            expect(mockVideoPlayer.play).toHaveBeenCalledTimes(2);
+            expect(mockScheduler.skipToNext).toHaveBeenCalledTimes(0);
+        });
+    });
+
+    describe('demo mode', () => {
+        beforeEach(async () => {
+            mockLocalStorage.getItem.mockImplementation((key: string) => {
+                if (key === 'retune_mode') return 'demo';
+                return null;
+            });
+            await orchestrator.initialize(mockConfig);
+        });
+
+        it('seeds demo channels when no channels are loaded', async () => {
+            mockChannelManager.getAllChannels.mockReturnValueOnce([]);
+
+            await orchestrator.start();
+
+            expect(mockChannelManager.seedDemoChannels).toHaveBeenCalled();
+        });
+
+        it('skips Plex auth and discovery during startup', async () => {
+            await orchestrator.start();
+
+            expect(mockPlexAuth.getStoredCredentials).not.toHaveBeenCalled();
+            expect(mockPlexAuth.validateToken).not.toHaveBeenCalled();
+            expect(mockPlexDiscovery.initialize).not.toHaveBeenCalled();
+
+            expect(mockVideoPlayer.initialize).toHaveBeenCalledWith(
+                expect.objectContaining({ demoMode: true })
+            );
+
+            const ChannelManagerCtor = require('../modules/scheduler/channel-manager').ChannelManager as jest.Mock;
+            expect(ChannelManagerCtor).toHaveBeenCalled();
+            const calledWith = ChannelManagerCtor.mock.calls.map((c) => c[0] as { storageKey?: string });
+            expect(calledWith.some((cfg) => cfg?.storageKey === 'retune_channels_demo_v1')).toBe(true);
+        });
+
+        it('handles programStart without calling Plex stream resolution', async () => {
+            await orchestrator.start();
+
+            expect(schedulerHandlers.programStart).toBeDefined();
+            schedulerHandlers.programStart?.({
+                item: {
+                    ratingKey: 'demo-1-0',
+                    type: 'movie',
+                    title: 'Demo Item',
+                    fullTitle: 'Demo Item',
+                    durationMs: 600000,
+                    thumb: null,
+                    year: 0,
+                    scheduledIndex: 0,
+                },
+                scheduledStartTime: 0,
+                scheduledEndTime: 600000,
+                elapsedMs: 0,
+                remainingMs: 600000,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: true,
+            });
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(mockPlexStreamResolver.resolveStream).not.toHaveBeenCalled();
+            expect(mockVideoPlayer.loadStream).toHaveBeenCalledTimes(1);
+            expect(mockVideoPlayer.play).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('switchToChannel', () => {
@@ -493,6 +842,57 @@ describe('AppOrchestrator', () => {
 
             expect(resolveOrder).toEqual(['resolve', 'load']);
         });
+
+        // ========================================
+        // ORCH-002: Concurrent Channel Switch Guard
+        // ========================================
+
+        it('should reject concurrent channel switch attempts', async () => {
+            // Make resolveChannelContent take some time
+            let resolveDelay: () => void = (): void => { };
+            mockChannelManager.resolveChannelContent.mockImplementation(
+                (): Promise<{ channelId: string; orderedItems: never[]; resolvedAt: number }> => new Promise<{ channelId: string; orderedItems: never[]; resolvedAt: number }>((resolve) => {
+                    resolveDelay = (): void => resolve({ channelId: 'ch1', orderedItems: [], resolvedAt: Date.now() });
+                })
+            );
+
+            // Start first switch (will be pending)
+            const switch1 = orchestrator.switchToChannel('ch1');
+
+            // Attempt second switch while first is in progress
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+            const switch2 = orchestrator.switchToChannel('ch2');
+
+            // Both should resolve, but second should early-return
+            await switch2;
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('already in progress')
+            );
+            expect(mockChannelManager.resolveChannelContent).toHaveBeenCalledTimes(1);
+            expect(mockScheduler.loadChannel).not.toHaveBeenCalled();
+
+            // Complete first switch
+            resolveDelay();
+            await switch1;
+
+            consoleSpy.mockRestore();
+        });
+
+        it('should allow sequential channel switches', async () => {
+            mockChannelManager.resolveChannelContent.mockResolvedValue({
+                channelId: 'ch1',
+                orderedItems: [],
+                resolvedAt: Date.now(),
+            });
+
+            // First switch
+            await orchestrator.switchToChannel('ch1');
+            expect(mockScheduler.loadChannel).toHaveBeenCalledTimes(1);
+
+            // Second switch (should work since first is complete)
+            await orchestrator.switchToChannel('ch2');
+            expect(mockScheduler.loadChannel).toHaveBeenCalledTimes(2);
+        });
     });
 
     describe('switchToChannelByNumber', () => {
@@ -518,6 +918,23 @@ describe('AppOrchestrator', () => {
             expect(mockLifecycle.reportError).toHaveBeenCalledWith(
                 expect.objectContaining({ code: 'CHANNEL_NOT_FOUND' })
             );
+        });
+    });
+
+    describe('channel setup rerun', () => {
+        beforeEach(async () => {
+            await orchestrator.initialize(mockConfig);
+        });
+
+        it('should clear setup record and navigate to channel-setup', () => {
+            mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-3' });
+
+            orchestrator.requestChannelSetupRerun();
+
+            expect(mockLocalStorage.removeItem).toHaveBeenCalledWith(
+                'retune_channel_setup_v1:server-3'
+            );
+            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
         });
     });
 
@@ -679,4 +1096,5 @@ describe('AppOrchestrator', () => {
             expect(emitterStatus && emitterStatus.status).toBe('ready');
         });
     });
+
 });

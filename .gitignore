@@ -9,6 +9,7 @@ node_modules/
 
 # Build outputs
 dist/
+dist-ts/
 build/
 *.ipk
 *.wgt
@@ -120,6 +121,7 @@ agent-memory/
 orchestration-docs/
 prompts/
 spec-pack/*
+docs/review/*
 
 # 2. Un-ignore (keep) the specific file
 !spec-pack/artifact-2-shared-types.ts

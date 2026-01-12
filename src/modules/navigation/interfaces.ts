@@ -144,6 +144,7 @@ export type Screen =
     | 'splash'
     | 'auth'
     | 'server-select'
+    | 'channel-setup'
     | 'home'
     | 'player'
     | 'guide'

@@ -6,7 +6,10 @@
 import { ChannelManager } from '../ChannelManager';
 import type { IPlexLibraryMinimal, PlexMediaItemMinimal } from '../interfaces';
 import type { LibraryContentSource } from '../types';
-import { STORAGE_KEY, CURRENT_CHANNEL_KEY } from '../constants';
+import {
+    STORAGE_KEY,
+    CURRENT_CHANNEL_KEY,
+} from '../constants';
 
 // ============================================
 // Mock Setup
@@ -416,6 +419,90 @@ describe('ChannelManager', () => {
 
             expect(newManager.getAllChannels()).toHaveLength(1);
             expect(newManager.getAllChannels()[0]!.name).toBe('Saved Channel');
+        });
+
+        it('should not throw on malformed persisted contentSource', async () => {
+            await manager.createChannel({
+                name: 'Bad Channel',
+                contentSource: createMockContentSource(),
+            });
+            const channel = manager.getAllChannels()[0]!;
+
+            mockLocalStorage.clear();
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [{ ...channel, contentSource: null }],
+                channelOrder: [channel.id],
+                currentChannelId: channel.id,
+                savedAt: Date.now(),
+            });
+
+            const newManager = new ChannelManager({ plexLibrary: mockLibrary });
+            await expect(newManager.loadChannels()).resolves.toBeUndefined();
+            expect(newManager.getAllChannels()).toHaveLength(0);
+        });
+
+        it('should prune channels with malformed manual item shapes on load', async () => {
+            await manager.createChannel({
+                name: 'Bad Manual Channel',
+                contentSource: createMockContentSource(),
+            });
+            const channel = manager.getAllChannels()[0]!;
+
+            mockLocalStorage.clear();
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [{
+                    ...channel,
+                    contentSource: {
+                        type: 'manual',
+                        items: [
+                            // durationMs has wrong type
+                            { ratingKey: 'rk1', title: 'Manual Item', durationMs: '1000' },
+                        ],
+                    },
+                }],
+                channelOrder: [channel.id],
+                currentChannelId: channel.id,
+                savedAt: Date.now(),
+            });
+
+            const newManager = new ChannelManager({ plexLibrary: mockLibrary });
+            await newManager.loadChannels();
+            expect(newManager.getAllChannels()).toHaveLength(0);
+        });
+
+        it('should rebuild channelOrder when persisted order is empty', async () => {
+            const ch1 = await manager.createChannel({
+                name: 'Ch 10',
+                number: 10,
+                contentSource: createMockContentSource(),
+            });
+            const ch2 = await manager.createChannel({
+                name: 'Ch 2',
+                number: 2,
+                contentSource: createMockContentSource(),
+            });
+
+            mockLocalStorage.clear();
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [ch1, ch2],
+                channelOrder: [],
+                currentChannelId: 'missing',
+                savedAt: Date.now(),
+            });
+
+            const newManager = new ChannelManager({ plexLibrary: mockLibrary });
+            await newManager.loadChannels();
+
+            const loaded = newManager.getAllChannels();
+            expect(loaded).toHaveLength(2);
+            // Rebuilt order is by channel number.
+            expect(loaded[0]?.number).toBe(2);
+            expect(loaded[1]?.number).toBe(10);
+            // Current channel is sanitized to first if invalid.
+            expect(newManager.getCurrentChannel()?.id).toBe(loaded[0]?.id);
         });
 
         it('should export channels as JSON', async () => {

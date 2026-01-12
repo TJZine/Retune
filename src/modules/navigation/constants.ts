@@ -14,6 +14,8 @@ export const KEY_MAP: Map<number, RemoteButton> = new Map([
     // Navigation
     [13, 'ok'],
     [461, 'back'],  // webOS specific! Standard web uses 8 (Backspace)
+    [8, 'back'],    // Backspace for desktop keyboards
+    [27, 'back'],   // Escape for desktop keyboards
     [38, 'up'],
     [40, 'down'],
     [37, 'left'],
@@ -51,6 +53,8 @@ export const KEY_MAP: Map<number, RemoteButton> = new Map([
     // Info/Guide
     [457, 'info'],
     [458, 'guide'],
+    [73, 'info'],   // I key for desktop keyboards
+    [71, 'guide'],  // G key for desktop keyboards
 ]);
 
 /**

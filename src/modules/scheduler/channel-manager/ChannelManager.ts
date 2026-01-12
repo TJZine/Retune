@@ -11,6 +11,7 @@ import { AppErrorCode } from '../../lifecycle/types';
 import type { IChannelManager, ChannelManagerConfig, IPlexLibraryMinimal } from './interfaces';
 import type {
     ChannelConfig,
+    ChannelContentSource,
     ResolvedChannelContent,
     ImportResult,
     ChannelManagerEventMap,
@@ -90,6 +91,84 @@ function isNetworkError(error: unknown): boolean {
     );
 }
 
+function isValidContentSource(source: unknown, depth: number = 0): source is ChannelContentSource {
+    // Guard against excessive nesting in corrupted storage (mixed sources can be recursive).
+    // JSON cannot represent cyclic references, so a depth limit is sufficient here.
+    if (depth > 25) {
+        return false;
+    }
+    if (!source || typeof source !== 'object') {
+        return false;
+    }
+    const src = source as Record<string, unknown> & { type?: unknown };
+    const type = src.type;
+    if (typeof type !== 'string') {
+        return false;
+    }
+
+    const isValidManualItem = (item: unknown): boolean => {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+        const obj = item as Record<string, unknown>;
+        const ratingKey = obj['ratingKey'];
+        const title = obj['title'];
+        const durationMs = obj['durationMs'];
+
+        return (
+            typeof ratingKey === 'string' &&
+            ratingKey.length > 0 &&
+            ratingKey !== 'undefined' &&
+            typeof title === 'string' &&
+            title.length > 0 &&
+            typeof durationMs === 'number' &&
+            Number.isFinite(durationMs) &&
+            durationMs > 0
+        );
+    };
+
+    switch (type) {
+        case 'library':
+            return (
+                typeof src['libraryId'] === 'string' &&
+                (src['libraryId'] as string).length > 0 &&
+                src['libraryId'] !== 'undefined'
+            );
+        case 'collection':
+            return (
+                typeof src['collectionKey'] === 'string' &&
+                (src['collectionKey'] as string).length > 0 &&
+                src['collectionKey'] !== 'undefined'
+            );
+        case 'show':
+            return (
+                typeof src['showKey'] === 'string' &&
+                (src['showKey'] as string).length > 0 &&
+                src['showKey'] !== 'undefined'
+            );
+        case 'playlist':
+            return (
+                typeof src['playlistKey'] === 'string' &&
+                (src['playlistKey'] as string).length > 0 &&
+                src['playlistKey'] !== 'undefined'
+            );
+        case 'manual':
+            return (
+                Array.isArray(src['items']) &&
+                (src['items'] as unknown[]).length > 0 &&
+                (src['items'] as unknown[]).every((item) => isValidManualItem(item))
+            );
+        case 'mixed':
+            return (
+                Array.isArray(src['sources']) &&
+                (src['sources'] as unknown[]).length > 0 &&
+                (src['sources'] as unknown[]).every((s) => isValidContentSource(s, depth + 1))
+            );
+        default:
+            return false;
+    }
+}
+
 /**
  * Check if error is a content-unavailable error that allows stale cache fallback.
  */
@@ -135,6 +214,8 @@ export class ChannelManager implements IChannelManager {
     private readonly _emitter: EventEmitter<ChannelManagerEventMap>;
     private readonly _contentResolver: ContentResolver;
     private readonly _library: IPlexLibraryMinimal;
+    private _storageKey: string;
+    private _currentChannelKey: string;
     private readonly _logger: {
         warn: (message: string, ...args: unknown[]) => void;
         error: (message: string, ...args: unknown[]) => void;
@@ -156,6 +237,16 @@ export class ChannelManager implements IChannelManager {
             warn: console.warn.bind(console),
             error: console.error.bind(console),
         };
+        this._storageKey = config.storageKey || STORAGE_KEY;
+        if (config.currentChannelKey) {
+            this._currentChannelKey = config.currentChannelKey;
+        } else if (this._storageKey === STORAGE_KEY) {
+            // Back-compat: legacy/default store uses the global current-channel key.
+            this._currentChannelKey = CURRENT_CHANNEL_KEY;
+        } else {
+            // Namespaced to avoid demo/real and multi-server clobbering.
+            this._currentChannelKey = `${CURRENT_CHANNEL_KEY}:${this._storageKey}`;
+        }
         this._contentResolver = new ContentResolver(this._library, this._logger);
 
         this._state = {
@@ -164,6 +255,67 @@ export class ChannelManager implements IChannelManager {
             currentChannelId: null,
             channelOrder: [],
         };
+    }
+
+    /**
+     * Update persistence keys (multi-server / multi-mode support).
+     * Does not implicitly load; caller should invoke loadChannels().
+     */
+    setStorageKeys(storageKey: string, currentChannelKey: string): void {
+        if (!storageKey || !currentChannelKey) {
+            throw new Error('Storage keys must be non-empty strings');
+        }
+        this.cancelPendingRetries();
+        this._storageKey = storageKey;
+        this._currentChannelKey = currentChannelKey;
+        this._state.channels.clear();
+        this._state.resolvedContent.clear();
+        this._state.channelOrder = [];
+        this._state.currentChannelId = null;
+    }
+
+    /**
+     * Replace the entire channel lineup atomically (best-effort).
+     */
+    async replaceAllChannels(
+        channels: ChannelConfig[],
+        options?: { currentChannelId?: string | null }
+    ): Promise<void> {
+        this.cancelPendingRetries();
+        this._state.channels.clear();
+        this._state.resolvedContent.clear();
+        this._state.channelOrder = [];
+
+        for (const channel of channels) {
+            if (!isValidContentSource(channel.contentSource)) {
+                this._logger.warn(`Skipping invalid channel ${channel.name} (${channel.id}) during replaceAllChannels`);
+                continue;
+            }
+            this._state.channels.set(channel.id, channel);
+            this._state.channelOrder.push(channel.id);
+        }
+
+        const requestedCurrent = options?.currentChannelId ?? null;
+        const fallbackCurrent = this._state.channelOrder[0] ?? null;
+        this._state.currentChannelId =
+            requestedCurrent && this._state.channels.has(requestedCurrent)
+                ? requestedCurrent
+                : fallbackCurrent;
+
+        try {
+            await this.saveChannels();
+        } catch (e) {
+            // Best-effort persistence: keep in-memory state and warn rather than failing the operation.
+            this._logger.warn('Failed to persist channels during replaceAllChannels', e);
+        }
+
+        if (this._state.currentChannelId) {
+            try {
+                localStorage.setItem(this._currentChannelKey, this._state.currentChannelId);
+            } catch (e) {
+                this._logger.warn('Failed to persist current channel', e);
+            }
+        }
     }
 
     // ============================================
@@ -438,9 +590,9 @@ export class ChannelManager implements IChannelManager {
 
         this._state.currentChannelId = channelId;
 
-        // Persist current channel separately
+        // Persist current channel separately (namespaced to the active store)
         try {
-            localStorage.setItem(CURRENT_CHANNEL_KEY, channelId);
+            localStorage.setItem(this._currentChannelKey, channelId);
         } catch (e) {
             this._logger.warn('Failed to persist current channel', e);
         }
@@ -576,13 +728,14 @@ export class ChannelManager implements IChannelManager {
         const json = JSON.stringify(data);
 
         try {
-            localStorage.setItem(STORAGE_KEY, json);
+
+            localStorage.setItem(this._storageKey, json);
         } catch (e) {
             if (this._isQuotaExceeded(e)) {
                 // Issue 6: First clear content caches
                 this._state.resolvedContent.clear();
                 try {
-                    localStorage.setItem(STORAGE_KEY, json);
+                    localStorage.setItem(this._storageKey, json);
                     return;
                 } catch (e2) {
                     // Issue 6: If still failing, remove oldest channels until it fits
@@ -597,7 +750,7 @@ export class ChannelManager implements IChannelManager {
                             currentChannelId: this._state.currentChannelId,
                             savedAt: Date.now(),
                         };
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(compactedData));
+                        localStorage.setItem(this._storageKey, JSON.stringify(compactedData));
                         return;
                     }
                     this._logger.error('Failed to save channels after pruning cache', e2);
@@ -614,38 +767,85 @@ export class ChannelManager implements IChannelManager {
      */
     async loadChannels(): Promise<void> {
         try {
-            const json = localStorage.getItem(STORAGE_KEY);
+            const json = localStorage.getItem(this._storageKey);
             if (!json) {
                 return;
             }
 
-            const data = JSON.parse(json) as StoredChannelData;
-
-            // Validate version
-            if (typeof data.version !== 'number' || data.version > STORAGE_VERSION) {
-                this._logger.warn('Unknown storage version, skipping load');
+            const parsed = JSON.parse(json) as Partial<StoredChannelData>;
+            const data = this._migrateStoredChannelData(parsed);
+            if (!data) {
+                this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
             }
 
             // Restore state
             this._state.channels.clear();
             for (const channel of data.channels) {
+                // Prune invalid channels (fix for seeding bug)
+                if (!isValidContentSource(channel.contentSource)) {
+                    this._logger.warn(`Pruning invalid channel ${channel.name} (${channel.id})`);
+                    continue;
+                }
                 this._state.channels.set(channel.id, channel);
             }
 
             this._state.channelOrder = data.channelOrder.filter((id) =>
                 this._state.channels.has(id)
             );
+
+            // Fallback: if stored order is corrupt/empty but channels exist, rebuild a stable order.
+            if (this._state.channelOrder.length === 0 && this._state.channels.size > 0) {
+                this._state.channelOrder = [...this._state.channels.values()]
+                    .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))
+                    .map((c) => c.id);
+            }
             this._state.currentChannelId = data.currentChannelId;
 
             // Also restore current channel from separate key
-            const savedCurrent = localStorage.getItem(CURRENT_CHANNEL_KEY);
+            const savedCurrent = localStorage.getItem(this._currentChannelKey);
             if (savedCurrent && this._state.channels.has(savedCurrent)) {
                 this._state.currentChannelId = savedCurrent;
+            }
+
+            // Ensure current channel is valid; fallback to first channel if needed.
+            if (this._state.currentChannelId && !this._state.channels.has(this._state.currentChannelId)) {
+                this._state.currentChannelId = this._state.channelOrder[0] ?? null;
             }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);
         }
+    }
+
+    private _migrateStoredChannelData(data: Partial<StoredChannelData>): StoredChannelData | null {
+        if (!Array.isArray(data.channels)) {
+            return null;
+        }
+        if (!Array.isArray(data.channelOrder)) {
+            return null;
+        }
+
+        const savedAt =
+            typeof data.savedAt === 'number' && Number.isFinite(data.savedAt) ? data.savedAt : Date.now();
+
+        const currentChannelId =
+            typeof data.currentChannelId === 'string' ? data.currentChannelId : null;
+
+        const version =
+            typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
+
+        if (version !== STORAGE_VERSION) {
+            this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
+            // TODO: Implement explicit schema transformations when STORAGE_VERSION increments.
+        }
+
+        return {
+            version: STORAGE_VERSION,
+            channels: data.channels,
+            channelOrder: data.channelOrder,
+            currentChannelId,
+            savedAt,
+        };
     }
 
     // ============================================
@@ -660,6 +860,87 @@ export class ChannelManager implements IChannelManager {
         handler: (payload: ChannelManagerEventMap[K]) => void
     ): void {
         this._emitter.on(event, handler);
+    }
+
+    /**
+     * Seed deterministic demo channels.
+     */
+    async seedDemoChannels(): Promise<void> {
+        this._logger.warn('[ChannelManager] Seeding Demo Channels');
+
+        this.cancelPendingRetries();
+
+        // Clear existing channels
+        this._state.channels.clear();
+        this._state.channelOrder = [];
+        this._state.resolvedContent.clear();
+        this._state.currentChannelId = null;
+
+        const DEMO_CHANNELS = [
+            { name: 'Demo Movies', count: 20, type: 'movie' },
+            { name: 'Demo Cartoons', count: 30, type: 'episode' },
+            { name: 'Demo Classics', count: 15, type: 'movie' },
+            { name: 'Demo Action', count: 25, type: 'movie' },
+            { name: 'Demo Comedy', count: 20, type: 'episode' },
+            { name: 'Demo Docu', count: 10, type: 'movie' },
+            { name: 'Demo News', count: 40, type: 'episode' },
+            { name: 'Demo Sci-Fi', count: 15, type: 'movie' },
+            { name: 'Demo Horror', count: 15, type: 'movie' },
+            { name: 'Demo Kids', count: 50, type: 'episode' },
+        ];
+
+        const DEMO_ANCHOR_TIME = Date.UTC(2020, 0, 1, 0, 0, 0, 0);
+        const DEMO_CREATED_AT = DEMO_ANCHOR_TIME;
+
+        for (let idx = 0; idx < DEMO_CHANNELS.length; idx++) {
+            const cfg = DEMO_CHANNELS[idx];
+            if (!cfg) continue;
+
+            const chNum = idx + 1;
+            const channelId = `demo-channel-${String(chNum).padStart(3, '0')}`;
+
+            const items: Array<{ ratingKey: string; title: string; durationMs: number }> = [];
+            let totalDurationMs = 0;
+
+            for (let i = 0; i < cfg.count; i++) {
+                // Vary durations between 5 min and 120 min (deterministic)
+                const durationMs = 300000 + ((i * 1234567) % 6900000);
+                totalDurationMs += durationMs;
+                items.push({
+                    ratingKey: `demo-${chNum}-${i}`,
+                    title: `${cfg.name} Item ${i + 1}`,
+                    durationMs,
+                });
+            }
+
+            const channel: ChannelConfig = {
+                id: channelId,
+                number: chNum,
+                name: cfg.name,
+                contentSource: {
+                    type: 'manual',
+                    items,
+                },
+                playbackMode: 'shuffle',
+                shuffleSeed: 12345 + chNum,
+                startTimeAnchor: DEMO_ANCHOR_TIME,
+                skipIntros: false,
+                skipCredits: false,
+                createdAt: DEMO_CREATED_AT,
+                updatedAt: DEMO_CREATED_AT,
+                lastContentRefresh: 0,
+                itemCount: cfg.count,
+                totalDurationMs,
+            };
+
+            this._state.channels.set(channel.id, channel);
+            this._state.channelOrder.push(channel.id);
+        }
+
+        // Deterministic default: start on the first channel.
+        this._state.currentChannelId = this._state.channelOrder[0] ?? null;
+
+        await this.saveChannels();
     }
 
     // ============================================
@@ -853,17 +1134,7 @@ export class ChannelManager implements IChannelManager {
 
         const obj = item as Record<string, unknown>;
 
-        // Must have contentSource with type
-        if (!obj['contentSource'] || typeof obj['contentSource'] !== 'object') {
-            return false;
-        }
-
-        const source = obj['contentSource'] as Record<string, unknown>;
-        if (typeof source['type'] !== 'string') {
-            return false;
-        }
-
-        return true;
+        return isValidContentSource(obj['contentSource']);
     }
 
     // Issue 6: Compact oldest channels to free storage space

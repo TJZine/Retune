@@ -33,10 +33,9 @@ import {
     PROGRESS_TIMEOUT_MS,
     BURN_IN_SUBTITLE_FORMATS,
     SIDECAR_SUBTITLE_FORMATS,
-    WEBOS_CLIENT_PROFILE_PARTS,
     DEFAULT_HLS_OPTIONS,
 } from './constants';
-import { generateUUID, withTimeout } from './utils';
+import { generateUUID } from './utils';
 
 // Re-export types for consumers
 export { PlexStreamErrorCode } from './types';
@@ -102,82 +101,99 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             );
         }
 
-        // 3. Check direct play compatibility ON THE SELECTED MEDIA VERSION
-        const canDirect = this._canDirectPlayMedia(media);
-
-        let playbackUrl: string;
-        let protocol: 'hls' | 'http';
-        let isTranscoding = false;
-        let container: string;
-        let videoCodec: string;
-        let audioCodec: string;
-
-        if (canDirect && request.directPlay !== false) {
-            // Direct play
-            playbackUrl = this._buildDirectPlayUrl(part.key);
-            protocol = 'http';
-            container = media.container;
-            videoCodec = media.videoCodec;
-            audioCodec = media.audioCodec;
-        } else {
-            // Transcode to HLS
-            const maxBitrate = typeof request.maxBitrate === 'number'
-                ? request.maxBitrate
-                : DEFAULT_HLS_OPTIONS.maxBitrate;
-            playbackUrl = this.getTranscodeUrl(request.itemKey, { maxBitrate });
-            protocol = 'hls';
-            isTranscoding = true;
-            container = 'mpegts';
-            videoCodec = 'h264';
-            audioCodec = 'aac';
-        }
-
-        // 4. Find selected tracks
-        const audioStream = this._findStream(
-            part.streams,
-            2,
-            request.audioStreamId
-        );
-        const subtitleStream = this._findStream(
-            part.streams,
-            3,
-            request.subtitleStreamId
-        );
-
-        // 5. Determine subtitle delivery
-        const subtitleDelivery = this._getSubtitleDelivery(
-            subtitleStream,
-            isTranscoding
-        );
-
-        // 6. Start session
+        // 3. Start a playback session early so the same sessionId can be used for:
+        // - Timeline updates (`X-Plex-Session-Identifier`)
+        // - Transcoding session binding (`session` + `X-Plex-Session-Identifier`)
         const sessionId = await this.startSession(request.itemKey);
 
-        // 7. Track transcoding state
-        const session = this._state.activeSessions.get(sessionId);
-        if (session) {
-            session.isTranscoding = isTranscoding;
-            session.durationMs = item.durationMs;
-        }
+        try {
+            // 4. Check direct play compatibility ON THE SELECTED MEDIA VERSION
+            const canDirect = this._canDirectPlayMedia(media);
 
-        return {
-            playbackUrl,
-            protocol,
-            isDirectPlay: !isTranscoding,
-            isTranscoding,
-            container,
-            videoCodec,
-            audioCodec,
-            subtitleDelivery,
-            sessionId,
-            selectedAudioStream: audioStream,
-            selectedSubtitleStream: subtitleStream,
-            width: media.width,
-            height: media.height,
-            bitrate: isTranscoding
-                ? (typeof request.maxBitrate === 'number' ? request.maxBitrate : 8000)
-                : media.bitrate,
-        };
+            let playbackUrl: string;
+            let protocol: 'hls' | 'http';
+            let isTranscoding = false;
+            let container: string;
+            let videoCodec: string;
+            let audioCodec: string;
+
+            if (canDirect && request.directPlay !== false) {
+                // Direct play
+                playbackUrl = this._buildDirectPlayUrl(part.key);
+                protocol = 'http';
+                container = media.container;
+                videoCodec = media.videoCodec;
+                audioCodec = media.audioCodec;
+            } else {
+                // Transcode to HLS
+                const maxBitrate = typeof request.maxBitrate === 'number'
+                    ? request.maxBitrate
+                    : DEFAULT_HLS_OPTIONS.maxBitrate;
+                playbackUrl = this.getTranscodeUrl(request.itemKey, { maxBitrate, sessionId });
+                protocol = 'hls';
+                isTranscoding = true;
+                container = 'mpegts';
+                videoCodec = 'h264';
+                audioCodec = 'aac';
+            }
+
+            // 5. Find selected tracks
+            const audioStream = this._findStream(
+                part.streams,
+                2,
+                request.audioStreamId
+            );
+            const subtitleStream = this._findStream(
+                part.streams,
+                3,
+                request.subtitleStreamId
+            );
+
+            // 6. Determine subtitle delivery
+            const subtitleDelivery = this._getSubtitleDelivery(
+                subtitleStream,
+                isTranscoding
+            );
+
+            // 7. Track transcoding state
+            const session = this._state.activeSessions.get(sessionId);
+            if (session) {
+                session.isTranscoding = isTranscoding;
+                session.durationMs = item.durationMs;
+            }
+
+            return {
+                playbackUrl,
+                protocol,
+                isDirectPlay: !isTranscoding,
+                isTranscoding,
+                container,
+                videoCodec,
+                audioCodec,
+                subtitleDelivery,
+                sessionId,
+                selectedAudioStream: audioStream,
+                selectedSubtitleStream: subtitleStream,
+                width: media.width,
+                height: media.height,
+                bitrate: isTranscoding
+                    ? (typeof request.maxBitrate === 'number' ? request.maxBitrate : 8000)
+                    : media.bitrate,
+            };
+        } catch (error) {
+            // Avoid leaking sessions when stream resolution fails mid-flight
+            const session = this._state.activeSessions.get(sessionId);
+            const positionMs = session ? session.lastReportedPositionMs : 0;
+            this._state.activeSessions.delete(sessionId);
+
+            // Ensure sessionStart has a corresponding sessionEnd for consumers.
+            this._emitter.emit('sessionEnd', {
+                sessionId,
+                itemKey: request.itemKey,
+                positionMs,
+            });
+            throw error;
+        }
     }
 
     // ========================================
@@ -225,33 +241,24 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         positionMs: number,
         state: 'playing' | 'paused' | 'stopped'
     ): Promise<void> {
-        // Wrap operation to return result we can check, using null as timeout sentinel
-        const result = await withTimeout(
-            this._reportProgress(sessionId, itemKey, positionMs, state).then(
-                () => ({ completed: true as const })
-            ),
-            PROGRESS_TIMEOUT_MS,
-            null
-        );
-
-        // SUGGESTION-002: Emit progressTimeout event for diagnostics when exceeded budget
-        if (result === null) {
+        const status = await this._reportProgressWithBudget(sessionId, itemKey, positionMs, state);
+        if (status === 'timeout') {
             this._emitter.emit('progressTimeout', { sessionId, itemKey });
         }
     }
 
     /**
-     * Internal progress reporting (no timeout).
+     * Internal progress reporting with timeout budget.
      */
-    private async _reportProgress(
+    private async _reportProgressWithBudget(
         sessionId: string,
         itemKey: string,
         positionMs: number,
         state: 'playing' | 'paused' | 'stopped'
-    ): Promise<void> {
+    ): Promise<'ok' | 'timeout' | 'error'> {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
-            return;
+            return 'error';
         }
 
         const session = this._state.activeSessions.get(sessionId);
@@ -267,19 +274,29 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         });
 
         try {
-            await fetch(`${serverUri}/:/timeline?${params.toString()}`, {
-                method: 'POST',
-                headers: this._config.getAuthHeaders(),
-            });
+            const baseUri = this._selectBaseUriForMixedContent(serverUri);
+            const timelineUrl = new URL('/:/timeline', baseUri);
+            timelineUrl.search = params.toString();
+
+            await this._fetchWithTimeout(
+                timelineUrl.toString(),
+                { method: 'POST', headers: this._config.getAuthHeaders() },
+                PROGRESS_TIMEOUT_MS
+            );
 
             // Update local session tracking
             if (session) {
                 session.lastReportedPositionMs = positionMs;
                 session.lastReportedAt = Date.now();
             }
+            return 'ok';
         } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+                return 'timeout';
+            }
             // Swallow errors for progress reporting (fire-and-forget)
             console.warn('Failed to report progress:', error);
+            return 'error';
         }
     }
 
@@ -294,6 +311,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         const serverUri = this._config.getServerUri();
         if (serverUri) {
+            const baseUri = this._selectBaseUriForMixedContent(serverUri);
             // Report stopped state
             const params = new URLSearchParams({
                 ratingKey: itemKey,
@@ -303,16 +321,21 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             });
 
             try {
-                await fetch(`${serverUri}/:/timeline?${params.toString()}`, {
-                    method: 'POST',
-                    headers: this._config.getAuthHeaders(),
-                });
+                const timelineUrl = new URL('/:/timeline', baseUri);
+                timelineUrl.search = params.toString();
+                await this._fetchWithTimeout(
+                    timelineUrl.toString(),
+                    { method: 'POST', headers: this._config.getAuthHeaders() },
+                    2000
+                );
 
                 // If transcoding, stop the transcode session per spec: DELETE /transcode/sessions/{key}
                 if (session && session.isTranscoding) {
-                    await fetch(
-                        `${serverUri}/transcode/sessions/${sessionId}`,
-                        { method: 'DELETE', headers: this._config.getAuthHeaders() }
+                    const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(sessionId)}`, baseUri);
+                    await this._fetchWithTimeout(
+                        stopUrl.toString(),
+                        { method: 'DELETE', headers: this._config.getAuthHeaders() },
+                        5000
                     );
                 }
             } catch (error) {
@@ -363,6 +386,30 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             return false;
         }
 
+        // webOS nuance: MKV container support is inconsistent on older webOS (Chromium 79 era).
+        // For pre-webOS 23 devices, prefer Direct Stream (remux to HLS) rather than attempting MKV Direct Play.
+        // This avoids "SRC_NOT_SUPPORTED" failures for MKV-heavy libraries while still allowing MKV Direct Play
+        // on newer firmware/browser stacks that support it.
+        if (media.container === 'mkv') {
+            const isLegacyWebOs = ((): boolean => {
+                try {
+                    if (typeof navigator === 'undefined') return false;
+                    const ua = navigator.userAgent || '';
+                    if (!/Web0S|webOS/i.test(ua)) return false;
+                    const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                    const chromeMajor = chromeMatch ? Number(chromeMatch[1]) : NaN;
+                    // webOS 6.x is typically Chromium 79; webOS 23+ moves into newer Chromium.
+                    return Number.isFinite(chromeMajor) && chromeMajor < 87;
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (isLegacyWebOs) {
+                return false;
+            }
+        }
+
         // Check video codec (pre-normalized to lowercase in ResponseParser)
         if (!SUPPORTED_VIDEO_CODECS.includes(media.videoCodec)) {
             return false;
@@ -401,9 +448,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             );
         }
 
-        const sessionId = generateUUID();
-        const clientProfile = WEBOS_CLIENT_PROFILE_PARTS.join('&');
+        const baseUri = this._selectBaseUriForMixedContent(serverUri);
 
+        const sessionId = options.sessionId ?? generateUUID();
         const maxBitrate = typeof options.maxBitrate === 'number'
             ? options.maxBitrate
             : DEFAULT_HLS_OPTIONS.maxBitrate;
@@ -414,35 +461,304 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             ? options.audioBoost
             : DEFAULT_HLS_OPTIONS.audioBoost;
 
-        const params = new URLSearchParams({
-            path: `/library/metadata/${itemKey}`,
-            mediaIndex: '0',
-            partIndex: '0',
-            protocol: 'hls',
-            fastSeek: '1',
-            directPlay: '0',
-            directStream: '1',
-            subtitleSize: String(subtitleSize),
-            audioBoost: String(audioBoost),
-            maxVideoBitrate: String(maxBitrate),
-            subtitles: 'burn',
-            'Accept-Language': 'en',
-            'X-Plex-Session-Identifier': sessionId,
-            'X-Plex-Client-Profile-Extra': clientProfile,
-        });
+        const metadataPath = itemKey.startsWith('/library/metadata/')
+            ? itemKey
+            : `/library/metadata/${itemKey}`;
 
-        // Add client params
-        const headers = this._config.getAuthHeaders();
-        const token = headers['X-Plex-Token'];
-        if (token) {
-            params.set('X-Plex-Token', token);
+        const compatMode = ((): boolean => {
+            try {
+                return localStorage.getItem('retune_transcode_compat') === '1';
+            } catch {
+                return false;
+            }
+        })();
+
+        const getOverride = (key: string): string | null => {
+            try {
+                const value = localStorage.getItem(key);
+                return typeof value === 'string' && value.length > 0 ? value : null;
+            } catch {
+                return null;
+            }
+        };
+
+        const preset = getOverride('retune_transcode_preset');
+
+        const relayOrigin = ((): string | null => {
+            try {
+                const relay = this._config.getRelayConnection()?.uri ?? null;
+                if (!relay) return null;
+                return new URL(relay).origin;
+            } catch {
+                return null;
+            }
+        })();
+        const baseOrigin = ((): string | null => {
+            try {
+                return new URL(baseUri).origin;
+            } catch {
+                return null;
+            }
+        })();
+        const location = ((): 'lan' | 'wan' | null => {
+            const selectedConn = this._config.getSelectedConnection?.() ?? null;
+            if (selectedConn) {
+                if (selectedConn.relay) return 'wan';
+                return selectedConn.local ? 'lan' : 'wan';
+            }
+            // Fallback: only classify as WAN if we are clearly using a relay origin.
+            if (relayOrigin && baseOrigin && relayOrigin === baseOrigin) {
+                return 'wan';
+            }
+            // Unknown: avoid misclassifying WAN as LAN.
+            return null;
+        })();
+
+        const params = new URLSearchParams();
+        params.set('path', metadataPath);
+        params.set('mediaIndex', '0');
+        params.set('partIndex', '0');
+        params.set('protocol', 'hls');
+        params.set('offset', '0');
+        // Bind the transcoder session key to our app sessionId so we can terminate it later
+        params.set('session', sessionId);
+        params.set('X-Plex-Session-Identifier', sessionId);
+
+        if (!compatMode) {
+            // Default: richer set aligned with Plex examples
+            params.set('fastSeek', '1');
+            params.set('directPlay', '0');
+            // Allow Plex to Direct Stream (copy video, transcode audio if needed) instead of forcing full transcode.
+            params.set('directStream', '1');
+            params.set('directStreamAudio', '1');
+            params.set('subtitleSize', String(subtitleSize));
+            params.set('audioBoost', String(audioBoost));
+            params.set('maxVideoBitrate', String(maxBitrate));
+            if (location) {
+                params.set('location', location);
+            }
+            params.set('addDebugOverlay', '0');
+            params.set('autoAdjustQuality', '0');
+            params.set('mediaBufferSize', '102400');
+            // Retune does not yet provide subtitle track selection. Avoid forcing burn-in, which can trigger video transcode.
+            params.set('subtitles', 'none');
+            params.set('Accept-Language', 'en');
+        } else {
+            // Compat: minimal, conservative set for older/stricter servers
+            params.set('directPlay', '0');
+            params.set('directStream', '1');
+            params.set('maxVideoBitrate', String(maxBitrate));
+            if (location) {
+                params.set('location', location);
+            }
         }
-        params.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
-        params.set('X-Plex-Platform', 'webOS');
-        params.set('X-Plex-Device', 'LG Smart TV');
-        params.set('X-Plex-Product', 'Retune');
 
-        return `${serverUri}/video/:/transcode/universal/start.m3u8?${params.toString()}`;
+        // Explicitly declare capabilities to improve Direct Stream decisions (audio-only transcode, no video transcode).
+        // Keep this conservative and adaptive to avoid requesting streams the device can't decode.
+        const is4K = typeof window !== 'undefined' && window.screen.width >= 3840;
+        const h264Level = is4K ? '51' : '42'; // Level 5.1 (4K) vs 4.2 (1080p)
+
+        const videoEl = typeof document !== 'undefined' ? document.createElement('video') : null;
+        const canPlay = (mime: string): boolean => {
+            try {
+                return !!videoEl && videoEl.canPlayType(mime) !== '';
+            } catch {
+                return false;
+            }
+        };
+
+        // HEVC detection (common for 4K MKV libraries).
+        const supportsHevc =
+            canPlay('video/mp4; codecs="hvc1.1.6.L93.B0"') ||
+            canPlay('video/mp4; codecs="hev1.1.6.L93.B0"');
+
+        const supportsVp9 =
+            canPlay('video/webm; codecs="vp9"') ||
+            canPlay('video/mp4; codecs="vp09.00.10.08"');
+
+        const supportsAv1 =
+            canPlay('video/mp4; codecs="av01.0.05M.08"') ||
+            canPlay('video/webm; codecs="av01.0.05M.08"');
+
+        const videoDecoders: string[] = [`h264{profile:high&level:${h264Level}}`];
+        if (supportsHevc) {
+            // Plex commonly uses HEVC "level" style values like 120 (1080p) / 150 (4K).
+            const hevcLevel = is4K ? '150' : '120';
+            videoDecoders.push(`hevc{profile:main&level:${hevcLevel}}`);
+        }
+        if (supportsVp9) {
+            videoDecoders.push('vp9');
+        }
+        if (supportsAv1) {
+            videoDecoders.push('av1');
+        }
+
+        params.set(
+            'X-Plex-Client-Capabilities',
+            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000}`
+        );
+
+        // Add client params (video element requests cannot include headers, so use query params)
+        const headers = this._config.getAuthHeaders();
+        for (const [key, value] of Object.entries(headers)) {
+            if (!key.startsWith('X-Plex-')) {
+                continue;
+            }
+            if (typeof value !== 'string' || value.length === 0) {
+                continue;
+            }
+            params.set(key, value);
+        }
+
+        // Optional: Force the server to use a specific built-in profile name/version (advanced).
+        const forcedProfileName = getOverride('retune_transcode_profile_name');
+        if (forcedProfileName) {
+            params.set('X-Plex-Client-Profile-Name', forcedProfileName);
+        } else {
+            // Default to 'HTML TV App' for better Direct Play support on webOS
+            // 'Generic' forces transcoding for almost everything.
+            params.set('X-Plex-Client-Profile-Name', 'HTML TV App');
+        }
+
+        const forcedProfileVersion = getOverride('retune_transcode_profile_version');
+        if (forcedProfileVersion) {
+            params.set('X-Plex-Client-Profile-Version', forcedProfileVersion);
+        }
+
+        // Optional overrides for identity fields used by Plex profile matching.
+        // These are intentionally narrow and only affect the transcode URL.
+        const overridePlatform = getOverride('retune_transcode_platform');
+        const overridePlatformVersion = getOverride('retune_transcode_platform_version');
+        const overrideDevice = getOverride('retune_transcode_device');
+        const overrideModel = getOverride('retune_transcode_model');
+        const overrideProduct = getOverride('retune_transcode_product');
+        const overrideVersion = getOverride('retune_transcode_version');
+        const overrideDeviceName = getOverride('retune_transcode_device_name');
+
+        // Presets to quickly try known-ish combinations without code changes.
+        // If you find a working combo, prefer setting explicit overrides above.
+        if (preset) {
+            switch (preset) {
+                case 'webos-lgtv':
+                    params.set('X-Plex-Platform', 'webOS');
+                    params.set('X-Plex-Platform-Version', '6.0');
+                    params.set('X-Plex-Device', 'lgtv');
+                    params.set('X-Plex-Model', 'webOS');
+                    break;
+                case 'webos-lg':
+                    params.set('X-Plex-Platform', 'webOS');
+                    params.set('X-Plex-Platform-Version', '6.0');
+                    params.set('X-Plex-Device', 'LG');
+                    params.set('X-Plex-Model', 'webOS');
+                    break;
+                case 'android':
+                    params.set('X-Plex-Platform', 'Android');
+                    params.set('X-Plex-Platform-Version', '12');
+                    params.set('X-Plex-Device', 'Android');
+                    params.set('X-Plex-Model', 'Pixel');
+                    params.set('X-Plex-Product', 'Plex for Android');
+                    params.set('X-Plex-Version', '9.0.0');
+                    break;
+                case 'plex-web':
+                    params.set('X-Plex-Platform', 'Chrome');
+                    params.set('X-Plex-Platform-Version', '87.0');
+                    params.set('X-Plex-Device', 'Web');
+                    params.set('X-Plex-Model', 'Chrome');
+                    params.set('X-Plex-Product', 'Plex Web');
+                    params.set('X-Plex-Version', '4.0.0');
+                    break;
+            }
+        }
+
+        // Explicit overrides take precedence over presets.
+        if (overridePlatform) {
+            params.set('X-Plex-Platform', overridePlatform);
+        }
+        if (overridePlatformVersion) {
+            params.set('X-Plex-Platform-Version', overridePlatformVersion);
+        }
+        if (overrideDevice) {
+            params.set('X-Plex-Device', overrideDevice);
+        }
+        if (overrideDeviceName) {
+            params.set('X-Plex-Device-Name', overrideDeviceName);
+        }
+        if (overrideModel) {
+            params.set('X-Plex-Model', overrideModel);
+        }
+        if (overrideProduct) {
+            params.set('X-Plex-Product', overrideProduct);
+        }
+        if (overrideVersion) {
+            params.set('X-Plex-Version', overrideVersion);
+        }
+
+        // Ensure minimum required ID params are present even if getAuthHeaders is mocked/minimal
+        if (!params.has('X-Plex-Client-Identifier')) {
+            params.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
+        }
+        if (!params.has('X-Plex-Platform')) {
+            params.set('X-Plex-Platform', 'webOS');
+        }
+        if (!params.has('X-Plex-Product')) {
+            params.set('X-Plex-Product', 'Retune');
+        }
+        if (!params.has('X-Plex-Version')) {
+            params.set('X-Plex-Version', '1.0.0');
+        }
+        if (!params.has('X-Plex-Device')) {
+            params.set('X-Plex-Device', 'LG Smart TV');
+        }
+        if (!params.has('X-Plex-Device-Name')) {
+            params.set('X-Plex-Device-Name', 'Retune');
+        }
+        if (!params.has('X-Plex-Platform-Version')) {
+            params.set('X-Plex-Platform-Version', '6.0');
+        }
+        // Plex server profile matching frequently requires a non-empty model; provide a sane default.
+        if (!params.has('X-Plex-Model')) {
+            params.set('X-Plex-Model', 'LGTV');
+        }
+
+        const url = new URL('/video/:/transcode/universal/start.m3u8', baseUri);
+        url.search = params.toString();
+        try {
+            const shouldLogTranscodeDebug = ((): boolean => {
+                try {
+                    return localStorage.getItem('retune_debug_transcode') === '1';
+                } catch {
+                    return false;
+                }
+            })();
+            if (!shouldLogTranscodeDebug) {
+                return url.toString();
+            }
+
+            const debugUrl = new URL(url.toString());
+            if (debugUrl.searchParams.has('X-Plex-Token')) {
+                debugUrl.searchParams.set('X-Plex-Token', 'REDACTED');
+            }
+            const idSummary = {
+                platform: debugUrl.searchParams.get('X-Plex-Platform'),
+                platformVersion: debugUrl.searchParams.get('X-Plex-Platform-Version'),
+                device: debugUrl.searchParams.get('X-Plex-Device'),
+                clientIdentifier: debugUrl.searchParams.get('X-Plex-Client-Identifier'),
+                model: debugUrl.searchParams.get('X-Plex-Model'),
+                product: debugUrl.searchParams.get('X-Plex-Product'),
+                version: debugUrl.searchParams.get('X-Plex-Version'),
+                profileName: debugUrl.searchParams.get('X-Plex-Client-Profile-Name'),
+                profileVersion: debugUrl.searchParams.get('X-Plex-Client-Profile-Version'),
+                preset: preset,
+            };
+            console.warn(
+                `[PlexStreamResolver] Transcode URL (compat=${compatMode ? '1' : '0'}):`,
+                debugUrl.toString()
+            );
+            console.warn('[PlexStreamResolver] Transcode ID:', idSummary);
+        } catch {
+            // Ignore debug logging failures
+        }
+        return url.toString();
     }
 
     // ========================================
@@ -454,21 +770,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @param event - Event name
      * @param handler - Handler function
      */
-    on(
-        event: 'sessionStart',
-        handler: (session: SessionStartPayload) => void
-    ): void;
-    on(
-        event: 'sessionEnd',
-        handler: (session: SessionEndPayload) => void
-    ): void;
-    on(event: 'error', handler: (error: StreamResolverError) => void): void;
-    on(
-        event: 'sessionStart' | 'sessionEnd' | 'error',
-        handler:
-            | ((session: SessionStartPayload) => void)
-            | ((session: SessionEndPayload) => void)
-            | ((error: StreamResolverError) => void)
+    on<K extends keyof StreamResolverEventMap>(
+        event: K,
+        handler: (payload: StreamResolverEventMap[K]) => void
     ): void {
         // Type assertion to handler union - EventEmitter accepts this via index signature
         type HandlerUnion = (payload: StreamResolverEventMap[keyof StreamResolverEventMap]) => void;
@@ -494,34 +798,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             );
         }
 
-        // Check for mixed content issues
-        const serverUrl = new URL(serverUri);
-        const isAppHttps = typeof window !== 'undefined' &&
-            window.location.protocol === 'https:';
-        const isServerHttp = serverUrl.protocol === 'http:';
-
-        if (isAppHttps && isServerHttp) {
-            // Mixed content - try fallbacks
-            const httpsConn = this._config.getHttpsConnection();
-            if (httpsConn) {
-                return this._buildUrlWithToken(httpsConn.uri, partKey);
-            }
-
-            const relayConn = this._config.getRelayConnection();
-            if (relayConn) {
-                console.warn('Using Plex relay due to mixed content restrictions');
-                return this._buildUrlWithToken(relayConn.uri, partKey);
-            }
-
-            // No fallback available
-            throw this._createError(
-                PlexStreamErrorCode.MIXED_CONTENT_BLOCKED,
-                'Cannot access HTTP server from HTTPS app - no fallback available',
-                false
-            );
-        }
-
-        return this._buildUrlWithToken(serverUri, partKey);
+        const baseUri = this._selectBaseUriForMixedContent(serverUri);
+        return this._buildUrlWithToken(baseUri, partKey);
     }
 
     /**
@@ -530,8 +808,72 @@ export class PlexStreamResolver implements IPlexStreamResolver {
     private _buildUrlWithToken(baseUri: string, partKey: string): string {
         const headers = this._config.getAuthHeaders();
         const token = headers['X-Plex-Token'];
-        const tokenParam = token ? `?X-Plex-Token=${token}` : '';
-        return `${baseUri}${partKey}${tokenParam}`;
+        const baseUrl = new URL(baseUri);
+        const parsedPart = new URL(partKey, baseUrl.origin);
+        const normalizedPartKey = `${parsedPart.pathname}${parsedPart.search}`;
+        const url = new URL(
+            normalizedPartKey.startsWith('/') ? normalizedPartKey : `/${normalizedPartKey}`,
+            baseUrl.origin
+        );
+        if (token) {
+            url.searchParams.set('X-Plex-Token', token);
+        }
+        return url.toString();
+    }
+
+    private _selectBaseUriForMixedContent(serverUri: string): string {
+        const serverUrl = new URL(serverUri);
+        const isAppHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        const isServerHttp = serverUrl.protocol === 'http:';
+
+        if (!isAppHttps || !isServerHttp) {
+            return serverUrl.origin;
+        }
+
+        const httpsConn = this._config.getHttpsConnection();
+        if (httpsConn) {
+            try {
+                const url = new URL(httpsConn.uri);
+                if (url.protocol === 'https:') {
+                    return url.origin;
+                }
+            } catch {
+                // Ignore invalid connection URIs and try other fallbacks.
+            }
+        }
+
+        const relayConn = this._config.getRelayConnection();
+        if (relayConn) {
+            try {
+                const url = new URL(relayConn.uri);
+                if (url.protocol === 'https:') {
+                    console.warn('Using Plex relay due to mixed content restrictions');
+                    return url.origin;
+                }
+            } catch {
+                // Ignore invalid relay URIs and continue.
+            }
+        }
+
+        throw this._createError(
+            PlexStreamErrorCode.MIXED_CONTENT_BLOCKED,
+            'Cannot access HTTP server from HTTPS app - no fallback available',
+            false
+        );
+    }
+
+    private async _fetchWithTimeout(
+        url: string,
+        options: RequestInit,
+        timeoutMs: number
+    ): Promise<Response> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 
     // ========================================

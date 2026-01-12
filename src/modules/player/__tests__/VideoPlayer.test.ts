@@ -231,7 +231,7 @@ describe('VideoPlayer', () => {
             expect(videoElement?.src).toContain('test.m3u8');
         });
 
-        it('should create source element for direct play', async () => {
+        it('should set video.src for direct play', async () => {
             const descriptor = createMockDescriptor({
                 protocol: 'direct',
                 mimeType: 'video/mp4',
@@ -240,9 +240,31 @@ describe('VideoPlayer', () => {
 
             await player.loadStream(descriptor);
 
-            const sourceElement = container.querySelector('source');
-            expect(sourceElement).not.toBeNull();
-            expect(sourceElement?.type).toBe('video/mp4');
+            const videoElement = container.querySelector('video');
+            expect(videoElement?.src).toContain('test.mp4');
+            expect(container.querySelector('source')).toBeNull();
+        });
+
+        it('should not overwrite playing state after demo-mode load delay', async () => {
+            const demoPlayer = new VideoPlayer();
+            await demoPlayer.initialize(createMockConfig({ demoMode: true }));
+
+            const descriptor = createMockDescriptor({
+                startPositionMs: 0,
+                durationMs: 10000,
+                mediaMetadata: { title: 'Demo', durationMs: 10000 },
+            });
+
+            await demoPlayer.loadStream(descriptor);
+            await demoPlayer.play();
+
+            expect(demoPlayer.getState().status).toBe('playing');
+
+            await jest.advanceTimersByTimeAsync(500);
+
+            expect(demoPlayer.getState().status).toBe('playing');
+
+            demoPlayer.destroy();
         });
 
         it('should update status to loading', async () => {
@@ -646,6 +668,51 @@ describe('VideoPlayer', () => {
             videoElement.dispatchEvent(new Event('ended'));
 
             expect(handler).toHaveBeenCalled();
+        });
+    });
+
+    // ========================================
+    // destroy
+    // ========================================
+
+    describe('destroy', () => {
+        let player: VideoPlayer;
+        let setIntervalSpy: jest.SpyInstance;
+        let clearIntervalSpy: jest.SpyInstance;
+        let setTimeoutSpy: jest.SpyInstance;
+        let clearTimeoutSpy: jest.SpyInstance;
+
+        beforeEach(async () => {
+            setIntervalSpy = jest.spyOn(globalThis, 'setInterval');
+            clearIntervalSpy = jest.spyOn(globalThis, 'clearInterval');
+            setTimeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+            clearTimeoutSpy = jest.spyOn(globalThis, 'clearTimeout');
+            player = new VideoPlayer();
+            await player.initialize(createMockConfig({ demoMode: true }));
+        });
+
+        afterEach(() => {
+            player.destroy();
+            jest.restoreAllMocks();
+            jest.useRealTimers();
+        });
+
+        it('should clear demo timers on destroy', async () => {
+            const intervalCountAfterInit = setIntervalSpy.mock.results.length;
+            const timeoutCountBeforeLoad = setTimeoutSpy.mock.results.length;
+
+            await player.loadStream(createMockDescriptor({ durationMs: 10000 }));
+            expect(setTimeoutSpy.mock.results.length).toBe(timeoutCountBeforeLoad + 1);
+            const demoTimeoutId = setTimeoutSpy.mock.results[setTimeoutSpy.mock.results.length - 1]?.value;
+
+            await player.play();
+            expect(setIntervalSpy.mock.results.length).toBe(intervalCountAfterInit + 1);
+            const simulationIntervalId = setIntervalSpy.mock.results[setIntervalSpy.mock.results.length - 1]?.value;
+
+            player.destroy();
+
+            expect(clearTimeoutSpy).toHaveBeenCalledWith(demoTimeoutId);
+            expect(clearIntervalSpy).toHaveBeenCalledWith(simulationIntervalId);
         });
     });
 

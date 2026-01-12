@@ -28,6 +28,11 @@ export const MAX_RETRY_ATTEMPTS = 3;
  */
 export const RETRY_BASE_DELAY_MS = 1000;
 
+/**
+ * Synthetic error code key stored on the HTMLVideoElement to coordinate retries.
+ */
+export const SYNTHETIC_MEDIA_ERROR_CODE_KEY = '__retuneSyntheticMediaErrorCode';
+
 // ============================================
 // Video Element Configuration
 // ============================================

@@ -359,11 +359,18 @@ export class PlexLibrary implements IPlexLibrary {
 
     /**
      * Get collections in a library.
+     * Uses type=18 filter on the 'all' endpoint for standard Plex behavior.
      * @param libraryId - Library section ID
      * @returns Promise resolving to list of collections
      */
     async getCollections(libraryId: string): Promise<PlexCollection[]> {
-        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_COLLECTIONS(libraryId));
+        // Use type=18 (COLLECTION) filter on the library 'all' endpoint
+        const params = {
+            type: PLEX_MEDIA_TYPES.COLLECTION,
+            includeGuids: 1, // Standard metadata
+            includeMeta: 1,  // Standard metadata
+        };
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
         const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url);
 
         if (!response) {
@@ -380,7 +387,11 @@ export class PlexLibrary implements IPlexLibrary {
      * @returns Promise resolving to list of items
      */
     async getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]> {
-        const url = this._buildUrl(PLEX_ENDPOINTS.COLLECTION_CHILDREN(collectionKey));
+        const params = {
+            includeGuids: 1,
+            includeMeta: 1,
+        };
+        const url = this._buildUrl(PLEX_ENDPOINTS.COLLECTION_CHILDREN(collectionKey), params);
         const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
 
         if (!response) {
@@ -442,19 +453,26 @@ export class PlexLibrary implements IPlexLibrary {
         if (!serverUri) return '';
 
         const token = this._config.getAuthToken() || '';
-        const params = new URLSearchParams({ 'X-Plex-Token': token });
 
         if (typeof width === 'number' && width > 0) {
             // Use photo transcoder for resizing
             const resizeHeight = typeof height === 'number' ? height : width;
-            params.set('width', String(width));
-            params.set('height', String(resizeHeight));
-            params.set('url', imagePath);
-            return `${serverUri}${PLEX_ENDPOINTS.PHOTO_TRANSCODE}?${params.toString()}`;
+            const url = new URL(PLEX_ENDPOINTS.PHOTO_TRANSCODE, serverUri);
+            if (token) {
+                url.searchParams.set('X-Plex-Token', token);
+            }
+            url.searchParams.set('width', String(width));
+            url.searchParams.set('height', String(resizeHeight));
+            url.searchParams.set('url', imagePath);
+            return url.toString();
         }
 
         // Direct image URL
-        return `${serverUri}${imagePath}?${params.toString()}`;
+        const url = new URL(imagePath, serverUri);
+        if (token) {
+            url.searchParams.set('X-Plex-Token', token);
+        }
+        return url.toString();
     }
 
     // ============================================
@@ -546,6 +564,7 @@ export class PlexLibrary implements IPlexLibrary {
         const logger = this._config.logger ?? { warn: console.warn, error: console.error };
         let timeoutRetries = 0;
         let serverErrorRetried = false;
+        let rateLimitRetries = 0;
 
         while (true) {
             try {
@@ -582,12 +601,21 @@ export class PlexLibrary implements IPlexLibrary {
 
                 // Handle 429 Rate Limited - backoff per Retry-After
                 if (response.status === 429) {
+                    if (rateLimitRetries >= PLEX_LIBRARY_CONSTANTS.MAX_TIMEOUT_RETRIES) {
+                        throw new PlexLibraryError(
+                            PlexLibraryErrorCode.RATE_LIMITED,
+                            'Rate limited after max retries',
+                            429
+                        );
+                    }
+                    rateLimitRetries++;
+
                     const retryAfterHeader = response.headers.get('Retry-After');
                     let retryAfter: number = PLEX_LIBRARY_CONSTANTS.DEFAULT_RATE_LIMIT_DELAY;
                     if (retryAfterHeader) {
                         const parsed = parseInt(retryAfterHeader, 10);
                         if (!isNaN(parsed)) {
-                            retryAfter = parsed;
+                            retryAfter = Math.max(0, parsed);
                         } else {
                             // Try parsing as HTTP-date
                             const date = Date.parse(retryAfterHeader);

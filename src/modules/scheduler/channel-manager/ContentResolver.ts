@@ -228,6 +228,17 @@ export class ContentResolver {
         for (let i = 0; i < source.items.length; i++) {
             const manualItem = source.items[i];
             if (!manualItem) continue;
+            if (
+                typeof manualItem.ratingKey !== 'string' ||
+                manualItem.ratingKey.length === 0 ||
+                typeof manualItem.title !== 'string' ||
+                manualItem.title.length === 0 ||
+                typeof manualItem.durationMs !== 'number' ||
+                !Number.isFinite(manualItem.durationMs) ||
+                manualItem.durationMs <= 0
+            ) {
+                continue;
+            }
 
             // Build resolved item from cached manual metadata
             results.push({
@@ -303,6 +314,9 @@ export class ContentResolver {
         if (item.genres && item.genres.length > 0) {
             resolved.genres = item.genres;
         }
+        if (item.directors && item.directors.length > 0) {
+            resolved.directors = item.directors;
+        }
         if (typeof item.viewCount === 'number') {
             resolved.watched = item.viewCount > 0;
         }
@@ -363,6 +377,19 @@ export class ContentResolver {
                 } else if (filter.operator === 'neq') {
                     // Issue 3 (Round 2): neq means genre must NOT contain the value
                     return !genres.some((g) => g.toLowerCase() === String(filter.value).toLowerCase());
+                }
+                return true;
+            }
+            case 'director': {
+                const directors = item.directors || [];
+                if (filter.operator === 'contains') {
+                    return directors.some((d) => d.toLowerCase().includes(String(filter.value).toLowerCase()));
+                } else if (filter.operator === 'notContains') {
+                    return !directors.some((d) => d.toLowerCase().includes(String(filter.value).toLowerCase()));
+                } else if (filter.operator === 'eq') {
+                    return directors.some((d) => d.toLowerCase() === String(filter.value).toLowerCase());
+                } else if (filter.operator === 'neq') {
+                    return !directors.some((d) => d.toLowerCase() === String(filter.value).toLowerCase());
                 }
                 return true;
             }

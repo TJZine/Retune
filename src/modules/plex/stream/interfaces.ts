@@ -86,6 +86,11 @@ export interface PlexStreamResolverConfig {
     getAuthHeaders: () => Record<string, string>;
     /** Function to get current server URI */
     getServerUri: () => string | null;
+    /**
+     * Optional: Function to get the currently selected server connection metadata.
+     * Used to classify transcode requests as LAN vs WAN when possible.
+     */
+    getSelectedConnection?: () => { uri: string; local: boolean; relay: boolean } | null;
     /** Function to get an HTTPS connection (for mixed content fallback) */
     getHttpsConnection: () => { uri: string } | null;
     /** Function to get a relay connection (for mixed content fallback) */
@@ -180,23 +185,12 @@ export interface IPlexStreamResolver {
     // ========================================
 
     /**
-     * Register handler for session start events.
+     * Register handler for resolver events.
      * @param event - Event name
      * @param handler - Handler function
      */
-    on(event: 'sessionStart', handler: (session: SessionStartPayload) => void): void;
-
-    /**
-     * Register handler for session end events.
-     * @param event - Event name
-     * @param handler - Handler function
-     */
-    on(event: 'sessionEnd', handler: (session: SessionEndPayload) => void): void;
-
-    /**
-     * Register handler for error events.
-     * @param event - Event name
-     * @param handler - Handler function
-     */
-    on(event: 'error', handler: (error: StreamResolverError) => void): void;
+    on<K extends keyof StreamResolverEventMap>(
+        event: K,
+        handler: (payload: StreamResolverEventMap[K]) => void
+    ): void;
 }

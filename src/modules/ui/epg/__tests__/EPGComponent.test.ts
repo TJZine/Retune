@@ -180,6 +180,37 @@ describe('EPGComponent', () => {
             epg.show();
         });
 
+        it('should not set a negative timeOffset when ensuring cell visibility', () => {
+            const state = epg.getState();
+            const program: ScheduledProgram = {
+                item: {
+                    ratingKey: 'ch0-prog-negative',
+                    type: 'movie',
+                    title: 'Program Negative',
+                    fullTitle: 'Program Negative',
+                    durationMs: 3600000,
+                    thumb: null,
+                    year: 2020,
+                    scheduledIndex: 0,
+                },
+                scheduledStartTime: state.viewWindow.startTime - 3600000,
+                scheduledEndTime: state.viewWindow.startTime - 1800000,
+                elapsedMs: 0,
+                remainingMs: 0,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: false,
+            };
+
+            (epg as unknown as { state: { scrollPosition: { timeOffset: number } } }).state.scrollPosition.timeOffset = 10;
+
+            (epg as unknown as { ensureCellVisible: (channelIndex: number, program: ScheduledProgram) => boolean })
+                .ensureCellVisible(0, program);
+
+            expect(epg.getState().scrollPosition.timeOffset).toBeGreaterThanOrEqual(0);
+        });
+
         it('should focus first visible cell when no focus and navigation pressed', () => {
             const moved = epg.handleNavigation('down');
             expect(moved).toBe(true);

@@ -115,6 +115,11 @@ export class VideoPlayer implements IVideoPlayer {
     /** Player configuration */
     private _config: VideoPlayerConfig | null = null;
 
+    /** Simulation timer for Demo Mode */
+    private _simulationTimer: ReturnType<typeof setInterval> | null = null;
+    private _demoLoadTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    private _demoLoadToken: number = 0;
+
     /** Whether Media Session is enabled */
     private _mediaSessionEnabled: boolean = false;
 
@@ -151,6 +156,9 @@ export class VideoPlayer implements IVideoPlayer {
         this._videoElement.id = VIDEO_ELEMENT_ID;
         this._videoElement.style.cssText = VIDEO_ELEMENT_STYLES;
         this._videoElement.playsInline = true;
+        // webOS simulator quirk: some builds composite the video plane above HTML overlays.
+        // Hide the video element until a stream is actually loaded so the UI can render.
+        this._videoElement.style.display = 'none';
 
         // Find container and append
         const container = document.getElementById(config.containerId);
@@ -196,6 +204,17 @@ export class VideoPlayer implements IVideoPlayer {
      * Destroy the video player.
      */
     public destroy(): void {
+        // Stop any active simulation timers first (they may reference the video element/state)
+        if (this._simulationTimer) {
+            clearInterval(this._simulationTimer);
+            this._simulationTimer = null;
+        }
+        if (this._demoLoadTimeoutId !== null) {
+            clearTimeout(this._demoLoadTimeoutId);
+            this._demoLoadTimeoutId = null;
+        }
+        this._demoLoadToken += 1;
+
         // Release media session before tearing down event emitters
         this.releaseMediaSession();
 
@@ -238,6 +257,9 @@ export class VideoPlayer implements IVideoPlayer {
         // Unload any existing stream
         this.unloadStream();
 
+        // Ensure video element is visible once we start loading media.
+        this._videoElement.style.display = 'block';
+
         // Store descriptor
         this._state.currentDescriptor = descriptor;
 
@@ -251,15 +273,75 @@ export class VideoPlayer implements IVideoPlayer {
 
         // Set source based on protocol
         // CRITICAL: webOS has native HLS support - DO NOT use HLS.js
-        if (descriptor.protocol === 'hls') {
+        if (this._config?.demoMode) {
+            console.warn('[VideoPlayer] Loading stream in DEMO MODE (Simulated)');
+
+            // In Demo Mode, we don't load the video source.
+            // We simulate the ready state and metadata loading.
+            this._videoElement.style.display = 'none'; // Ensure video is hidden
+
+            // Ensure duration/currentTime are available immediately for the simulation timer.
+            this._state.durationMs = descriptor.durationMs;
+            if (descriptor.startPositionMs > 0) {
+                this._state.currentTimeMs = descriptor.startPositionMs;
+            }
+
+            // Keep the demo-mode contract aligned with real mode:
+            // - Use descriptor-provided tracks for UI
+            // - Let AudioTrackManager pick a default/active track ID
+            this._audioTrackManager.setTracks(descriptor.audioTracks);
+            this._state.activeAudioId = this._audioTrackManager.getActiveTrackId();
+
+            this._demoLoadToken += 1;
+            const token = this._demoLoadToken;
+            if (this._demoLoadTimeoutId !== null) {
+                clearTimeout(this._demoLoadTimeoutId);
+                this._demoLoadTimeoutId = null;
+            }
+
+            // Simulate async load delay
+            this._demoLoadTimeoutId = setTimeout(() => {
+                if (token !== this._demoLoadToken) {
+                    return;
+                }
+                if (this._state.currentDescriptor !== descriptor) {
+                    return;
+                }
+                this._demoLoadTimeoutId = null;
+
+                this._emitter.emit('mediaLoaded', {
+                    durationMs: descriptor.durationMs,
+                    tracks: {
+                        audio: descriptor.audioTracks,
+                        subtitle: descriptor.subtitleTracks,
+                    },
+                });
+
+                if (descriptor.startPositionMs > 0) {
+                    this._state.currentTimeMs = descriptor.startPositionMs;
+                }
+
+                // Sync media session metadata if enabled
+                this._syncMediaSessionMetadata();
+
+                // Simulate 'canplay' equivalent state
+                if (this._state.status === 'loading') {
+                    this._updateStatus('paused');
+                } else {
+                    // Avoid clobbering active playback state (e.g., playing) due to stale demo-load completion.
+                    this._emitStateChange();
+                }
+            }, 500);
+
+            return;
+        } else if (descriptor.protocol === 'hls') {
             // Native HLS - set src directly
             this._videoElement.src = descriptor.url;
         } else {
-            // Direct play - use source element with type hint
-            const source = document.createElement('source');
-            source.src = descriptor.url;
-            source.type = descriptor.mimeType;
-            this._videoElement.appendChild(source);
+            // Direct play - set src directly.
+            // Note: Some platforms (including webOS) are picky about <source type=...> for MKV,
+            // so we let the media pipeline sniff the container/codec from the URL response.
+            this._videoElement.src = descriptor.url;
         }
 
         // Load subtitle tracks
@@ -300,6 +382,13 @@ export class VideoPlayer implements IVideoPlayer {
             return;
         }
 
+        // Cancel any pending demo-load completion callback.
+        this._demoLoadToken += 1;
+        if (this._demoLoadTimeoutId !== null) {
+            clearTimeout(this._demoLoadTimeoutId);
+            this._demoLoadTimeoutId = null;
+        }
+
         // Cancel pending retries to prevent stream resurrection
         this._retryManager.clear();
         this._retryManager.setDescriptor(null);
@@ -315,6 +404,8 @@ export class VideoPlayer implements IVideoPlayer {
         // Clear src attribute
         this._videoElement.removeAttribute('src');
         this._videoElement.load();
+        // Hide when idle to avoid covering UI with a black video plane.
+        this._videoElement.style.display = 'none';
 
         // Unload subtitles
         this._subtitleManager.unloadTracks();
@@ -330,6 +421,11 @@ export class VideoPlayer implements IVideoPlayer {
         this._state.activeSubtitleId = null;
         this._state.activeAudioId = null;
         this._state.errorInfo = null;
+
+        if (this._simulationTimer) {
+            clearInterval(this._simulationTimer);
+            this._simulationTimer = null;
+        }
 
         // Sync media session metadata if enabled (clears metadata)
         this._syncMediaSessionMetadata();
@@ -349,8 +445,24 @@ export class VideoPlayer implements IVideoPlayer {
             throw new Error('VideoPlayer not initialized');
         }
 
+        if (this._config?.demoMode && !this._state.currentDescriptor) {
+            // No-op to avoid emitting ended/skip loops when nothing is loaded.
+            return;
+        }
+
+        // If the caller tries to play after a stream is loaded, ensure visibility.
+        // Demo Mode keeps the video plane hidden to avoid overlay issues.
+        if (this._state.currentDescriptor && !this._config?.demoMode) {
+            this._videoElement.style.display = 'block';
+        }
+
         try {
-            await this._videoElement.play();
+            if (this._config?.demoMode) {
+                this._startSimulation();
+                this._updateStatus('playing');
+            } else {
+                await this._videoElement.play();
+            }
         } catch (error) {
             console.error('[VideoPlayer] Play failed:', error);
             throw error;
@@ -361,7 +473,10 @@ export class VideoPlayer implements IVideoPlayer {
      * Pause playback.
      */
     public pause(): void {
-        if (this._videoElement) {
+        if (this._config?.demoMode) {
+            this._stopSimulation();
+            this._updateStatus('paused');
+        } else if (this._videoElement) {
             this._videoElement.pause();
         }
     }
@@ -572,6 +687,10 @@ export class VideoPlayer implements IVideoPlayer {
      * Get current playback position.
      */
     public getCurrentTimeMs(): number {
+        // In Demo Mode, return internal state
+        if (this._config?.demoMode) {
+            return this._state.currentTimeMs;
+        }
         if (!this._videoElement) {
             return 0;
         }
@@ -582,6 +701,9 @@ export class VideoPlayer implements IVideoPlayer {
      * Get media duration.
      */
     public getDurationMs(): number {
+        if (this._config?.demoMode) {
+            return this._state.durationMs;
+        }
         if (!this._videoElement || !isFinite(this._videoElement.duration)) {
             return this._state.durationMs;
         }
@@ -1034,6 +1156,40 @@ export class VideoPlayer implements IVideoPlayer {
             });
         } catch {
             // Some browsers may throw for invalid values; ignore
+        }
+    }
+
+    private _startSimulation(): void {
+        if (this._simulationTimer) return;
+
+        console.warn('[VideoPlayer] Starting simulation timer');
+        this._simulationTimer = setInterval(() => {
+            this._state.currentTimeMs += 250;
+
+            // Check for end
+            if (this._state.currentTimeMs >= this._state.durationMs) {
+                this._state.currentTimeMs = this._state.durationMs;
+                this._emitter.emit('timeUpdate', {
+                    currentTimeMs: this._state.currentTimeMs,
+                    durationMs: this._state.durationMs,
+                });
+                console.warn('[VideoPlayer] Simulation ended');
+                this._updateStatus('ended');
+                this._stopSimulation();
+                this._emitter.emit('ended', undefined);
+            } else {
+                this._emitter.emit('timeUpdate', {
+                    currentTimeMs: this._state.currentTimeMs,
+                    durationMs: this._state.durationMs
+                });
+            }
+        }, 250);
+    }
+
+    private _stopSimulation(): void {
+        if (this._simulationTimer) {
+            clearInterval(this._simulationTimer);
+            this._simulationTimer = null;
         }
     }
 }

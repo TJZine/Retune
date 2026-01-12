@@ -33,6 +33,7 @@ export type FilterField =
     | 'rating'
     | 'contentRating'
     | 'genre'
+    | 'director'
     | 'duration'
     | 'watched'
     | 'addedAt';
@@ -267,6 +268,8 @@ export interface ResolvedContentItem {
     contentRating?: string;
     /** Genres */
     genres?: string[];
+    /** Directors */
+    directors?: string[];
     /** Whether item has been watched */
     watched?: boolean;
     /** When item was added to Plex */
