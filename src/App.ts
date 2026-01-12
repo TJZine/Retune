@@ -264,28 +264,6 @@ export class App {
         root.appendChild(errorOverlay);
         this._errorOverlay = errorOverlay;
 
-        // Status overlay (dev/simulator hint)
-        const isDemo = safeLocalStorageGet(STORAGE_KEYS.MODE) === 'demo';
-        const startText = isDemo
-            ? 'DEMO MODE ACTIVE. Press Ctrl+Shift+D for Menu.'
-            : 'Retune running. Press Guide (G) for EPG or Info (I) to change server.';
-
-        const statusOverlay = document.createElement('div');
-        statusOverlay.id = 'app-status';
-        statusOverlay.textContent = startText;
-        statusOverlay.style.position = 'absolute';
-        statusOverlay.style.left = '24px';
-        statusOverlay.style.top = '24px';
-        statusOverlay.style.background = 'rgba(0, 0, 0, 0.7)';
-        statusOverlay.style.color = '#fff';
-        statusOverlay.style.padding = '10px 14px';
-        statusOverlay.style.borderRadius = '6px';
-        statusOverlay.style.fontSize = '18px';
-        statusOverlay.style.lineHeight = '1.2';
-        statusOverlay.style.zIndex = '9999';
-        statusOverlay.style.pointerEvents = 'none';
-        root.appendChild(statusOverlay);
-
         // Global debug key handlers
         if (this._globalKeydownHandler) {
             document.removeEventListener('keydown', this._globalKeydownHandler);

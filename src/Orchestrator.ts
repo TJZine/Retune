@@ -2576,6 +2576,34 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Handle key press from navigation.
      */
     private _handleKeyPress(event: KeyEvent): void {
+        if (this._epg?.isVisible()) {
+            switch (event.button) {
+                case 'up':
+                case 'down':
+                case 'left':
+                case 'right':
+                    if (this._epg.handleNavigation(event.button)) {
+                        event.originalEvent.preventDefault();
+                        return;
+                    }
+                    break;
+                case 'ok':
+                    if (this._epg.handleSelect()) {
+                        event.originalEvent.preventDefault();
+                        return;
+                    }
+                    break;
+                case 'back':
+                    if (this._epg.handleBack()) {
+                        event.originalEvent.preventDefault();
+                        return;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
         switch (event.button) {
             case 'channelUp':
                 this._switchToNextChannel();

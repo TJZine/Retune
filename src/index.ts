@@ -38,19 +38,6 @@ window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
 let app: App | null = null;
 
-function setBootBanner(text: string, type: 'info' | 'ok' | 'error' = 'info'): void {
-    const el = document.getElementById('retune-boot-banner');
-    if (!el) return;
-    el.textContent = text;
-    if (type === 'ok') {
-        el.style.background = 'rgba(0, 120, 0, 0.8)';
-    } else if (type === 'error') {
-        el.style.background = 'rgba(160, 0, 0, 0.85)';
-    } else {
-        el.style.background = 'rgba(0, 0, 0, 0.8)';
-    }
-}
-
 function describeElement(el: Element | null): unknown {
     if (!el) return null;
     const element = el as HTMLElement;
@@ -84,7 +71,6 @@ function describeElement(el: Element | null): unknown {
  */
 async function bootstrap(): Promise<void> {
     console.warn('[Retune] Starting...');
-    setBootBanner('Retune: starting…', 'info');
 
     try {
         app = new App();
@@ -101,11 +87,9 @@ async function bootstrap(): Promise<void> {
             },
             domSnapshot: (): unknown => ({
                 app: describeElement(document.getElementById('app')),
-                status: describeElement(document.getElementById('app-status')),
                 videoContainer: describeElement(document.getElementById('video-container')),
                 video: describeElement(document.querySelector('video')),
                 epgContainer: describeElement(document.getElementById('epg-container')),
-                bootBanner: describeElement(document.getElementById('retune-boot-banner')),
             }),
             hideVideo: (): void => {
                 const video = document.querySelector('video') as HTMLElement | null;
@@ -132,11 +116,9 @@ async function bootstrap(): Promise<void> {
         };
         (window as Window & { __RETUNE__?: typeof debugApi }).__RETUNE__ = debugApi;
         await app.start();
-        setBootBanner('Retune: started', 'ok');
         console.warn('[Retune] Started successfully');
     } catch (error) {
         console.error('Failed to start Retune:', error);
-        setBootBanner('Retune: startup failed (see console)', 'error');
     }
 }
 
