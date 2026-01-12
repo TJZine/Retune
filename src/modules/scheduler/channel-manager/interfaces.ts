@@ -220,7 +220,13 @@ export interface ChannelManagerConfig {
  * Decouples from full IPlexLibrary for testability.
  */
 export interface IPlexLibraryMinimal {
-    getLibraryItems(libraryId: string, options?: { includeCollections?: boolean }): Promise<PlexMediaItemMinimal[]>;
+    getLibraryItems(
+        libraryId: string,
+        options?: {
+            includeCollections?: boolean;
+            filter?: Record<string, string | number>;
+        }
+    ): Promise<PlexMediaItemMinimal[]>;
     getCollectionItems(collectionKey: string): Promise<PlexMediaItemMinimal[]>;
     getShowEpisodes(showKey: string): Promise<PlexMediaItemMinimal[]>;
     getPlaylistItems(playlistKey: string): Promise<PlexMediaItemMinimal[]>;

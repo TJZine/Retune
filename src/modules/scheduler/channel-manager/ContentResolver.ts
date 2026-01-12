@@ -21,6 +21,7 @@ import type {
     PlexMediaType,
 } from './types';
 import { shuffleWithSeed } from '../../../utils/prng';
+import { PLEX_MEDIA_TYPES } from '../../plex/library/constants';
 
 // ============================================
 // Content Resolver Class
@@ -182,7 +183,11 @@ export class ContentResolver {
         source: LibraryContentSource
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
-        const items = await this._library.getLibraryItems(source.libraryId);
+        const items = source.libraryType === 'show'
+            ? await this._library.getLibraryItems(source.libraryId, {
+                filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+            })
+            : await this._library.getLibraryItems(source.libraryId);
         return items.map((item, index) => this._toResolvedItem(item, index));
     }
 
@@ -191,7 +196,28 @@ export class ContentResolver {
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
         const items = await this._library.getCollectionItems(source.collectionKey);
-        return items.map((item, index) => this._toResolvedItem(item, index));
+        const expanded: PlexMediaItemMinimal[] = [];
+
+        for (const item of items) {
+            if (
+                item.durationMs <= 0 &&
+                item.episodeNumber === undefined &&
+                item.seasonNumber === undefined
+            ) {
+                try {
+                    const episodes = await this._library.getShowEpisodes(item.ratingKey);
+                    if (episodes.length > 0) {
+                        expanded.push(...episodes);
+                        continue;
+                    }
+                } catch (error) {
+                    this._logger.warn('Failed to expand show collection item', item.ratingKey, error);
+                }
+            }
+            expanded.push(item);
+        }
+
+        return expanded.map((item, index) => this._toResolvedItem(item, index));
     }
 
     private async _resolveShowSource(source: ShowContentSource): Promise<ResolvedContentItem[]> {
