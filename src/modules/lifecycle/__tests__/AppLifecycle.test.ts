@@ -355,6 +355,22 @@ describe('AppLifecycle', () => {
             expect(lifecycle.isNetworkAvailable()).toBe(true);
         });
 
+        it('checkNetworkStatus should treat resolved no-cors fetch as available', async () => {
+            const originalFetch = globalThis.fetch;
+            (globalThis as unknown as { fetch: typeof fetch }).fetch = (jest.fn().mockResolvedValue({
+                ok: false,
+                type: 'opaque',
+            }) as unknown) as typeof fetch;
+
+            await lifecycle.initialize();
+
+            const result = await lifecycle.checkNetworkStatus();
+            expect(result).toBe(true);
+            expect(lifecycle.isNetworkAvailable()).toBe(true);
+
+            globalThis.fetch = originalFetch;
+        });
+
         it('should detect offline status', async () => {
             Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
             await lifecycle.initialize();

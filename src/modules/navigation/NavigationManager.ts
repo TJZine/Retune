@@ -629,8 +629,9 @@ export class NavigationManager
         // Emit keyPress event
         this.emit('keyPress', keyEvent);
 
-        // Always log key for debugging in production builds
-        console.warn(`[NavigationManager] Key received: ${keyEvent.button} (repeat=${keyEvent.isRepeat})`);
+        if (this._state.config.debugMode) {
+            console.warn(`[NavigationManager] Key received: ${keyEvent.button} (repeat=${keyEvent.isRepeat})`);
+        }
 
         // GLOBAL FOCUS SENTINEL: Check for focus desync (Browser vs App)
         // This handles cases where buttons were disabled/enabled and browser focus dropped to body

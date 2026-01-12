@@ -647,6 +647,20 @@ describe('VideoPlayer', () => {
 
             expect(handler).toHaveBeenCalled();
         });
+
+        it('destroy() should clear simulation timers', () => {
+            const playerAny = player as unknown as {
+                _simulationTimer: ReturnType<typeof setInterval> | null;
+                _statusUpdateInterval: ReturnType<typeof setInterval> | null;
+            };
+            playerAny._simulationTimer = setInterval(() => undefined, 1000);
+            playerAny._statusUpdateInterval = setInterval(() => undefined, 1000);
+
+            player.destroy();
+
+            expect(playerAny._simulationTimer).toBeNull();
+            expect(playerAny._statusUpdateInterval).toBeNull();
+        });
     });
 
     // ========================================

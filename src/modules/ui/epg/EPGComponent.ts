@@ -534,13 +534,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const programStartMinutes = (program.scheduledStartTime - this.state.gridAnchorTime) / 60000;
         const programEndMinutes = (program.scheduledEndTime - this.state.gridAnchorTime) / 60000;
         const visibleEndMinutes = scrollPosition.timeOffset + (visibleHours * 60);
+        const clampTimeOffset = (minutes: number): number => Math.max(0, minutes);
 
         if (programStartMinutes < scrollPosition.timeOffset) {
-            this.state.scrollPosition.timeOffset = programStartMinutes;
+            this.state.scrollPosition.timeOffset = clampTimeOffset(programStartMinutes);
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
             didScroll = true;
         } else if (programEndMinutes > visibleEndMinutes) {
-            this.state.scrollPosition.timeOffset = programEndMinutes - (visibleHours * 60);
+            this.state.scrollPosition.timeOffset = clampTimeOffset(programEndMinutes - (visibleHours * 60));
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
             didScroll = true;
         }

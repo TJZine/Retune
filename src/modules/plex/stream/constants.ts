@@ -12,8 +12,6 @@
 /**
  * Supported container formats for direct play on webOS.
  * All containers listed here can be played natively.
-/**
- * Supported container formats for direct play on webOS.
  * Strictly limited to formats with high native compatibility assurance.
  * Usage of legacy containers (AVI, WMV) generally triggers transcoding.
  */

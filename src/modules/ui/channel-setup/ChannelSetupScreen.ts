@@ -418,7 +418,11 @@ export class ChannelSetupScreen {
     }
 
     private _getSelectedServerId(): string | null {
-        return safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+        const stored = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+        if (stored) {
+            return stored;
+        }
+        return this._orchestrator.getSelectedServerId();
     }
 
     private _registerFocusables(buttons: HTMLElement[]): void {

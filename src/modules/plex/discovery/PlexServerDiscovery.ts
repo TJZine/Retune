@@ -36,7 +36,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     private _emitter: EventEmitter<PlexServerDiscoveryEvents>;
     private _getAuthHeaders: () => Record<string, string>;
     private _mixedContentConfig: MixedContentConfig;
-    private _pendingServerId?: string;
+    private _pendingServerId: string | undefined;
     private _discoveryPromise: Promise<PlexServer[]> | null = null;
 
     /**
@@ -499,7 +499,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     public clearSelection(): void {
         this._state.selectedServer = null;
         this._state.selectedConnection = null;
-        this._pendingServerId = undefined as unknown as string;
+        this._pendingServerId = undefined;
         try {
             localStorage.removeItem(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
         } catch {

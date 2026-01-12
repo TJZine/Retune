@@ -383,6 +383,7 @@ export class App {
         if (
             this._orchestrator &&
             this._orchestrator.isReady() &&
+            screen !== 'auth' &&
             screen !== 'server-select' &&
             screen !== 'channel-setup'
         ) {

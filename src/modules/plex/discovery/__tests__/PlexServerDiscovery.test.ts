@@ -257,33 +257,34 @@ describe('PlexServerDiscovery', () => {
 
         it('should timeout after the configured timeout', async () => {
             jest.useFakeTimers();
-
-            // Mock fetch that never resolves until aborted
-            (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation((_url: string, options: RequestInit) => {
-                return new Promise((_resolve, reject) => {
-                    if (options.signal) {
-                        options.signal.addEventListener('abort', () => {
-                            reject(new DOMException('The operation was aborted', 'AbortError'));
-                        });
-                    }
+            try {
+                // Mock fetch that never resolves until aborted
+                (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation((_url: string, options: RequestInit) => {
+                    return new Promise((_resolve, reject) => {
+                        if (options.signal) {
+                            options.signal.addEventListener('abort', () => {
+                                reject(new DOMException('The operation was aborted', 'AbortError'));
+                            });
+                        }
+                    });
                 });
-            });
 
-            const discovery = new PlexServerDiscovery(mockConfig);
-            const mockServer = createMockServer();
-            const mockConnection = createMockConnection();
+                const discovery = new PlexServerDiscovery(mockConfig);
+                const mockServer = createMockServer();
+                const mockConnection = createMockConnection();
 
-            const promise = discovery.testConnection(mockServer, mockConnection);
+                const promise = discovery.testConnection(mockServer, mockConnection);
 
-            // Advance timers past the configured timeout
-            await jest.advanceTimersByTimeAsync(PLEX_DISCOVERY_CONSTANTS.CONNECTION_TEST_TIMEOUT_MS + 100);
+                // Advance timers past the configured timeout
+                await jest.advanceTimersByTimeAsync(PLEX_DISCOVERY_CONSTANTS.CONNECTION_TEST_TIMEOUT_MS + 100);
 
-            const lat = await promise;
+                const lat = await promise;
 
-            // AbortController should have aborted the request
-            expect(lat).toBeNull();
-
-            jest.useRealTimers();
+                // AbortController should have aborted the request
+                expect(lat).toBeNull();
+            } finally {
+                jest.useRealTimers();
+            }
         });
 
         it('should call identity endpoint', async () => {

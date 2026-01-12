@@ -11,10 +11,16 @@ import { RemoteHandler } from '../RemoteHandler';
 import { LONG_PRESS_THRESHOLD_MS } from '../constants';
 
 // Helper to dispatch key events
-function dispatchKeyEvent(keyCode: number, type: 'keydown' | 'keyup' = 'keydown'): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const event = new KeyboardEvent(type, { keyCode } as any);
-    document.dispatchEvent(event);
+function dispatchKeyEvent(
+    keyCode: number,
+    type: 'keydown' | 'keyup' = 'keydown',
+    target: Document | HTMLElement = document
+): KeyboardEvent {
+    const event = new KeyboardEvent(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { value: keyCode });
+    Object.defineProperty(event, 'which', { value: keyCode });
+    target.dispatchEvent(event);
+    return event;
 }
 
 // Helper to wait for a specific duration
@@ -95,6 +101,23 @@ describe('RemoteHandler', () => {
             expect(handler).toHaveBeenCalledWith(
                 expect.objectContaining({ button: 'ok', isRepeat: false })
             );
+        });
+
+        it('should not intercept keydown when an input is focused', () => {
+            const handler = jest.fn();
+            remoteHandler.on('keyDown', handler);
+
+            const input = document.createElement('input');
+            document.body.appendChild(input);
+            input.focus();
+
+            const event = dispatchKeyEvent(8, 'keydown', input);
+
+            expect(event.defaultPrevented).toBe(false);
+            expect(handler).not.toHaveBeenCalled();
+
+            input.blur();
+            input.remove();
         });
 
         it('should not emit for unmapped keys', () => {

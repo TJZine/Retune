@@ -23,6 +23,6 @@ export default [
         },
     },
     {
-        ignores: ['dist/**', 'node_modules/**', '*.config.js'],
+        ignores: ['dist/**', 'dist-ts/**', 'node_modules/**', '*.config.js'],
     },
 ];

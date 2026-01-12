@@ -14,7 +14,7 @@ import type {
 } from './types';
 import type { RetryManager } from './RetryManager';
 
-const SYNTHETIC_MEDIA_ERROR_CODE_KEY = '__retuneSyntheticMediaErrorCode';
+import { SYNTHETIC_MEDIA_ERROR_CODE_KEY } from './constants';
 
 /**
  * Callbacks for state updates.

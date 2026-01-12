@@ -615,7 +615,7 @@ export class PlexLibrary implements IPlexLibrary {
                     if (retryAfterHeader) {
                         const parsed = parseInt(retryAfterHeader, 10);
                         if (!isNaN(parsed)) {
-                            retryAfter = parsed;
+                            retryAfter = Math.max(0, parsed);
                         } else {
                             // Try parsing as HTTP-date
                             const date = Date.parse(retryAfterHeader);

@@ -249,7 +249,9 @@ export class AppLifecycle implements IAppLifecycle {
                 mode: 'no-cors' // Use no-cors to avoid CORS errors on opaque network check
             });
 
-            const available = response.ok;
+            // With no-cors, response is typically opaque (type: 'opaque', ok: false, status: 0).
+            // A successful fetch that does not throw is sufficient to treat the network as available.
+            const available = response.type === 'opaque' || response.ok;
             if (available !== this._isNetworkAvailable) {
                 this._isNetworkAvailable = available;
                 this._emitter.emit('networkChange', { isAvailable: available });

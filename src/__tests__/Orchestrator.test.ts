@@ -727,6 +727,14 @@ describe('AppOrchestrator', () => {
             await orchestrator.initialize(mockConfig);
         });
 
+        it('seeds demo channels when no channels are loaded', async () => {
+            mockChannelManager.getAllChannels.mockReturnValueOnce([]);
+
+            await orchestrator.start();
+
+            expect(mockChannelManager.seedDemoChannels).toHaveBeenCalled();
+        });
+
         it('skips Plex auth and discovery during startup', async () => {
             await orchestrator.start();
 

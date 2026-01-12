@@ -121,6 +121,8 @@ export class AuthScreen {
     }
 
     hide(): void {
+        this._stopElapsedTimer();
+        this._pollToken += 1;
         this._unregisterFocusables();
         this._container.style.display = 'none';
         this._container.classList.remove('visible');
@@ -286,4 +288,3 @@ export class AuthScreen {
         nav.unregisterFocusable('btn-auth-retry');
     }
 }
-

@@ -6,10 +6,8 @@
  */
 
 import type { StreamDescriptor, PlaybackError } from './types';
-import { MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_MS } from './constants';
+import { MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_MS, SYNTHETIC_MEDIA_ERROR_CODE_KEY } from './constants';
 import { mapMediaErrorCodeToPlaybackError } from './ErrorHandler';
-
-const SYNTHETIC_MEDIA_ERROR_CODE_KEY = '__retuneSyntheticMediaErrorCode';
 
 /**
  * Callback for retry error handling.

@@ -161,6 +161,7 @@ export interface IAppOrchestrator {
     discoverServers(forceRefresh?: boolean): Promise<PlexServer[]>;
     selectServer(serverId: string): Promise<boolean>;
     clearSelectedServer(): void;
+    getSelectedServerId(): string | null;
     getLibrariesForSetup(): Promise<PlexLibraryType[]>;
     createChannelsFromSetup(config: ChannelSetupConfig): Promise<{ created: number; skipped: number }>;
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
@@ -425,6 +426,10 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     isReady(): boolean {
         return this._ready;
+    }
+
+    getSelectedServerId(): string | null {
+        return this._getSelectedServerId();
     }
 
     /**
@@ -726,6 +731,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // New channel = new playback attempt; unblock any prior fast-fail guard.
         this._resetPlaybackFailureGuard();
+        this._directFallbackAttemptedForItemKey.clear();
 
         // Prevent concurrent channel switches from causing state corruption
         if (this._isChannelSwitching) {
@@ -1482,8 +1488,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             // Demo Mode safety: demo storage must not allow Plex-backed sources.
             if (this._mode === 'demo') {
                 const channels = this._channelManager.getAllChannels();
-                const allManual = channels.every((c) => c.contentSource?.type === 'manual');
-                if (!allManual) {
+                const hasChannels = channels.length > 0;
+                const allManual = hasChannels && channels.every((c) => c.contentSource?.type === 'manual');
+                if (!hasChannels || !allManual) {
                     console.warn('[Orchestrator] Demo Mode: pruning non-manual channels via re-seed');
                     await this._channelManager.seedDemoChannels();
                 }
@@ -2339,9 +2346,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-    /**
-     * Get MIME type from stream decision.
-     */
     /**
      * Get MIME type from stream decision.
      */

@@ -140,6 +140,10 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
      * Handle keydown events.
      */
     private _handleKeyDown(event: KeyboardEvent): void {
+        if (this._isEditableActiveElement()) {
+            return;
+        }
+
         const keyCode = event.keyCode;
         const button = this.mapKeyCode(keyCode);
 
@@ -194,6 +198,11 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
             return;
         }
 
+        if (this._isEditableActiveElement()) {
+            this._cleanupKeyTracking(keyCode);
+            return;
+        }
+
         // Cancel long press timer
         const timerId = this._longPressTimers.get(keyCode);
         if (timerId !== undefined) {
@@ -213,6 +222,36 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
         }
 
         this.emit('keyUp', { button, wasLongPress });
+    }
+
+    private _cleanupKeyTracking(keyCode: number): void {
+        const timerId = this._longPressTimers.get(keyCode);
+        if (timerId !== undefined) {
+            window.clearTimeout(timerId);
+            this._longPressTimers.delete(keyCode);
+        }
+        this._keyDownTimes.delete(keyCode);
+        this._isLongPressFired.delete(keyCode);
+    }
+
+    private _isEditableActiveElement(): boolean {
+        if (typeof document === 'undefined') {
+            return false;
+        }
+        const active = document.activeElement;
+        if (!active) {
+            return false;
+        }
+
+        if (active instanceof HTMLInputElement) {
+            return true;
+        }
+        if (active instanceof HTMLTextAreaElement) {
+            return true;
+        }
+
+        const element = active as HTMLElement;
+        return element.isContentEditable === true;
     }
 
     /**

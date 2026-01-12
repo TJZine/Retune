@@ -20,7 +20,9 @@ import type {
 } from './types';
 import {
     STORAGE_KEY,
+    LEGACY_STORAGE_KEY,
     CURRENT_CHANNEL_KEY,
+    LEGACY_CURRENT_CHANNEL_KEY,
     STORAGE_VERSION,
     CACHE_TTL_MS,
     MAX_CHANNELS,
@@ -653,17 +655,35 @@ export class ChannelManager implements IChannelManager {
      */
     async loadChannels(): Promise<void> {
         try {
-            const json = localStorage.getItem(this._storageKey);
+            const primaryJson = localStorage.getItem(this._storageKey);
+            let json: string | null = primaryJson;
+            let sourceKey = this._storageKey;
+
+            if (!json && this._storageKey === STORAGE_KEY) {
+                const legacyJson = localStorage.getItem(LEGACY_STORAGE_KEY);
+                if (legacyJson) {
+                    json = legacyJson;
+                    sourceKey = LEGACY_STORAGE_KEY;
+                    this._logger.warn(`[ChannelManager] Migrating channels from legacy key "${LEGACY_STORAGE_KEY}" to "${STORAGE_KEY}"`);
+                }
+            }
             if (!json) {
                 return;
             }
 
-            const data = JSON.parse(json) as StoredChannelData;
-
-            // Validate version
-            if (typeof data.version !== 'number' || data.version !== STORAGE_VERSION) {
-                this._logger.warn(`Storage version mismatch (got ${data.version}, expected ${STORAGE_VERSION}), skipping load`);
+            const parsed = JSON.parse(json) as Partial<StoredChannelData>;
+            const data = this._migrateStoredChannelData(parsed);
+            if (!data) {
+                this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
+            }
+
+            if (sourceKey !== this._storageKey) {
+                try {
+                    localStorage.setItem(this._storageKey, JSON.stringify(data));
+                } catch (e) {
+                    this._logger.warn('[ChannelManager] Failed to persist migrated channel data', e);
+                }
             }
 
             // Restore state
@@ -687,9 +707,50 @@ export class ChannelManager implements IChannelManager {
             if (savedCurrent && this._state.channels.has(savedCurrent)) {
                 this._state.currentChannelId = savedCurrent;
             }
+            if (!savedCurrent && this._storageKey === STORAGE_KEY) {
+                const legacyCurrent = localStorage.getItem(LEGACY_CURRENT_CHANNEL_KEY);
+                if (legacyCurrent && this._state.channels.has(legacyCurrent)) {
+                    this._state.currentChannelId = legacyCurrent;
+                    try {
+                        localStorage.setItem(CURRENT_CHANNEL_KEY, legacyCurrent);
+                    } catch (e) {
+                        this._logger.warn('[ChannelManager] Failed to persist migrated current channel id', e);
+                    }
+                }
+            }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);
         }
+    }
+
+    private _migrateStoredChannelData(data: Partial<StoredChannelData>): StoredChannelData | null {
+        if (!Array.isArray(data.channels)) {
+            return null;
+        }
+        if (!Array.isArray(data.channelOrder)) {
+            return null;
+        }
+
+        const savedAt =
+            typeof data.savedAt === 'number' && Number.isFinite(data.savedAt) ? data.savedAt : Date.now();
+
+        const currentChannelId =
+            typeof data.currentChannelId === 'string' ? data.currentChannelId : null;
+
+        const version =
+            typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
+
+        if (version !== STORAGE_VERSION) {
+            this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), attempting migration`);
+        }
+
+        return {
+            version: STORAGE_VERSION,
+            channels: data.channels,
+            channelOrder: data.channelOrder,
+            currentChannelId,
+            savedAt,
+        };
     }
 
     // ============================================

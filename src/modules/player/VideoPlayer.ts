@@ -203,6 +203,16 @@ export class VideoPlayer implements IVideoPlayer {
      * Destroy the video player.
      */
     public destroy(): void {
+        // Stop any active simulation timers first (they may reference the video element/state)
+        if (this._simulationTimer) {
+            clearInterval(this._simulationTimer);
+            this._simulationTimer = null;
+        }
+        if (this._statusUpdateInterval) {
+            clearInterval(this._statusUpdateInterval);
+            this._statusUpdateInterval = null;
+        }
+
         // Release media session before tearing down event emitters
         this.releaseMediaSession();
 
