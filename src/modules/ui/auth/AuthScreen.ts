@@ -183,7 +183,11 @@ export class AuthScreen {
         this._pollToken += 1;
         this._stopElapsedTimer();
         if (this._activePinId !== null) {
-            await this._orchestrator.cancelPin(this._activePinId);
+            try {
+                await this._orchestrator.cancelPin(this._activePinId);
+            } catch {
+                // Best-effort cancellation: user intent is to stop polling UI regardless of network state.
+            }
         }
         this._activePinId = null;
         this._activeCode = null;

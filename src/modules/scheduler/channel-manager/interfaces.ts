@@ -153,6 +153,22 @@ export interface IChannelManager {
      */
     loadChannels(): Promise<void>;
 
+    /**
+     * Update persistence keys for multi-server/multi-mode support.
+     * Implementations should NOT throw if storage is unavailable.
+     * Typically followed by loadChannels().
+     */
+    setStorageKeys(storageKey: string, currentChannelKey: string): void;
+
+    /**
+     * Replace the entire channel lineup atomically (best-effort).
+     * Used to avoid partial destructive builds when generating many channels.
+     */
+    replaceAllChannels(
+        channels: ChannelConfig[],
+        options?: { currentChannelId?: string | null }
+    ): Promise<void>;
+
     // Events
 
     /**
@@ -191,6 +207,12 @@ export interface ChannelManagerConfig {
      * Storage key to use for channel persistence.
      */
     storageKey?: string;
+
+    /**
+     * Storage key to use for persisting the current channel ID.
+     * If omitted, a per-storage-key namespaced default is used.
+     */
+    currentChannelKey?: string;
 }
 
 /**

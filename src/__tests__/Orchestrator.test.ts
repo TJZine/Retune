@@ -14,7 +14,7 @@ const mockLocalStorage = {
     removeItem: jest.fn(),
     clear: jest.fn(),
 };
-Object.defineProperty(global, 'localStorage', { value: mockLocalStorage });
+Object.defineProperty(global, 'localStorage', { value: mockLocalStorage, configurable: true });
 
 
 // ============================================
@@ -206,6 +206,8 @@ const mockChannel = {
 
 const mockChannelManager = {
     loadChannels: jest.fn().mockResolvedValue(undefined),
+    setStorageKeys: jest.fn(),
+    replaceAllChannels: jest.fn().mockResolvedValue(undefined),
     seedDemoChannels: jest.fn().mockResolvedValue(undefined),
     getAllChannels: jest.fn().mockReturnValue([mockChannel]),
     getCurrentChannel: jest.fn().mockReturnValue(mockChannel),
@@ -550,7 +552,7 @@ describe('AppOrchestrator', () => {
             expect(mockNavigation.goTo).not.toHaveBeenCalledWith('player');
         });
 
-        it('should clear channels and rerun setup when server selection changes', async () => {
+        it('should rerun setup when switching to a new server without setup record', async () => {
             mockPlexAuth.getStoredCredentials.mockResolvedValue({
                 token: { token: 'valid-token' },
                 selectedServerId: null,
@@ -567,8 +569,11 @@ describe('AppOrchestrator', () => {
 
             await orchestrator.start();
 
-            expect(mockChannelManager.deleteChannel).toHaveBeenCalledWith(mockChannel.id);
             expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
+            expect(mockChannelManager.setStorageKeys).toHaveBeenCalledWith(
+                'retune_channels_server_v1:server-2',
+                'retune_current_channel_v4:server-2'
+            );
         });
 
         it('should navigate to server-select when auth is valid but no selection restored', async () => {

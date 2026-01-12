@@ -62,6 +62,9 @@ import {
     type ResolvedChannelContent,
 } from './modules/scheduler/channel-manager';
 import {
+    MAX_CHANNELS,
+} from './modules/scheduler/channel-manager/constants';
+import {
     ChannelScheduler,
     type IChannelScheduler,
     type ScheduledProgram,
@@ -114,6 +117,13 @@ export interface ChannelSetupConfig {
     };
 }
 
+export interface ChannelBuildSummary {
+    created: number;
+    skipped: number;
+    reachedMaxChannels: boolean;
+    errorCount: number;
+}
+
 export interface ChannelSetupRecord extends ChannelSetupConfig {
     createdAt: number;
     updatedAt: number;
@@ -163,7 +173,7 @@ export interface IAppOrchestrator {
     clearSelectedServer(): void;
     getSelectedServerId(): string | null;
     getLibrariesForSetup(): Promise<PlexLibraryType[]>;
-    createChannelsFromSetup(config: ChannelSetupConfig): Promise<{ created: number; skipped: number }>;
+    createChannelsFromSetup(config: ChannelSetupConfig): Promise<ChannelBuildSummary>;
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
     requestChannelSetupRerun(): void;
     handleGlobalError(error: AppError, context: string): void;
@@ -207,6 +217,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
     private _epgScheduleLoadToken = 0;
+    private _epgInitPromise: Promise<void> | null = null;
 
     private _config: OrchestratorConfig | null = null;
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
@@ -330,6 +341,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         const channelManagerConfig: ChannelManagerConfig = {
             plexLibrary: this._plexLibrary,
             storageKey: this._mode === 'demo' ? STORAGE_KEYS.CHANNELS_DEMO : STORAGE_KEYS.CHANNELS_REAL,
+            currentChannelKey: this._mode === 'demo' ? `${STORAGE_KEYS.CURRENT_CHANNEL}:demo` : STORAGE_KEYS.CURRENT_CHANNEL,
         };
         this._channelManager = new ChannelManager(channelManagerConfig);
 
@@ -534,7 +546,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
-        return this._plexDiscovery.selectServer(serverId);
+        const ok = await this._plexDiscovery.selectServer(serverId);
+        if (ok) {
+            // If we're already running (or resuming from the server-select screen),
+            // re-run the channel/player/EPG phases to swap to the selected server.
+            this._runStartup(4).catch((e) => {
+                console.error('[Orchestrator] Server select startup continuation failed:', e);
+            });
+        }
+        return ok;
     }
 
     /**
@@ -563,7 +583,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
     async createChannelsFromSetup(
         config: ChannelSetupConfig
-    ): Promise<{ created: number; skipped: number }> {
+    ): Promise<ChannelBuildSummary> {
         if (!this._channelManager || !this._plexLibrary) {
             throw new Error('Channel manager not initialized');
         }
@@ -573,21 +593,33 @@ export class AppOrchestrator implements IAppOrchestrator {
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
 
-        const existingChannels = this._channelManager.getAllChannels();
-        for (const channel of existingChannels) {
-            await this._channelManager.deleteChannel(channel.id);
-        }
+        const previousChannels = this._channelManager.getAllChannels();
+        const previousCurrent = this._channelManager.getCurrentChannel()?.id ?? null;
 
         let created = 0;
         let skipped = 0;
+        let reachedMaxChannels = false;
+        let errorCount = 0;
+        const errors: string[] = [];
+
         const shuffleSeedFor = (value: string): number => this._hashSeed(value);
         const MAX_SCAN_ITEMS = 500;
+
+        type PendingChannel = {
+            name: string;
+            contentSource: ChannelConfig['contentSource'];
+            playbackMode: ChannelConfig['playbackMode'];
+            shuffleSeed: number;
+            contentFilters?: ChannelConfig['contentFilters'];
+        };
+
+        const pending: PendingChannel[] = [];
 
         if (config.enabledStrategies.playlists) {
             const playlists = await this._plexLibrary.getPlaylists();
             const sortedPlaylists = [...playlists].sort((a, b) => a.title.localeCompare(b.title));
             for (const playlist of sortedPlaylists) {
-                await this._channelManager.createChannel({
+                pending.push({
                     name: `Playlist: ${playlist.title}`,
                     contentSource: {
                         type: 'playlist',
@@ -597,7 +629,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                     playbackMode: 'shuffle',
                     shuffleSeed: shuffleSeedFor(`playlist:${playlist.ratingKey}`),
                 });
-                created += 1;
             }
         }
 
@@ -610,7 +641,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             if (collections.length > 0) {
                 for (const collection of collections) {
-                    await this._channelManager.createChannel({
+                    pending.push({
                         name: collection.title,
                         contentSource: {
                             type: 'collection',
@@ -620,10 +651,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                         playbackMode: 'shuffle',
                         shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
                     });
-                    created += 1;
                 }
             } else if (config.enabledStrategies.libraryFallback) {
-                await this._channelManager.createChannel({
+                pending.push({
                     name: library.title,
                     contentSource: {
                         type: 'library',
@@ -634,7 +664,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                     playbackMode: 'shuffle',
                     shuffleSeed: shuffleSeedFor(`library:${library.id}`),
                 });
-                created += 1;
             } else {
                 skipped += 1;
             }
@@ -649,7 +678,11 @@ export class AppOrchestrator implements IAppOrchestrator {
                     : [];
 
                 for (const genre of uniqueGenres) {
-                    await this._channelManager.createChannel({
+                    if (pending.length >= MAX_CHANNELS) {
+                        reachedMaxChannels = true;
+                        break;
+                    }
+                    pending.push({
                         name: `${library.title} - ${genre}`,
                         contentSource: {
                             type: 'library',
@@ -661,11 +694,14 @@ export class AppOrchestrator implements IAppOrchestrator {
                         playbackMode: 'shuffle',
                         shuffleSeed: shuffleSeedFor(`genre:${library.id}:${genre}`),
                     });
-                    created += 1;
                 }
 
                 for (const director of uniqueDirectors) {
-                    await this._channelManager.createChannel({
+                    if (pending.length >= MAX_CHANNELS) {
+                        reachedMaxChannels = true;
+                        break;
+                    }
+                    pending.push({
                         name: `${library.title} - ${director}`,
                         contentSource: {
                             type: 'library',
@@ -677,16 +713,78 @@ export class AppOrchestrator implements IAppOrchestrator {
                         playbackMode: 'shuffle',
                         shuffleSeed: shuffleSeedFor(`director:${library.id}:${director}`),
                     });
-                    created += 1;
                 }
             }
         }
 
-        await this._channelManager.saveChannels();
-        this._primeEpgChannels();
-        await this._refreshEpgSchedules();
+        const tmpStorageKey = `retune_channels_build_tmp_v1:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        const tmpCurrentKey = `retune_current_channel_build_tmp_v1:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        const builder = new ChannelManager({
+            plexLibrary: this._plexLibrary,
+            storageKey: tmpStorageKey,
+            currentChannelKey: tmpCurrentKey,
+        });
 
-        return { created, skipped };
+        try {
+            for (const ch of pending) {
+                if (created >= MAX_CHANNELS) {
+                    reachedMaxChannels = true;
+                    break;
+                }
+                try {
+                    const createConfig: Partial<ChannelConfig> = {
+                        name: ch.name,
+                        contentSource: ch.contentSource,
+                        playbackMode: ch.playbackMode,
+                        shuffleSeed: ch.shuffleSeed,
+                    };
+                    if (ch.contentFilters) {
+                        createConfig.contentFilters = ch.contentFilters;
+                    }
+                    await builder.createChannel(createConfig);
+                    created += 1;
+                } catch (e) {
+                    errorCount += 1;
+                    skipped += 1;
+                    if (errors.length < 5) {
+                        errors.push(e instanceof Error ? e.message : 'Unknown channel creation error');
+                    }
+                    if (e instanceof Error && e.message === 'Maximum number of channels reached') {
+                        reachedMaxChannels = true;
+                        break;
+                    }
+                }
+            }
+
+            const builtChannels = builder.getAllChannels();
+            if (builtChannels.length === 0) {
+                return { created: 0, skipped: skipped + (pending.length - created), reachedMaxChannels, errorCount };
+            }
+
+            await this._channelManager.replaceAllChannels(builtChannels, { currentChannelId: builtChannels[0]?.id ?? null });
+            this._primeEpgChannels();
+            await this._refreshEpgSchedules();
+        } catch (e) {
+            console.error('[Orchestrator] Channel build failed; attempting rollback:', e);
+            try {
+                await this._channelManager.replaceAllChannels(previousChannels, { currentChannelId: previousCurrent });
+            } catch (rollbackError) {
+                console.error('[Orchestrator] Channel build rollback failed:', rollbackError);
+            }
+            throw e;
+        } finally {
+            safeLocalStorageRemove(tmpStorageKey);
+            safeLocalStorageRemove(tmpCurrentKey);
+        }
+
+        if (reachedMaxChannels) {
+            skipped += Math.max(0, pending.length - created - skipped);
+        }
+        if (errors.length > 0) {
+            console.warn('[Orchestrator] Channel build errors (first few):', errors);
+        }
+
+        return { created, skipped, reachedMaxChannels, errorCount };
     }
 
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void {
@@ -701,7 +799,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             updatedAt: Date.now(),
         };
         safeLocalStorageSet(storageKey, JSON.stringify(record));
-        safeLocalStorageSet(STORAGE_KEYS.CHANNELS_SERVER, serverId);
         this._channelSetupRerunRequested = false;
     }
 
@@ -1483,6 +1580,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Channel Manager
         if (this._channelManager) {
             this._updateModuleStatus('channel-manager', 'initializing');
+            await this._configureChannelManagerStorageForSelectedServer();
             await this._channelManager.loadChannels();
 
             // Demo Mode safety: demo storage must not allow Plex-backed sources.
@@ -1493,27 +1591,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                 if (!hasChannels || !allManual) {
                     console.warn('[Orchestrator] Demo Mode: pruning non-manual channels via re-seed');
                     await this._channelManager.seedDemoChannels();
-                }
-            }
-
-            if (this._mode === 'real') {
-                const serverId = this._getSelectedServerId();
-                const channelServerId = safeLocalStorageGet(STORAGE_KEYS.CHANNELS_SERVER);
-                const channels = this._channelManager.getAllChannels();
-                const hasChannels = channels.length > 0;
-                const setupRecord = serverId ? this._getChannelSetupRecord(serverId) : null;
-
-                if (
-                    serverId &&
-                    hasChannels &&
-                    ((channelServerId && channelServerId !== serverId) ||
-                        (!channelServerId && !setupRecord))
-                ) {
-                    console.warn('[Orchestrator] Server change detected. Clearing channels for setup.');
-                    await this._clearAllChannels();
-                    this._channelSetupRerunRequested = true;
-                } else if (serverId && hasChannels && !channelServerId && setupRecord) {
-                    safeLocalStorageSet(STORAGE_KEYS.CHANNELS_SERVER, serverId);
                 }
             }
 
@@ -1558,18 +1635,38 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Phase 5: Initialize EPG
      */
     private async _initPhase5(): Promise<void> {
-        const startTime = Date.now();
+        if (this._moduleStatus.get('epg-ui')?.status === 'ready') {
+            return;
+        }
+        if (this._epgInitPromise) {
+            await this._epgInitPromise;
+            return;
+        }
+        if (!this._epg || !this._config) {
+            return;
+        }
 
-        if (this._epg && this._config) {
-            this._updateModuleStatus('epg-ui', 'initializing');
-            this._epg.initialize(this._config.epgConfig);
+        const startTime = Date.now();
+        this._updateModuleStatus('epg-ui', 'initializing');
+        const init = async (): Promise<void> => {
+            this._epg!.initialize(this._config!.epgConfig);
             this._updateModuleStatus(
                 'epg-ui',
                 'ready',
                 undefined,
                 Date.now() - startTime
             );
-        }
+        };
+        this._epgInitPromise = init()
+            .catch((e) => {
+                this._updateModuleStatus('epg-ui', 'error');
+                throw e;
+            })
+            .finally(() => {
+                this._epgInitPromise = null;
+            });
+
+        await this._epgInitPromise;
     }
 
     private async _runStartup(startPhase: 1 | 2 | 3 | 4 | 5): Promise<void> {
@@ -1730,6 +1827,38 @@ export class AppOrchestrator implements IAppOrchestrator {
         return `retune_channel_setup_v1:${serverId}`;
     }
 
+    private _getPerServerChannelsStorageKey(serverId: string): string {
+        return `${STORAGE_KEYS.CHANNELS_SERVER}:${serverId}`;
+    }
+
+    private _getPerServerCurrentChannelKey(serverId: string): string {
+        return `${STORAGE_KEYS.CURRENT_CHANNEL}:${serverId}`;
+    }
+
+    private async _configureChannelManagerStorageForSelectedServer(): Promise<void> {
+        if (!this._channelManager) {
+            return;
+        }
+
+        if (this._mode === 'demo') {
+            this._channelManager.setStorageKeys(
+                STORAGE_KEYS.CHANNELS_DEMO,
+                `${STORAGE_KEYS.CURRENT_CHANNEL}:demo`
+            );
+            return;
+        }
+
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            return;
+        }
+
+        const serverChannelsKey = this._getPerServerChannelsStorageKey(serverId);
+        const serverCurrentKey = this._getPerServerCurrentChannelKey(serverId);
+
+        this._channelManager.setStorageKeys(serverChannelsKey, serverCurrentKey);
+    }
+
     private _getChannelSetupRecord(serverId: string): ChannelSetupRecord | null {
         const stored = safeLocalStorageGet(this._getChannelSetupStorageKey(serverId));
         if (!stored) {
@@ -1801,16 +1930,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             hash = Math.imul(hash, 16777619);
         }
         return hash >>> 0;
-    }
-
-    private async _clearAllChannels(): Promise<void> {
-        if (!this._channelManager) {
-            return;
-        }
-        const channels = this._channelManager.getAllChannels();
-        for (const channel of channels) {
-            await this._channelManager.deleteChannel(channel.id);
-        }
     }
 
     private _clearAuthResume(): void {
@@ -2338,6 +2457,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             const headers = this._plexAuth?.getAuthHeaders() ?? {};
             const token = headers['X-Plex-Token'];
             if (typeof token === 'string' && token.length > 0) {
+                // Note: We include the token as a query param because some webOS media/image fetch paths
+                // cannot reliably attach headers. This carries leak risk (logs/referrers/caches), so avoid
+                // logging these URLs and only use them where required.
                 url.searchParams.set('X-Plex-Token', token);
             }
             return url.toString();

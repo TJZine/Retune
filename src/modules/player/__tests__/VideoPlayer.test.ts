@@ -647,8 +647,25 @@ describe('VideoPlayer', () => {
 
             expect(handler).toHaveBeenCalled();
         });
+    });
 
-        it('destroy() should clear simulation timers', () => {
+    // ========================================
+    // destroy
+    // ========================================
+
+    describe('destroy', () => {
+        let player: VideoPlayer;
+
+        beforeEach(async () => {
+            player = new VideoPlayer();
+            await player.initialize(createMockConfig());
+        });
+
+        afterEach(() => {
+            player.destroy();
+        });
+
+        it('should clear simulation timers', () => {
             const playerAny = player as unknown as {
                 _simulationTimer: ReturnType<typeof setInterval> | null;
                 _statusUpdateInterval: ReturnType<typeof setInterval> | null;

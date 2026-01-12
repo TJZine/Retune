@@ -1187,130 +1187,138 @@ describe('PlexServerDiscovery', () => {
     describe('rate limit handling', () => {
         it('should retry after 429 with Retry-After header', async () => {
             jest.useFakeTimers();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    provides: 'server',
-                    connections: [],
-                    sourceTitle: 'user',
-                    ownerId: 'owner',
-                    owned: true,
-                },
-            ];
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        provides: 'server',
+                        connections: [],
+                        sourceTitle: 'user',
+                        ownerId: 'owner',
+                        owned: true,
+                    },
+                ];
 
-            let callCount = 0;
-            (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
-                callCount++;
-                if (callCount === 1) {
-                    // First call returns 429 with Retry-After: 3 seconds
+                let callCount = 0;
+                (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
+                    callCount++;
+                    if (callCount === 1) {
+                        // First call returns 429 with Retry-After: 3 seconds
+                        return Promise.resolve({
+                            ok: false,
+                            status: 429,
+                            headers: { get: (name: string) => name === 'Retry-After' ? '3' : null },
+                            json: async () => ({ error: 'rate limited' }),
+                        });
+                    }
+                    // Second call succeeds
                     return Promise.resolve({
-                        ok: false,
-                        status: 429,
-                        headers: { get: (name: string) => name === 'Retry-After' ? '3' : null },
-                        json: async () => ({ error: 'rate limited' }),
+                        ok: true,
+                        status: 200,
+                        headers: { get: () => null },
+                        json: async () => mockServers,
                     });
-                }
-                // Second call succeeds
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    headers: { get: () => null },
-                    json: async () => mockServers,
                 });
-            });
 
-            const discovery = new PlexServerDiscovery(mockConfig);
-            const discoverPromise = discovery.discoverServers();
+                const discovery = new PlexServerDiscovery(mockConfig);
+                const discoverPromise = discovery.discoverServers();
 
-            // Advance past the 3-second delay from Retry-After header
-            await jest.advanceTimersByTimeAsync(3000);
+                // Advance past the 3-second delay from Retry-After header
+                await jest.advanceTimersByTimeAsync(3000);
 
-            const result = await discoverPromise;
+                const result = await discoverPromise;
 
-            expect(callCount).toBe(2);
-            expect(result).toHaveLength(1);
-            jest.useRealTimers();
+                expect(callCount).toBe(2);
+                expect(result).toHaveLength(1);
+            } finally {
+                jest.useRealTimers();
+            }
         });
 
         it('should use default delay when Retry-After is missing', async () => {
             jest.useFakeTimers();
-            const mockServers = [
-                {
-                    clientIdentifier: 'srv1',
-                    name: 'Test Server',
-                    provides: 'server',
-                    connections: [],
-                    sourceTitle: 'user',
-                    ownerId: 'owner',
-                    owned: true,
-                },
-            ];
+            try {
+                const mockServers = [
+                    {
+                        clientIdentifier: 'srv1',
+                        name: 'Test Server',
+                        provides: 'server',
+                        connections: [],
+                        sourceTitle: 'user',
+                        ownerId: 'owner',
+                        owned: true,
+                    },
+                ];
 
-            let callCount = 0;
-            (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
-                callCount++;
-                if (callCount === 1) {
-                    // First call returns 429 without Retry-After
+                let callCount = 0;
+                (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
+                    callCount++;
+                    if (callCount === 1) {
+                        // First call returns 429 without Retry-After
+                        return Promise.resolve({
+                            ok: false,
+                            status: 429,
+                            headers: { get: () => null },
+                            json: async () => ({ error: 'rate limited' }),
+                        });
+                    }
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        headers: { get: () => null },
+                        json: async () => mockServers,
+                    });
+                });
+
+                const discovery = new PlexServerDiscovery(mockConfig);
+                const discoverPromise = discovery.discoverServers();
+
+                // Advance past the 2-second default delay
+                await jest.advanceTimersByTimeAsync(2000);
+
+                const result = await discoverPromise;
+
+                expect(callCount).toBe(2);
+                expect(result).toHaveLength(1);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it('should fail after max retries on persistent 429', async () => {
+            jest.useFakeTimers();
+            try {
+                let callCount = 0;
+                (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
+                    callCount++;
                     return Promise.resolve({
                         ok: false,
                         status: 429,
                         headers: { get: () => null },
                         json: async () => ({ error: 'rate limited' }),
                     });
-                }
-                return Promise.resolve({
-                    ok: true,
-                    status: 200,
-                    headers: { get: () => null },
-                    json: async () => mockServers,
                 });
-            });
 
-            const discovery = new PlexServerDiscovery(mockConfig);
-            const discoverPromise = discovery.discoverServers();
+                const discovery = new PlexServerDiscovery(mockConfig);
 
-            // Advance past the 2-second default delay
-            await jest.advanceTimersByTimeAsync(2000);
-
-            const result = await discoverPromise;
-
-            expect(callCount).toBe(2);
-            expect(result).toHaveLength(1);
-            jest.useRealTimers();
-        });
-
-        it('should fail after max retries on persistent 429', async () => {
-            jest.useFakeTimers();
-
-            let callCount = 0;
-            (globalThis as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockImplementation(() => {
-                callCount++;
-                return Promise.resolve({
-                    ok: false,
-                    status: 429,
-                    headers: { get: () => null },
-                    json: async () => ({ error: 'rate limited' }),
+                let caughtError: Error | null = null;
+                const discoverPromise = discovery.discoverServers().catch((e: Error) => {
+                    caughtError = e;
                 });
-            });
 
-            const discovery = new PlexServerDiscovery(mockConfig);
+                // Advance past retry delay to allow both attempts
+                await jest.advanceTimersByTimeAsync(2000);
+                await discoverPromise;
 
-            let caughtError: Error | null = null;
-            const discoverPromise = discovery.discoverServers().catch((e: Error) => {
-                caughtError = e;
-            });
-
-            // Advance past retry delay to allow both attempts
-            await jest.advanceTimersByTimeAsync(2000);
-            await discoverPromise;
-
-            // Should throw after max attempts (2 attempts per code)
-            expect(caughtError).not.toBeNull();
-            expect(caughtError!.message).toContain('Request failed with status 429');
-            // Verify it tried twice (maxAttempts = 2)
-            expect(callCount).toBe(2);
-            jest.useRealTimers();
+                // Should throw after max attempts (2 attempts per code)
+                expect(caughtError).not.toBeNull();
+                expect(caughtError!.message).toContain('Request failed with status 429');
+                // Verify it tried twice (maxAttempts = 2)
+                expect(callCount).toBe(2);
+            } finally {
+                jest.useRealTimers();
+            }
         });
     });
 });

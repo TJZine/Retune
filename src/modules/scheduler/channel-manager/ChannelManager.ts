@@ -20,9 +20,7 @@ import type {
 } from './types';
 import {
     STORAGE_KEY,
-    LEGACY_STORAGE_KEY,
     CURRENT_CHANNEL_KEY,
-    LEGACY_CURRENT_CHANNEL_KEY,
     STORAGE_VERSION,
     CACHE_TTL_MS,
     MAX_CHANNELS,
@@ -93,36 +91,45 @@ function isNetworkError(error: unknown): boolean {
     );
 }
 
-function isValidContentSource(source: ChannelContentSource): boolean {
-    switch (source.type) {
+function isValidContentSource(source: unknown): source is ChannelContentSource {
+    if (!source || typeof source !== 'object') {
+        return false;
+    }
+    const src = source as Record<string, unknown> & { type?: unknown };
+    const type = src.type;
+    if (typeof type !== 'string') {
+        return false;
+    }
+
+    switch (type) {
         case 'library':
             return (
-                typeof source.libraryId === 'string' &&
-                source.libraryId.length > 0 &&
-                source.libraryId !== 'undefined'
+                typeof src['libraryId'] === 'string' &&
+                (src['libraryId'] as string).length > 0 &&
+                src['libraryId'] !== 'undefined'
             );
         case 'collection':
             return (
-                typeof source.collectionKey === 'string' &&
-                source.collectionKey.length > 0 &&
-                source.collectionKey !== 'undefined'
+                typeof src['collectionKey'] === 'string' &&
+                (src['collectionKey'] as string).length > 0 &&
+                src['collectionKey'] !== 'undefined'
             );
         case 'show':
             return (
-                typeof source.showKey === 'string' &&
-                source.showKey.length > 0 &&
-                source.showKey !== 'undefined'
+                typeof src['showKey'] === 'string' &&
+                (src['showKey'] as string).length > 0 &&
+                src['showKey'] !== 'undefined'
             );
         case 'playlist':
             return (
-                typeof source.playlistKey === 'string' &&
-                source.playlistKey.length > 0 &&
-                source.playlistKey !== 'undefined'
+                typeof src['playlistKey'] === 'string' &&
+                (src['playlistKey'] as string).length > 0 &&
+                src['playlistKey'] !== 'undefined'
             );
         case 'manual':
-            return Array.isArray(source.items) && source.items.length > 0;
+            return Array.isArray(src['items']) && (src['items'] as unknown[]).length > 0;
         case 'mixed':
-            return Array.isArray(source.sources) && source.sources.every(isValidContentSource);
+            return Array.isArray(src['sources']) && (src['sources'] as unknown[]).every((s) => isValidContentSource(s));
         default:
             return false;
     }
@@ -173,7 +180,8 @@ export class ChannelManager implements IChannelManager {
     private readonly _emitter: EventEmitter<ChannelManagerEventMap>;
     private readonly _contentResolver: ContentResolver;
     private readonly _library: IPlexLibraryMinimal;
-    private readonly _storageKey: string;
+    private _storageKey: string;
+    private _currentChannelKey: string;
     private readonly _logger: {
         warn: (message: string, ...args: unknown[]) => void;
         error: (message: string, ...args: unknown[]) => void;
@@ -196,6 +204,15 @@ export class ChannelManager implements IChannelManager {
             error: console.error.bind(console),
         };
         this._storageKey = config.storageKey || STORAGE_KEY;
+        if (config.currentChannelKey) {
+            this._currentChannelKey = config.currentChannelKey;
+        } else if (this._storageKey === STORAGE_KEY) {
+            // Back-compat: legacy/default store uses the global current-channel key.
+            this._currentChannelKey = CURRENT_CHANNEL_KEY;
+        } else {
+            // Namespaced to avoid demo/real and multi-server clobbering.
+            this._currentChannelKey = `${CURRENT_CHANNEL_KEY}:${this._storageKey}`;
+        }
         this._contentResolver = new ContentResolver(this._library, this._logger);
 
         this._state = {
@@ -204,6 +221,53 @@ export class ChannelManager implements IChannelManager {
             currentChannelId: null,
             channelOrder: [],
         };
+    }
+
+    /**
+     * Update persistence keys (multi-server / multi-mode support).
+     * Does not implicitly load; caller should invoke loadChannels().
+     */
+    setStorageKeys(storageKey: string, currentChannelKey: string): void {
+        this._storageKey = storageKey;
+        this._currentChannelKey = currentChannelKey;
+        this._state.channels.clear();
+        this._state.resolvedContent.clear();
+        this._state.channelOrder = [];
+        this._state.currentChannelId = null;
+    }
+
+    /**
+     * Replace the entire channel lineup atomically (best-effort).
+     */
+    async replaceAllChannels(
+        channels: ChannelConfig[],
+        options?: { currentChannelId?: string | null }
+    ): Promise<void> {
+        this._state.channels.clear();
+        this._state.resolvedContent.clear();
+        this._state.channelOrder = [];
+
+        for (const channel of channels) {
+            this._state.channels.set(channel.id, channel);
+            this._state.channelOrder.push(channel.id);
+        }
+
+        const requestedCurrent = options?.currentChannelId ?? null;
+        const fallbackCurrent = this._state.channelOrder[0] ?? null;
+        this._state.currentChannelId =
+            requestedCurrent && this._state.channels.has(requestedCurrent)
+                ? requestedCurrent
+                : fallbackCurrent;
+
+        await this.saveChannels();
+
+        if (this._state.currentChannelId) {
+            try {
+                localStorage.setItem(this._currentChannelKey, this._state.currentChannelId);
+            } catch (e) {
+                this._logger.warn('Failed to persist current channel', e);
+            }
+        }
     }
 
     // ============================================
@@ -478,9 +542,9 @@ export class ChannelManager implements IChannelManager {
 
         this._state.currentChannelId = channelId;
 
-        // Persist current channel separately
+        // Persist current channel separately (namespaced to the active store)
         try {
-            localStorage.setItem(CURRENT_CHANNEL_KEY, channelId);
+            localStorage.setItem(this._currentChannelKey, channelId);
         } catch (e) {
             this._logger.warn('Failed to persist current channel', e);
         }
@@ -655,18 +719,7 @@ export class ChannelManager implements IChannelManager {
      */
     async loadChannels(): Promise<void> {
         try {
-            const primaryJson = localStorage.getItem(this._storageKey);
-            let json: string | null = primaryJson;
-            let sourceKey = this._storageKey;
-
-            if (!json && this._storageKey === STORAGE_KEY) {
-                const legacyJson = localStorage.getItem(LEGACY_STORAGE_KEY);
-                if (legacyJson) {
-                    json = legacyJson;
-                    sourceKey = LEGACY_STORAGE_KEY;
-                    this._logger.warn(`[ChannelManager] Migrating channels from legacy key "${LEGACY_STORAGE_KEY}" to "${STORAGE_KEY}"`);
-                }
-            }
+            const json = localStorage.getItem(this._storageKey);
             if (!json) {
                 return;
             }
@@ -676,14 +729,6 @@ export class ChannelManager implements IChannelManager {
             if (!data) {
                 this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
-            }
-
-            if (sourceKey !== this._storageKey) {
-                try {
-                    localStorage.setItem(this._storageKey, JSON.stringify(data));
-                } catch (e) {
-                    this._logger.warn('[ChannelManager] Failed to persist migrated channel data', e);
-                }
             }
 
             // Restore state
@@ -703,20 +748,9 @@ export class ChannelManager implements IChannelManager {
             this._state.currentChannelId = data.currentChannelId;
 
             // Also restore current channel from separate key
-            const savedCurrent = localStorage.getItem(CURRENT_CHANNEL_KEY);
+            const savedCurrent = localStorage.getItem(this._currentChannelKey);
             if (savedCurrent && this._state.channels.has(savedCurrent)) {
                 this._state.currentChannelId = savedCurrent;
-            }
-            if (!savedCurrent && this._storageKey === STORAGE_KEY) {
-                const legacyCurrent = localStorage.getItem(LEGACY_CURRENT_CHANNEL_KEY);
-                if (legacyCurrent && this._state.channels.has(legacyCurrent)) {
-                    this._state.currentChannelId = legacyCurrent;
-                    try {
-                        localStorage.setItem(CURRENT_CHANNEL_KEY, legacyCurrent);
-                    } catch (e) {
-                        this._logger.warn('[ChannelManager] Failed to persist migrated current channel id', e);
-                    }
-                }
             }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);

@@ -96,6 +96,7 @@ export class App {
     private _devMenuContainer: HTMLElement | null = null;
     private _screenUnsubscribe: (() => void) | null = null;
     private _phaseUnsubscribe: (() => void) | null = null;
+    private _globalKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
     /**
      * Initialize and start the application.
@@ -181,6 +182,15 @@ export class App {
         if (this._phaseUnsubscribe) {
             this._phaseUnsubscribe();
             this._phaseUnsubscribe = null;
+        }
+        if (this._globalKeydownHandler) {
+            document.removeEventListener('keydown', this._globalKeydownHandler);
+            this._globalKeydownHandler = null;
+        }
+        try {
+            delete (window as { retune?: unknown }).retune;
+        } catch {
+            // ignore
         }
         if (this._orchestrator) {
             await this._orchestrator.shutdown();
@@ -277,7 +287,10 @@ export class App {
         root.appendChild(statusOverlay);
 
         // Global debug key handlers
-        document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (this._globalKeydownHandler) {
+            document.removeEventListener('keydown', this._globalKeydownHandler);
+        }
+        this._globalKeydownHandler = (e: KeyboardEvent): void => {
             if (e.code === 'KeyI') {
                 this._orchestrator?.toggleServerSelect();
             }
@@ -285,7 +298,8 @@ export class App {
             if (e.code === 'KeyD' && e.ctrlKey && e.shiftKey) {
                 this._toggleDevMenu();
             }
-        });
+        };
+        document.addEventListener('keydown', this._globalKeydownHandler);
 
         // Dev Menu Container
         const devMenu = document.createElement('div');
@@ -645,6 +659,8 @@ export class App {
 
         const isDemo = safeLocalStorageGet(STORAGE_KEYS.MODE) === 'demo';
 
+        // Dev-only: keep all interpolations here strictly to controlled constants/flags.
+        // Do NOT interpolate Plex/user-provided strings into innerHTML to avoid future XSS foot-guns.
         this._devMenuContainer.innerHTML = `
             <h2 style="margin-top:0;border-bottom:1px solid #444;padding-bottom:10px;">Dev Menu</h2>
             <div style="margin-bottom:15px;color:#aaa;">Current Mode: <strong style="color:${isDemo ? '#eebb00' : '#00cc66'}">${isDemo ? 'DEMO' : 'REAL'}</strong></div>

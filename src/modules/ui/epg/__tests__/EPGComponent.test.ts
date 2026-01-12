@@ -196,7 +196,7 @@ describe('EPGComponent', () => {
                 scheduledStartTime: state.viewWindow.startTime - 3600000,
                 scheduledEndTime: state.viewWindow.startTime - 1800000,
                 elapsedMs: 0,
-                remainingMs: 3600000,
+                remainingMs: 0,
                 scheduleIndex: 0,
                 loopNumber: 0,
                 streamDescriptor: null,

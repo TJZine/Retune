@@ -640,7 +640,9 @@ export class NavigationManager
             if (currentId) {
                 // App thinks we have focus, but browser is on body.
                 // Attempt to re-apply focus to the known element.
-                console.warn(`[NavigationManager] Focus Desync detected. Restoring to ${currentId}`);
+                if (this._state.config.debugMode) {
+                    console.warn(`[NavigationManager] Focus Desync detected. Restoring to ${currentId}`);
+                }
                 this._focusManager.focus(currentId);
             }
         }

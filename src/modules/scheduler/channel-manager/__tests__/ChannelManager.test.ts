@@ -8,9 +8,7 @@ import type { IPlexLibraryMinimal, PlexMediaItemMinimal } from '../interfaces';
 import type { LibraryContentSource } from '../types';
 import {
     STORAGE_KEY,
-    LEGACY_STORAGE_KEY,
     CURRENT_CHANNEL_KEY,
-    LEGACY_CURRENT_CHANNEL_KEY,
 } from '../constants';
 
 // ============================================
@@ -423,34 +421,25 @@ describe('ChannelManager', () => {
             expect(newManager.getAllChannels()[0]!.name).toBe('Saved Channel');
         });
 
-        it('should migrate channels from legacy storage key', async () => {
+        it('should not throw on malformed persisted contentSource', async () => {
             await manager.createChannel({
-                name: 'Legacy Channel',
+                name: 'Bad Channel',
                 contentSource: createMockContentSource(),
             });
             const channel = manager.getAllChannels()[0]!;
 
             mockLocalStorage.clear();
-            mockStorage[LEGACY_STORAGE_KEY] = JSON.stringify({
-                version: 1,
-                channels: [channel],
+            mockStorage[STORAGE_KEY] = JSON.stringify({
+                version: 2,
+                channels: [{ ...channel, contentSource: null }],
                 channelOrder: [channel.id],
                 currentChannelId: channel.id,
                 savedAt: Date.now(),
             });
-            mockStorage[LEGACY_CURRENT_CHANNEL_KEY] = channel.id;
 
             const newManager = new ChannelManager({ plexLibrary: mockLibrary });
-            await newManager.loadChannels();
-
-            expect(newManager.getAllChannels()).toHaveLength(1);
-            expect(newManager.getAllChannels()[0]!.name).toBe('Legacy Channel');
-
-            expect(mockStorage[STORAGE_KEY]).toBeDefined();
-            const migrated = JSON.parse(mockStorage[STORAGE_KEY]!) as { version: number };
-            expect(migrated.version).toBe(2);
-
-            expect(mockStorage[CURRENT_CHANNEL_KEY]).toBe(channel.id);
+            await expect(newManager.loadChannels()).resolves.toBeUndefined();
+            expect(newManager.getAllChannels()).toHaveLength(0);
         });
 
         it('should export channels as JSON', async () => {

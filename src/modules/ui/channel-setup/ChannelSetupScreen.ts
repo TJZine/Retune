@@ -4,7 +4,7 @@
  * @version 1.0.0
  */
 
-import { AppOrchestrator, type ChannelSetupConfig } from '../../../Orchestrator';
+import { AppOrchestrator, type ChannelBuildSummary, type ChannelSetupConfig } from '../../../Orchestrator';
 import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
 import type { PlexLibraryType } from '../../plex/library';
 import type { FocusableElement } from '../../navigation';
@@ -42,7 +42,12 @@ export class ChannelSetupScreen {
     private _focusableIds: string[] = [];
     private _isLoading: boolean = false;
     private _isBuilding: boolean = false;
-    private _buildSummary: { created: number; skipped: number } | null = null;
+    private _buildSummary: ChannelBuildSummary | null = null;
+    private _visibilityToken = 0;
+
+    private _toDomId(raw: string): string {
+        return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
 
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
         this._container = container;
@@ -96,6 +101,7 @@ export class ChannelSetupScreen {
     }
 
     show(): void {
+        this._visibilityToken += 1;
         this._container.style.display = 'flex';
         this._container.classList.add('visible');
         this._resetState();
@@ -103,6 +109,7 @@ export class ChannelSetupScreen {
     }
 
     hide(): void {
+        this._visibilityToken += 1;
         this._unregisterFocusables();
         this._container.style.display = 'none';
         this._container.classList.remove('visible');
@@ -117,6 +124,7 @@ export class ChannelSetupScreen {
     }
 
     private async _loadLibraries(): Promise<void> {
+        const token = this._visibilityToken;
         if (this._isLoading) {
             return;
         }
@@ -128,8 +136,14 @@ export class ChannelSetupScreen {
         try {
             this._libraries = await this._orchestrator.getLibrariesForSetup();
             this._selectedLibraryIds = new Set(this._libraries.map((lib) => lib.id));
+            if (token !== this._visibilityToken) {
+                return;
+            }
             this._renderStep();
         } catch (error) {
+            if (token !== this._visibilityToken) {
+                return;
+            }
             const message = error instanceof Error ? error.message : 'Unable to load libraries.';
             this._errorEl.textContent = message;
             this._statusEl.textContent = 'Library load failed.';
@@ -139,7 +153,11 @@ export class ChannelSetupScreen {
     }
 
     private _renderStep(): void {
+        const token = this._visibilityToken;
         this._unregisterFocusables();
+        if (token !== this._visibilityToken) {
+            return;
+        }
         this._contentEl.innerHTML = '';
         this._buildSummary = null;
 
@@ -171,7 +189,7 @@ export class ChannelSetupScreen {
             const isSelected = this._selectedLibraryIds.has(library.id);
 
             const button = document.createElement('button');
-            button.id = `setup-lib-${library.id}`;
+            button.id = `setup-lib-${this._toDomId(library.id)}`;
             button.className = `setup-toggle${isSelected ? ' selected' : ''}`;
 
             const label = document.createElement('span');
@@ -256,7 +274,7 @@ export class ChannelSetupScreen {
         for (const strategy of strategyLabels) {
             const isEnabled = this._strategies[strategy.key];
             const button = document.createElement('button');
-            button.id = `setup-strategy-${strategy.key}`;
+            button.id = `setup-strategy-${this._toDomId(String(strategy.key))}`;
             button.className = `setup-toggle${isEnabled ? ' selected' : ''}`;
 
             const label = document.createElement('span');
@@ -372,6 +390,7 @@ export class ChannelSetupScreen {
     }
 
     private async _startBuild(summaryEl: HTMLElement, doneButton: HTMLButtonElement): Promise<void> {
+        const token = this._visibilityToken;
         if (this._isBuilding) {
             return;
         }
@@ -395,15 +414,23 @@ export class ChannelSetupScreen {
 
         try {
             const result = await this._orchestrator.createChannelsFromSetup(config);
+            if (token !== this._visibilityToken) {
+                return;
+            }
             this._orchestrator.markSetupComplete(serverId, config);
             this._buildSummary = result;
-            summaryEl.textContent = `Created ${result.created} channels. Skipped ${result.skipped} libraries.`;
+            const maxNote = result.reachedMaxChannels ? ' (reached max channels)' : '';
+            const errorNote = result.errorCount > 0 ? ` (${result.errorCount} errors)` : '';
+            summaryEl.textContent = `Created ${result.created} channels. Skipped ${result.skipped} items${maxNote}${errorNote}.`;
             this._statusEl.textContent = 'Channels ready.';
             doneButton.disabled = result.created === 0;
             if (result.created === 0) {
                 this._detailEl.textContent = 'No channels were created. Adjust your selections.';
             }
         } catch (error) {
+            if (token !== this._visibilityToken) {
+                return;
+            }
             const message = error instanceof Error ? error.message : 'Failed to build channels.';
             this._errorEl.textContent = message;
             this._statusEl.textContent = 'Channel build failed.';
@@ -411,7 +438,7 @@ export class ChannelSetupScreen {
         } finally {
             this._isBuilding = false;
             const nav = this._orchestrator.getNavigation();
-            if (nav && !doneButton.disabled) {
+            if (token === this._visibilityToken && nav && !doneButton.disabled) {
                 nav.setFocus(doneButton.id);
             }
         }

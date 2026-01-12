@@ -244,7 +244,18 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
         }
 
         if (active instanceof HTMLInputElement) {
-            return true;
+            const nonEditableTypes = new Set([
+                'button',
+                'submit',
+                'reset',
+                'checkbox',
+                'radio',
+                'image',
+                'file',
+                'hidden',
+            ]);
+            const type = active.type || 'text';
+            return !nonEditableTypes.has(type);
         }
         if (active instanceof HTMLTextAreaElement) {
             return true;
