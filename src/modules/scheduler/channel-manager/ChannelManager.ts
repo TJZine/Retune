@@ -262,6 +262,9 @@ export class ChannelManager implements IChannelManager {
      * Does not implicitly load; caller should invoke loadChannels().
      */
     setStorageKeys(storageKey: string, currentChannelKey: string): void {
+        if (!storageKey || !currentChannelKey) {
+            throw new Error('Storage keys must be non-empty strings');
+        }
         this.cancelPendingRetries();
         this._storageKey = storageKey;
         this._currentChannelKey = currentChannelKey;
@@ -284,6 +287,10 @@ export class ChannelManager implements IChannelManager {
         this._state.channelOrder = [];
 
         for (const channel of channels) {
+            if (!isValidContentSource(channel.contentSource)) {
+                this._logger.warn(`Skipping invalid channel ${channel.name} (${channel.id}) during replaceAllChannels`);
+                continue;
+            }
             this._state.channels.set(channel.id, channel);
             this._state.channelOrder.push(channel.id);
         }
@@ -1127,17 +1134,7 @@ export class ChannelManager implements IChannelManager {
 
         const obj = item as Record<string, unknown>;
 
-        // Must have contentSource with type
-        if (!obj['contentSource'] || typeof obj['contentSource'] !== 'object') {
-            return false;
-        }
-
-        const source = obj['contentSource'] as Record<string, unknown>;
-        if (typeof source['type'] !== 'string') {
-            return false;
-        }
-
-        return true;
+        return isValidContentSource(obj['contentSource']);
     }
 
     // Issue 6: Compact oldest channels to free storage space

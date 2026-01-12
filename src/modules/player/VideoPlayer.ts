@@ -309,7 +309,6 @@ export class VideoPlayer implements IVideoPlayer {
                 }
                 this._demoLoadTimeoutId = null;
 
-                this._state.durationMs = descriptor.durationMs;
                 this._emitter.emit('mediaLoaded', {
                     durationMs: descriptor.durationMs,
                     tracks: {
@@ -1175,8 +1174,8 @@ export class VideoPlayer implements IVideoPlayer {
                     durationMs: this._state.durationMs,
                 });
                 console.warn('[VideoPlayer] Simulation ended');
-                this._stopSimulation();
                 this._updateStatus('ended');
+                this._stopSimulation();
                 this._emitter.emit('ended', undefined);
             } else {
                 this._emitter.emit('timeUpdate', {

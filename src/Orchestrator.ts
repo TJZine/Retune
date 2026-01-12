@@ -273,6 +273,8 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._mode = 'real';
         }
 
+        this._cleanupStaleChannelBuildKeys();
+
         // Create module instances (not yet initialized)
         this._lifecycle = new AppLifecycle();
         this._navigation = new NavigationManager();
@@ -611,7 +613,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         const previousCurrent = this._channelManager.getCurrentChannel()?.id ?? null;
 
         let created = 0;
-        let skipped = 0;
+        let skippedLibraries = 0;
         let reachedMaxChannels = false;
         let errorCount = 0;
         const errors: string[] = [];
@@ -679,7 +681,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     shuffleSeed: shuffleSeedFor(`library:${library.id}`),
                 });
             } else {
-                skipped += 1;
+                skippedLibraries += 1;
             }
 
             if (config.enabledStrategies.genres || config.enabledStrategies.directors) {
@@ -759,7 +761,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                     created += 1;
                 } catch (e) {
                     errorCount += 1;
-                    skipped += 1;
                     if (errors.length < 5) {
                         errors.push(e instanceof Error ? e.message : 'Unknown channel creation error');
                     }
@@ -772,7 +773,12 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             const builtChannels = builder.getAllChannels();
             if (builtChannels.length === 0) {
-                return { created: 0, skipped: skipped + (pending.length - created), reachedMaxChannels, errorCount };
+                return {
+                    created: 0,
+                    skipped: skippedLibraries + pending.length,
+                    reachedMaxChannels,
+                    errorCount,
+                };
             }
 
             await this._channelManager.replaceAllChannels(builtChannels, { currentChannelId: builtChannels[0]?.id ?? null });
@@ -792,9 +798,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             safeLocalStorageRemove(tmpCurrentKey);
         }
 
-        if (reachedMaxChannels) {
-            skipped += Math.max(0, pending.length - created - skipped);
-        }
+        const skipped = skippedLibraries + Math.max(0, pending.length - created);
         if (errors.length > 0) {
             console.warn('[Orchestrator] Channel build errors (first few):', errors);
         }
@@ -2643,7 +2647,39 @@ export class AppOrchestrator implements IAppOrchestrator {
         const newMode: AppMode = this._mode === 'real' ? 'demo' : 'real';
         safeLocalStorageSet(STORAGE_KEYS.MODE, newMode);
         if (typeof window !== 'undefined') {
+            // Best-effort save before reload (do not block UI).
+            void this._lifecycle?.saveState();
             window.location.reload();
+        }
+    }
+
+    /**
+     * Remove orphaned temporary channel-build keys from prior crashes.
+     * Best-effort only; never throws.
+     */
+    private _cleanupStaleChannelBuildKeys(): void {
+        try {
+            const prefixes = [
+                'retune_channels_build_tmp_v1:',
+                'retune_current_channel_build_tmp_v1:',
+            ];
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k) continue;
+                if (prefixes.some((p) => k.startsWith(p))) {
+                    keysToRemove.push(k);
+                }
+            }
+            for (const k of keysToRemove) {
+                try {
+                    localStorage.removeItem(k);
+                } catch {
+                    // ignore
+                }
+            }
+        } catch {
+            // ignore
         }
     }
 }
