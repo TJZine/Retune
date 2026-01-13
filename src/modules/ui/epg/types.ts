@@ -42,6 +42,8 @@ export interface EPGConfig {
         timeStartMs: number;
         timeEndMs: number;
     }) => void;
+    /** Optional callback to resolve relative Plex thumb paths to absolute URLs */
+    resolveThumbUrl?: (pathOrUrl: string | null) => string | null;
 }
 
 /**

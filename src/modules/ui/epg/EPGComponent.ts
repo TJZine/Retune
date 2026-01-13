@@ -97,6 +97,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.timeHeader.initialize(this.gridElement, this.config, this.state.gridAnchorTime);
             this.channelList.initialize(this.gridElement, this.config);
             this.infoPanel.initialize(this.containerElement);
+
+            // Wire thumb resolver to info panel
+            if (this.config.resolveThumbUrl) {
+                this.infoPanel.setThumbResolver(this.config.resolveThumbUrl);
+            }
         }
 
         // Create time indicator

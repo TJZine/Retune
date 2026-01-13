@@ -403,6 +403,24 @@ describe('EPGComponent', () => {
             expect(state.currentTime).toBeGreaterThan(0);
         });
 
+        it('updates time header transform when timeOffset changes via scrollToTime', () => {
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 10));
+            epg.show();
+
+            const header = container.querySelector('.epg-time-header') as HTMLElement;
+            expect(header).not.toBeNull();
+
+            // Scroll to 2 hours from anchor
+            const twoHoursFromAnchor = epg.getState().viewWindow.startTime + (2 * 60 * 60000);
+            epg.scrollToTime(twoHoursFromAnchor);
+
+            // Header transform should be updated (negative translateX)
+            expect(header.style.transform).toMatch(/translateX\(-?\d+px\)/);
+            expect(epg.getState().scrollPosition.timeOffset).toBeGreaterThan(0);
+        });
+
         it('keeps timeOffset at 0 when autoScrollToNow is enabled (window anchored to now)', () => {
             const now = new Date('2026-01-07T10:00:00Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(now);

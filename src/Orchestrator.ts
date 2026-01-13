@@ -1711,7 +1711,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         const startTime = Date.now();
         this._updateModuleStatus('epg-ui', 'initializing');
         const init = async (): Promise<void> => {
-            this._epg!.initialize(this._config!.epgConfig);
+            // Wire thumb resolver callback to convert relative Plex paths to absolute URLs
+            const epgConfigWithResolver = {
+                ...this._config!.epgConfig,
+                resolveThumbUrl: (pathOrUrl: string | null): string | null => {
+                    if (!pathOrUrl) return null;
+                    return this._buildPlexResourceUrl(pathOrUrl);
+                },
+            };
+            this._epg!.initialize(epgConfigWithResolver);
             this._updateModuleStatus(
                 'epg-ui',
                 'ready',

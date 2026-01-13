@@ -17,6 +17,17 @@ export class EPGInfoPanel implements IEPGInfoPanel {
     private containerElement: HTMLElement | null = null;
     private isVisible: boolean = false;
     private currentProgram: ScheduledProgram | null = null;
+    private thumbResolver: ((pathOrUrl: string | null) => string | null) | null = null;
+
+    /**
+     * Set the thumb URL resolver callback.
+     * Called before assigning poster src to resolve relative Plex paths.
+     *
+     * @param resolver - Callback that converts paths to full URLs
+     */
+    setThumbResolver(resolver: ((pathOrUrl: string | null) => string | null) | null): void {
+        this.thumbResolver = resolver;
+    }
 
     /**
      * Initialize the info panel.
@@ -54,6 +65,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             this.containerElement = null;
         }
         this.currentProgram = null;
+        this.thumbResolver = null;
         this.isVisible = false;
     }
 
@@ -100,22 +112,20 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         const { item } = program;
 
-        // Update poster with URL validation (defense-in-depth)
+        // Update poster: use resolver if available, otherwise validate URL scheme
         const poster = this.containerElement.querySelector(
             `.${EPG_CLASSES.INFO_POSTER}`
         ) as HTMLImageElement;
         if (poster) {
-            // Validate URL scheme to prevent javascript: or data: URLs
-            // Also allow relative paths (Plex returns /library/metadata/.../thumb/...)
-            const isValidUrl = item.thumb && (
-                /^https?:\/\//i.test(item.thumb) ||
-                item.thumb.startsWith('/')
-            );
-            if (isValidUrl) {
-                poster.src = item.thumb!;
+            // Use resolver callback to convert relative Plex paths to absolute URLs
+            const resolvedUrl = this.thumbResolver?.(item.thumb) ?? null;
+            if (resolvedUrl) {
+                poster.src = resolvedUrl;
                 poster.alt = item.title;
                 poster.style.display = 'block';
             } else {
+                // Hide poster when unresolved (prevents file:/// errors on webOS)
+                poster.src = '';
                 poster.style.display = 'none';
             }
         }

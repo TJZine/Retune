@@ -347,7 +347,7 @@ export class EPGChannelList {
             transform: this.contentElement.style.transform,
             renderedRows: this.rowElements.length,
         };
-        console.debug('[EPGChannelList] scroll', payload);
+        console.warn('[EPGChannelList] scroll', payload);
         appendEpgDebugLog('EPGChannelList.scroll', payload);
     }
 }
