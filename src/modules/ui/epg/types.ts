@@ -111,6 +111,8 @@ export interface EPGProgramCell {
 export interface VirtualizedGridState {
     /** Currently rendered channel indices */
     visibleRows: number[];
+    /** Current channel scroll offset */
+    channelOffset: number;
     /** Visible time window */
     visibleTimeRange: { start: number; end: number };
     /** Recycled DOM elements */

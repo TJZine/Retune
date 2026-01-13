@@ -66,7 +66,7 @@ const DEFAULT_EPG_CONFIG: EPGConfig = {
     visibleHours: 3,
     totalHours: 24,
     pixelsPerMinute: 4,
-    rowHeight: 80,
+    rowHeight: 96,
     showCurrentTimeIndicator: true,
     autoScrollToNow: true,
 };

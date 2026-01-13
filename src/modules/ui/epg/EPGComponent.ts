@@ -11,7 +11,7 @@ import { EPGInfoPanel } from './EPGInfoPanel';
 import { EPGTimeHeader } from './EPGTimeHeader';
 import { EPGChannelList } from './EPGChannelList';
 import { EPGErrorBoundary } from './EPGErrorBoundary';
-import { rafThrottle } from './utils';
+import { rafThrottle, appendEpgDebugLog } from './utils';
 import type { IEPGComponent } from './interfaces';
 import type {
     EPGConfig,
@@ -55,6 +55,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private gridElement: HTMLElement | null = null;
     private programAreaElement: HTMLElement | null = null;
     private timeIndicatorElement: HTMLElement | null = null;
+    private hasRenderedOnce: boolean = false;
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
@@ -105,6 +106,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.isInitialized = true;
     }
 
+    private isDebugEnabled(): boolean {
+        try {
+            return localStorage.getItem('retune_debug_epg') === '1';
+        } catch {
+            return false;
+        }
+    }
+
     /**
      * Destroy the EPG component and clean up resources.
      */
@@ -137,6 +146,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             gridAnchorTime: 0,
             lastRenderTime: 0,
         };
+        this.hasRenderedOnce = false;
 
         this.errorBoundary.destroy();
         this.removeAllListeners();
@@ -209,6 +219,20 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     }
 
     /**
+     * Set the grid anchor time (left edge of the EPG timeline).
+     * Used to shift the guide window to start at "now".
+     */
+    setGridAnchorTime(anchorTime: number): void {
+        this.state.gridAnchorTime = anchorTime;
+        this.virtualizer.setGridAnchorTime(anchorTime);
+        this.timeHeader.setGridAnchorTime(anchorTime);
+        this.updateTimeIndicatorPosition();
+        if (this.state.isVisible) {
+            this.renderGrid();
+        }
+    }
+
+    /**
      * Start the time update interval.
      */
     private startTimeUpdateInterval(): void {
@@ -245,12 +269,27 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         // Start time indicator updates (paused when hidden)
         this.startTimeUpdateInterval();
 
-        // Render grid first, then focus (focus needs rendered cells)
-        this.renderGrid();
+        if (this.config.autoScrollToNow) {
+            this.setTimeOffsetToNow();
+        }
 
-        // Auto-scroll to current time if configured
+        // Render immediately on open to avoid a blank guide before first input.
+        this.renderGridInternal();
+
+        // Auto-focus current program if available.
         if (this.config.autoScrollToNow) {
             this.focusNow();
+        }
+
+        if (this.isDebugEnabled()) {
+            const payload = {
+                channelCount: this.state.channels.length,
+                scheduleCount: this.state.schedules.size,
+                timeOffset: this.state.scrollPosition.timeOffset,
+                gridAnchorTime: this.state.gridAnchorTime,
+            };
+            console.warn('[EPG] show', payload);
+            appendEpgDebugLog('EPG.show', payload);
         }
 
         this.emit('open', undefined);
@@ -307,7 +346,23 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.channelList.updateChannels(channels);
 
         if (this.state.isVisible) {
-            this.renderGrid();
+            if (this.config.autoScrollToNow && this.state.scrollPosition.timeOffset === 0) {
+                this.setTimeOffsetToNow();
+            }
+            if (!this.hasRenderedOnce) {
+                this.renderGridInternal();
+            } else {
+                this.renderGrid();
+            }
+        }
+
+        if (this.isDebugEnabled()) {
+            const payload = {
+                channelCount: channels.length,
+                timeOffset: this.state.scrollPosition.timeOffset,
+            };
+            console.warn('[EPG] loadChannels', payload);
+            appendEpgDebugLog('EPG.loadChannels', payload);
         }
     }
 
@@ -321,7 +376,22 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.schedules.set(channelId, schedule);
 
         if (this.state.isVisible) {
-            this.renderGrid();
+            if (!this.hasRenderedOnce) {
+                this.renderGridInternal();
+            } else {
+                this.renderGrid();
+            }
+        }
+
+        if (this.isDebugEnabled()) {
+            const payload = {
+                channelId,
+                programCount: schedule.programs.length,
+                startTime: schedule.startTime,
+                endTime: schedule.endTime,
+            };
+            console.warn('[EPG] loadScheduleForChannel', payload);
+            appendEpgDebugLog('EPG.loadScheduleForChannel', payload);
         }
     }
 
@@ -427,10 +497,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     focusNow(): void {
         const now = Date.now();
 
-        // Calculate time offset to center current time
-        const minutesFromAnchor = (now - this.state.gridAnchorTime) / 60000;
-        const centerOffset = minutesFromAnchor - (this.config.visibleHours * 60 / 2);
-        this.state.scrollPosition.timeOffset = Math.max(0, centerOffset);
+        // EPG window is anchored to "now"; do not scroll back into the past.
+        this.state.scrollPosition.timeOffset = 0;
+        this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
 
         // Track if we focused a program (to avoid redundant render)
         let didFocus = false;
@@ -452,9 +521,6 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
                     if (currentProgramIndex >= 0) {
                         this.focusProgram(channelIndex, currentProgramIndex);
-                        didFocus = true;
-                    } else if (schedule.programs.length > 0) {
-                        this.focusProgram(channelIndex, 0);
                         didFocus = true;
                     }
                 }
@@ -565,7 +631,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         // If no focus, focus first visible cell
         if (!focusedCell) {
             if (channels.length > 0) {
-                this.focusProgram(this.state.scrollPosition.channelOffset, 0);
+                const targetTime = this.state.gridAnchorTime +
+                    (this.state.scrollPosition.timeOffset * 60000);
+                this.focusProgramAtTime(this.state.scrollPosition.channelOffset, targetTime);
                 return true;
             }
             return false;
@@ -846,6 +914,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (!this.state.isVisible || !this.state.isInitialized) return;
 
         this.errorBoundary.wrap('RENDER_ERROR', 'renderGrid', () => {
+            this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
+            this.virtualizer.updateScrollPosition(this.state.scrollPosition.timeOffset);
             const range = this.virtualizer.calculateVisibleRange(this.state.scrollPosition);
             const channelIds = this.state.channels.map((c) => c.id);
             const focused = this.state.focusedCell;
@@ -863,6 +933,30 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
                     focused.program.scheduledStartTime
                 );
             }
+
+            if (channelIds.length > 0) {
+                this.hasRenderedOnce = true;
+            }
+
+            if (this.isDebugEnabled()) {
+                const payload = {
+                    channelCount: channelIds.length,
+                    scheduleCount: this.state.schedules.size,
+                    timeOffset: this.state.scrollPosition.timeOffset,
+                    visibleRows: range.visibleRows.length,
+                    renderedCells: this.virtualizer.getElementCount(),
+                };
+                console.warn('[EPG] renderGrid', payload);
+                appendEpgDebugLog('EPG.renderGrid', payload);
+            }
         });
+    }
+
+    private setTimeOffsetToNow(): void {
+        const now = Date.now();
+        const minutesFromAnchor = (now - this.state.gridAnchorTime) / 60000;
+        const centerOffset = minutesFromAnchor - (this.config.visibleHours * 60 / 2);
+        this.state.scrollPosition.timeOffset = Math.max(0, centerOffset);
+        this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
     }
 }

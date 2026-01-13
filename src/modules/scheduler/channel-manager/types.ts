@@ -201,6 +201,8 @@ export interface ChannelConfig {
     playbackMode: PlaybackMode;
     /** Seed for deterministic shuffle */
     shuffleSeed?: number;
+    /** Seed for deterministic per-channel phase offset (live drift) */
+    phaseSeed?: number;
     /** Unix timestamp (ms) - schedule reference point */
     startTimeAnchor: number;
 

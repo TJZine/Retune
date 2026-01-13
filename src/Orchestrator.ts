@@ -86,6 +86,7 @@ import {
     type EPGConfig,
 } from './modules/ui/epg';
 import type { IDisposable } from './utils/interfaces';
+import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 
 // ============================================
@@ -217,6 +218,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
     private _epgScheduleLoadToken = 0;
+    private _activeScheduleDayKey: number | null = null;
+    private _pendingDayRolloverDayKey: number | null = null;
+    private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
     private _epgInitPromise: Promise<void> | null = null;
 
     private _config: OrchestratorConfig | null = null;
@@ -887,15 +891,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._videoPlayer.stop();
 
             // Configure scheduler
-            const scheduleConfig: ScheduleConfig = {
-                channelId: channel.id,
-                anchorTime: channel.startTimeAnchor,
-                content: content.orderedItems,
-                playbackMode: channel.playbackMode,
-                shuffleSeed: channel.shuffleSeed ?? Date.now(),
-                loopSchedule: true,
-            };
+            const scheduleConfig = this._buildDailyScheduleConfig(channel, content.items, Date.now());
             this._scheduler.loadChannel(scheduleConfig);
+            this._activeScheduleDayKey = this._getLocalDayKey(Date.now());
 
             // Sync to current time (this will emit programStart)
             this._scheduler.syncToCurrentTime();
@@ -1050,10 +1048,15 @@ export class AppOrchestrator implements IAppOrchestrator {
             return null;
         }
         const totalHours = this._config.epgConfig.totalHours;
-
-        const anchor = new Date();
-        anchor.setHours(0, 0, 0, 0);
-        const startTime = anchor.getTime();
+        const slotMinutes = this._config.epgConfig.timeSlotMinutes;
+        const slotMs = slotMinutes * 60_000;
+        const PAST_WINDOW_MINUTES = 30;
+        const now = Date.now();
+        const dayStart = this._getLocalMidnightMs(now);
+        const startTime = Math.max(
+            Math.floor((now - (PAST_WINDOW_MINUTES * 60_000)) / slotMs) * slotMs,
+            dayStart
+        );
         const endTime = startTime + totalHours * 60 * 60 * 1000;
 
         return { startTime, endTime };
@@ -1073,6 +1076,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         const { startTime, endTime } = range;
+        this._epg.setGridAnchorTime(startTime);
         const channels = this._channelManager.getAllChannels();
         if (channels.length === 0) {
             return;
@@ -1082,7 +1086,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         const shuffler = new ShuffleGenerator();
 
         // Safety limit to avoid long blocking loops on TV hardware.
-        const MAX_CHANNELS_TO_PRELOAD = 50;
+        const MAX_CHANNELS_TO_PRELOAD = 100;
         const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
 
         for (const channel of channelsToLoad) {
@@ -1092,15 +1096,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             try {
                 const resolved = await this._channelManager.resolveChannelContent(channel.id);
 
-                // Keep EPG schedule order aligned with playback order by treating orderedItems as sequential content.
-                const scheduleConfig: ScheduleConfig = {
-                    channelId: channel.id,
-                    anchorTime: channel.startTimeAnchor,
-                    content: resolved.orderedItems,
-                    playbackMode: 'sequential',
-                    shuffleSeed: 0,
-                    loopSchedule: true,
-                };
+                const scheduleConfig = this._buildDailyScheduleConfig(channel, resolved.items, startTime);
 
                 const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
                 const programs = ScheduleCalculator.generateScheduleWindow(
@@ -1114,6 +1110,14 @@ export class AppOrchestrator implements IAppOrchestrator {
             } catch (error) {
                 console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
             }
+        }
+
+        if (
+            loadToken === this._epgScheduleLoadToken &&
+            this._epg.isVisible() &&
+            !this._epg.getFocusedProgram()
+        ) {
+            this._epg.focusNow();
         }
     }
 
@@ -2010,6 +2014,144 @@ export class AppOrchestrator implements IAppOrchestrator {
         return hash >>> 0;
     }
 
+    private _getLocalMidnightMs(timeMs: number): number {
+        const date = new Date(timeMs);
+        date.setHours(0, 0, 0, 0);
+        return date.getTime();
+    }
+
+    private _getLocalDayKey(timeMs: number): number {
+        const date = new Date(timeMs);
+        return (date.getFullYear() * 10000) + ((date.getMonth() + 1) * 100) + date.getDate();
+    }
+
+    private _calculateLoopDurationMs(items: ResolvedChannelContent['items']): number {
+        let total = 0;
+        for (const item of items) {
+            total += item.durationMs;
+        }
+        return total;
+    }
+
+    private _getPhaseOffsetMs(channel: ChannelConfig, items: ResolvedChannelContent['items']): number {
+        const loopDurationMs = this._calculateLoopDurationMs(items);
+        if (!Number.isFinite(loopDurationMs) || loopDurationMs <= 0) {
+            return 0;
+        }
+        const seed =
+            typeof channel.phaseSeed === 'number' && Number.isFinite(channel.phaseSeed)
+                ? channel.phaseSeed
+                : 0;
+        if (seed === 0) {
+            return 0;
+        }
+        const random = createMulberry32(seed);
+        return Math.floor(random() * loopDurationMs);
+    }
+
+    private _buildDailyScheduleConfig(
+        channel: ChannelConfig,
+        items: ResolvedChannelContent['items'],
+        referenceTimeMs: number
+    ): ScheduleConfig {
+        const dayStart = this._getLocalMidnightMs(referenceTimeMs);
+        const dayKey = this._getLocalDayKey(dayStart);
+        const phaseOffsetMs = this._getPhaseOffsetMs(channel, items);
+
+        const baseSeed =
+            typeof channel.shuffleSeed === 'number' && Number.isFinite(channel.shuffleSeed)
+                ? channel.shuffleSeed
+                : Date.now();
+
+        const effectiveSeed =
+            channel.playbackMode === 'shuffle'
+                ? (baseSeed ^ dayKey) >>> 0
+                : baseSeed;
+
+        return {
+            channelId: channel.id,
+            anchorTime: dayStart - phaseOffsetMs,
+            content: items,
+            playbackMode: channel.playbackMode,
+            shuffleSeed: effectiveSeed,
+            loopSchedule: true,
+        };
+    }
+
+    private async _handleScheduleDayRollover(): Promise<void> {
+        if (!this._channelManager || !this._scheduler) {
+            return;
+        }
+        const now = Date.now();
+        const dayKey = this._getLocalDayKey(now);
+        if (this._activeScheduleDayKey === null) {
+            this._activeScheduleDayKey = dayKey;
+            return;
+        }
+        if (dayKey === this._activeScheduleDayKey) {
+            return;
+        }
+
+        // If we're already waiting to apply the same day rollover, no-op.
+        if (this._pendingDayRolloverDayKey === dayKey) {
+            return;
+        }
+
+        const dayStart = this._getLocalMidnightMs(now);
+        const currentProgram = this._scheduler.getCurrentProgram();
+        const spansMidnight =
+            currentProgram !== null &&
+            currentProgram.scheduledStartTime < dayStart &&
+            currentProgram.scheduledEndTime > dayStart;
+
+        // Avoid interrupting a program that started before midnight and is still playing.
+        if (spansMidnight) {
+            this._pendingDayRolloverDayKey = dayKey;
+            if (this._pendingDayRolloverTimer !== null) {
+                globalThis.clearTimeout(this._pendingDayRolloverTimer);
+                this._pendingDayRolloverTimer = null;
+            }
+            const delayMs = Math.max(0, currentProgram.scheduledEndTime - now + 50);
+            this._pendingDayRolloverTimer = globalThis.setTimeout(() => {
+                this._pendingDayRolloverTimer = null;
+                this._applyScheduleDayRollover().catch((error) => {
+                    console.error('[Orchestrator] Failed to apply day rollover:', error);
+                });
+            }, delayMs);
+            return;
+        }
+
+        this._pendingDayRolloverDayKey = dayKey;
+        await this._applyScheduleDayRollover();
+    }
+
+    private async _applyScheduleDayRollover(): Promise<void> {
+        if (!this._channelManager || !this._scheduler) {
+            return;
+        }
+        const now = Date.now();
+        const dayKey = this._getLocalDayKey(now);
+        if (this._activeScheduleDayKey === dayKey) {
+            this._pendingDayRolloverDayKey = null;
+            return;
+        }
+
+        const current = this._channelManager.getCurrentChannel();
+        if (!current) {
+            this._activeScheduleDayKey = dayKey;
+            this._pendingDayRolloverDayKey = null;
+            return;
+        }
+
+        const content = await this._channelManager.resolveChannelContent(current.id);
+        this._scheduler.loadChannel(this._buildDailyScheduleConfig(current, content.items, now));
+        this._scheduler.syncToCurrentTime();
+
+        await this._refreshEpgSchedules();
+        this._activeScheduleDayKey = dayKey;
+        this._pendingDayRolloverDayKey = null;
+    }
+
     private _clearAuthResume(): void {
         if (this._authResumeDisposable) {
             this._authResumeDisposable.dispose();
@@ -2061,10 +2203,18 @@ export class AppOrchestrator implements IAppOrchestrator {
         };
         this._scheduler.on('programStart', handler);
 
+        const syncHandler = (): void => {
+            this._handleScheduleDayRollover().catch((error) => {
+                console.error('[Orchestrator] Unhandled error in scheduleSync handler:', error);
+            });
+        };
+        this._scheduler.on('scheduleSync', syncHandler);
+
         // Register cleanup
         this._eventUnsubscribers.push(() => {
             if (this._scheduler) {
                 this._scheduler.off('programStart', handler);
+                this._scheduler.off('scheduleSync', syncHandler);
             }
         });
     }
@@ -2298,6 +2448,11 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._epg) return;
 
         const handler = (payload: { channel: ChannelConfig; program: ScheduledProgram }): void => {
+            const now = Date.now();
+            if (now < payload.program.scheduledStartTime) {
+                // Future program: keep guide open; info panel already shows details on focus.
+                return;
+            }
             this.closeEPG();
             this.switchToChannel(payload.channel.id).catch(console.error);
         };

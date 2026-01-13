@@ -193,12 +193,15 @@ function generateUUID(): string {
 }
 
 /**
- * Get today's midnight timestamp.
+ * Deterministic string -> uint32 hash (FNV-1a).
  */
-function getTodayMidnight(): number {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now.getTime();
+function hashStringToUint32(input: string): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
 }
 
 // ============================================
@@ -363,7 +366,7 @@ export class ChannelManager implements IChannelManager {
             startTimeAnchor:
                 typeof config.startTimeAnchor === 'number'
                     ? config.startTimeAnchor
-                    : getTodayMidnight(),
+                    : Date.now(),
             skipIntros: config.skipIntros === true,
             skipCredits: config.skipCredits === true,
             createdAt: Date.now(),
@@ -379,6 +382,8 @@ export class ChannelManager implements IChannelManager {
         if (config.color !== undefined) channel.color = config.color;
         if (typeof config.shuffleSeed === 'number') channel.shuffleSeed = config.shuffleSeed;
         else channel.shuffleSeed = Date.now();
+        if (typeof config.phaseSeed === 'number') channel.phaseSeed = config.phaseSeed;
+        else channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
         if (config.contentFilters !== undefined) channel.contentFilters = config.contentFilters;
         if (config.sortOrder !== undefined) channel.sortOrder = config.sortOrder;
         if (config.maxEpisodeRunTimeMs !== undefined) channel.maxEpisodeRunTimeMs = config.maxEpisodeRunTimeMs;
@@ -773,11 +778,12 @@ export class ChannelManager implements IChannelManager {
             }
 
             const parsed = JSON.parse(json) as Partial<StoredChannelData>;
-            const data = this._migrateStoredChannelData(parsed);
-            if (!data) {
+            const migrated = this._migrateStoredChannelData(parsed);
+            if (!migrated) {
                 this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
             }
+            const { data, didMutate } = migrated;
 
             // Restore state
             this._state.channels.clear();
@@ -812,12 +818,19 @@ export class ChannelManager implements IChannelManager {
             if (this._state.currentChannelId && !this._state.channels.has(this._state.currentChannelId)) {
                 this._state.currentChannelId = this._state.channelOrder[0] ?? null;
             }
+
+            // Persist normalized/migrated channel records once.
+            if (didMutate) {
+                await this.saveChannels();
+            }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);
         }
     }
 
-    private _migrateStoredChannelData(data: Partial<StoredChannelData>): StoredChannelData | null {
+    private _migrateStoredChannelData(
+        data: Partial<StoredChannelData>
+    ): { data: StoredChannelData; didMutate: boolean } | null {
         if (!Array.isArray(data.channels)) {
             return null;
         }
@@ -834,17 +847,40 @@ export class ChannelManager implements IChannelManager {
         const version =
             typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
 
+        let didMutate = false;
+
         if (version !== STORAGE_VERSION) {
             this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
             // TODO: Implement explicit schema transformations when STORAGE_VERSION increments.
+            didMutate = true;
+        }
+
+        const normalizedChannels: ChannelConfig[] = [];
+        for (const raw of data.channels) {
+            // Keep unknown records as-is; basic field normalization happens below.
+            const channel = raw as ChannelConfig;
+            if (channel && typeof channel === 'object') {
+                if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
+                    channel.shuffleSeed = Date.now();
+                    didMutate = true;
+                }
+                if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {
+                    channel.phaseSeed = hashStringToUint32(`${channel.id ?? ''}:phase`);
+                    didMutate = true;
+                }
+            }
+            normalizedChannels.push(channel);
         }
 
         return {
-            version: STORAGE_VERSION,
-            channels: data.channels,
-            channelOrder: data.channelOrder,
-            currentChannelId,
-            savedAt,
+            data: {
+                version: STORAGE_VERSION,
+                channels: normalizedChannels,
+                channelOrder: data.channelOrder,
+                currentChannelId,
+                savedAt,
+            },
+            didMutate,
         };
     }
 

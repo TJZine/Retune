@@ -183,12 +183,43 @@ export class ContentResolver {
         source: LibraryContentSource
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
-        const items = source.libraryType === 'show'
-            ? await this._library.getLibraryItems(source.libraryId, {
-                filter: { type: PLEX_MEDIA_TYPES.EPISODE },
-            })
-            : await this._library.getLibraryItems(source.libraryId);
-        return items.map((item, index) => this._toResolvedItem(item, index));
+        if (source.libraryType !== 'show') {
+            const items = await this._library.getLibraryItems(source.libraryId);
+            return items.map((item, index) => this._toResolvedItem(item, index));
+        }
+
+        // Prefer a single call if Plex returns episodes directly for the section.
+        const episodeItems = await this._library.getLibraryItems(source.libraryId, {
+            filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+        });
+        const playableEpisodes = episodeItems.filter((item) => item.durationMs > 0);
+        if (playableEpisodes.length > 0) {
+            return playableEpisodes.map((item, index) => this._toResolvedItem(item, index));
+        }
+
+        // Fallback: expand each show into episodes and propagate show metadata for filtering.
+        const shows = await this._library.getLibraryItems(source.libraryId);
+        const expanded: PlexMediaItemMinimal[] = [];
+        for (const show of shows) {
+            try {
+                const episodes = await this._library.getShowEpisodes(show.ratingKey);
+                for (const episode of episodes) {
+                    const merged: PlexMediaItemMinimal = { ...episode };
+
+                    // Propagate show-level metadata to episodes for filtering, without assigning undefined
+                    if (!merged.genres && show.genres) merged.genres = show.genres;
+                    if (!merged.directors && show.directors) merged.directors = show.directors;
+                    if (!merged.contentRating && show.contentRating) merged.contentRating = show.contentRating;
+                    if (merged.year === 0 && show.year) merged.year = show.year;
+
+                    expanded.push(merged);
+                }
+            } catch (error) {
+                this._logger.warn('Failed to expand show library item', show.ratingKey, error);
+            }
+        }
+
+        return expanded.map((item, index) => this._toResolvedItem(item, index));
     }
 
     private async _resolveCollectionSource(

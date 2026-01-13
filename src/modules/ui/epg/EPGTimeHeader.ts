@@ -5,6 +5,7 @@
  */
 
 import { EPG_CLASSES } from './constants';
+import { appendEpgDebugLog } from './utils';
 import type { EPGConfig, TimeSlot } from './types';
 
 /**
@@ -119,6 +120,11 @@ export class EPGTimeHeader {
 
         const translateX = -(timeOffset * this.config.pixelsPerMinute);
         this.containerElement.style.transform = `translateX(${translateX}px)`;
+
+        appendEpgDebugLog('EPGTimeHeader.scroll', {
+            timeOffset,
+            transform: this.containerElement.style.transform,
+        });
     }
 
     /**
