@@ -294,16 +294,18 @@ export class ChannelManager implements IChannelManager {
                 this._logger.warn(`Skipping invalid channel ${channel.name} (${channel.id}) during replaceAllChannels`);
                 continue;
             }
+            // Clone to avoid mutating caller-owned channel objects.
+            const normalizedChannel: ChannelConfig = { ...channel };
             // Normalize seeds so imported channels behave like newly created ones.
             // This prevents nondeterministic shuffle order / missing live-drift until next app restart.
-            if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
-                channel.shuffleSeed = hashStringToUint32(`${channel.id}:shuffle`);
+            if (typeof normalizedChannel.shuffleSeed !== 'number' || !Number.isFinite(normalizedChannel.shuffleSeed)) {
+                normalizedChannel.shuffleSeed = hashStringToUint32(`${normalizedChannel.id}:shuffle`);
             }
-            if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {
-                channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
+            if (typeof normalizedChannel.phaseSeed !== 'number' || !Number.isFinite(normalizedChannel.phaseSeed)) {
+                normalizedChannel.phaseSeed = hashStringToUint32(`${normalizedChannel.id}:phase`);
             }
-            this._state.channels.set(channel.id, channel);
-            this._state.channelOrder.push(channel.id);
+            this._state.channels.set(normalizedChannel.id, normalizedChannel);
+            this._state.channelOrder.push(normalizedChannel.id);
         }
 
         const requestedCurrent = options?.currentChannelId ?? null;
@@ -874,7 +876,7 @@ export class ChannelManager implements IChannelManager {
             const channel = raw as ChannelConfig;
             if (channel && typeof channel === 'object') {
                 if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
-                    channel.shuffleSeed = Date.now();
+                    channel.shuffleSeed = hashStringToUint32(`${channel.id ?? ''}:shuffle`);
                     didMutate = true;
                 }
                 if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {

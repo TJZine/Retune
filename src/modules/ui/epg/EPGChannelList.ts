@@ -261,8 +261,13 @@ export class EPGChannelList {
 
     private applyFocusToRenderedRows(): void {
         for (const row of this.rowElements) {
-            const index = Number(row.dataset.channelIndex);
-            if (index === this.focusedChannelIndex) {
+            const rawIndex = row.dataset.channelIndex;
+            if (!rawIndex) {
+                row.classList.remove('focused');
+                continue;
+            }
+            const index = Number(rawIndex);
+            if (Number.isFinite(index) && index === this.focusedChannelIndex) {
                 row.classList.add('focused');
             } else {
                 row.classList.remove('focused');
@@ -338,7 +343,7 @@ export class EPGChannelList {
             transform: this.contentElement.style.transform,
             renderedRows: this.rowElements.length,
         };
-        console.warn('[EPGChannelList] scroll', payload);
+        console.debug('[EPGChannelList] scroll', payload);
         appendEpgDebugLog('EPGChannelList.scroll', payload);
     }
 }
