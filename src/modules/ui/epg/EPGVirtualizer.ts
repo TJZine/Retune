@@ -635,7 +635,7 @@ export class EPGVirtualizer {
      * @param programStartTime - Program start time (Unix ms)
      * @returns The focused element or null
      */
-    setFocusedCell(channelId: string, programStartTime: number): HTMLElement | null {
+    setFocusedCell(channelId: string, programStartTime: number, focusTimeMs?: number): HTMLElement | null {
         const key = `${channelId}-${programStartTime}`;
 
         // Remove focus from all cells
@@ -646,7 +646,29 @@ export class EPGVirtualizer {
         }
 
         // Add focus to target cell
-        const cellData = this.visibleCells.get(key);
+        let cellData = this.visibleCells.get(key);
+        if (!cellData) {
+            const placeholderKey = `${channelId}-placeholder-${programStartTime}`;
+            cellData = this.visibleCells.get(placeholderKey);
+        }
+
+        if (!cellData && focusTimeMs !== undefined) {
+            for (const candidate of this.visibleCells.values()) {
+                if (candidate.channelId !== channelId) {
+                    continue;
+                }
+                const start = candidate.kind === 'program'
+                    ? candidate.program.scheduledStartTime
+                    : candidate.placeholder.scheduledStartTime;
+                const end = candidate.kind === 'program'
+                    ? candidate.program.scheduledEndTime
+                    : candidate.placeholder.scheduledEndTime;
+                if (focusTimeMs >= start && focusTimeMs < end) {
+                    cellData = candidate;
+                    break;
+                }
+            }
+        }
         if (cellData && cellData.cellElement) {
             cellData.cellElement.classList.add(EPG_CLASSES.CELL_FOCUSED);
             return cellData.cellElement;

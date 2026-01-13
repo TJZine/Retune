@@ -247,7 +247,11 @@ describe('EPGComponent', () => {
             const moved = epg.handleNavigation('left');
 
             expect(moved).toBe(true);
-            expect(epg.getState().focusedCell!.programIndex).toBe(0);
+            const focused = epg.getState().focusedCell;
+            expect(focused?.kind).toBe('program');
+            if (focused?.kind === 'program') {
+                expect(focused.programIndex).toBe(0);
+            }
         });
 
         it('should move focus up/down between channels', () => {
@@ -280,6 +284,7 @@ describe('EPGComponent', () => {
 
             expect(handler).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    kind: 'program',
                     channelIndex: 0,
                     programIndex: 0,
                 })
@@ -439,6 +444,20 @@ describe('EPGComponent', () => {
 
             epg.focusProgram(0, 0);
             expect(epg.getFocusedProgram()).not.toBeNull();
+        });
+
+        it('keeps focusTime even when schedule is missing', () => {
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.show();
+
+            epg.handleNavigation('down');
+
+            const focused = epg.getState().focusedCell;
+            expect(focused?.kind).toBe('placeholder');
+            if (focused?.kind === 'placeholder') {
+                expect(focused.focusTimeMs).toBeGreaterThan(0);
+            }
         });
     });
 

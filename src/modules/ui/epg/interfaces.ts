@@ -33,7 +33,7 @@ export interface IEPGComponent {
     /**
      * Show the EPG overlay.
      */
-    show(): void;
+    show(options?: { preserveFocus?: boolean }): void;
 
     /**
      * Hide the EPG overlay.

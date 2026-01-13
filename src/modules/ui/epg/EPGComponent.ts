@@ -36,7 +36,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         isVisible: false,
         channels: [],
         schedules: new Map(),
+        scheduleLoadTimes: new Map(),
         focusedCell: null,
+        focusTimeMs: Date.now(),
         scrollPosition: { channelOffset: 0, timeOffset: 0 },
         currentTime: Date.now(),
         gridAnchorTime: 0,
@@ -56,6 +58,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private programAreaElement: HTMLElement | null = null;
     private timeIndicatorElement: HTMLElement | null = null;
     private hasRenderedOnce: boolean = false;
+    private lastVisibleRangeKey: string | null = null;
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
@@ -77,6 +80,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.config = { ...DEFAULT_EPG_CONFIG, ...config } as EPGConfig;
         this.state.currentTime = Date.now();
         this.state.gridAnchorTime = this.calculateGridAnchorTime(this.state.currentTime);
+        this.state.focusTimeMs = this.state.currentTime;
 
         // Find container element
         this.containerElement = document.getElementById(this.config.containerId);
@@ -140,7 +144,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             isVisible: false,
             channels: [],
             schedules: new Map(),
+            scheduleLoadTimes: new Map(),
             focusedCell: null,
+            focusTimeMs: Date.now(),
             scrollPosition: { channelOffset: 0, timeOffset: 0 },
             currentTime: Date.now(),
             gridAnchorTime: 0,
@@ -260,16 +266,18 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     /**
      * Show the EPG overlay.
      */
-    show(): void {
+    show(options?: { preserveFocus?: boolean }): void {
         if (!this.state.isInitialized || !this.containerElement) return;
 
         this.containerElement.classList.add(EPG_CLASSES.CONTAINER_VISIBLE);
         this.state.isVisible = true;
+        this.lastVisibleRangeKey = null;
 
         // Start time indicator updates (paused when hidden)
         this.startTimeUpdateInterval();
 
-        if (this.config.autoScrollToNow) {
+        const shouldPreserveFocus = Boolean(options?.preserveFocus && this.state.focusedCell);
+        if (this.config.autoScrollToNow && !shouldPreserveFocus) {
             this.setTimeOffsetToNow();
         }
 
@@ -277,7 +285,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.renderGridInternal();
 
         // Auto-focus current program if available.
-        if (this.config.autoScrollToNow) {
+        if (this.config.autoScrollToNow && !shouldPreserveFocus) {
             this.focusNow();
         }
 
@@ -374,6 +382,13 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     loadScheduleForChannel(channelId: string, schedule: ScheduleWindow): void {
         this.state.schedules.set(channelId, schedule);
+        this.state.scheduleLoadTimes.set(channelId, Date.now());
+
+        const focused = this.state.focusedCell;
+        if (focused && this.state.channels[focused.channelIndex]?.id === channelId) {
+            const focusTime = this.state.focusTimeMs;
+            this.focusProgramAtTime(focused.channelIndex, focusTime);
+        }
 
         if (this.state.isVisible) {
             if (!this.hasRenderedOnce) {
@@ -432,13 +447,13 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (!channel) return;
         const schedule = this.state.schedules.get(channel.id);
 
+        const targetTime = this.state.focusTimeMs || Date.now();
         if (schedule && schedule.programs.length > 0) {
-            this.focusProgram(channelIndex, 0);
-        } else {
-            // Just scroll to channel if no programs
-            this.scrollToChannel(channelIndex);
-            this.channelList.setFocusedChannel(channelIndex);
+            this.focusProgramAtTime(channelIndex, targetTime);
+            return;
         }
+
+        this.focusPlaceholder(channelIndex, targetTime);
     }
 
     /**
@@ -468,16 +483,23 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         // Ensure cell is visible (may require scrolling/render)
         const didScroll = this.ensureCellVisible(channelIndex, program);
 
+        const focusTimeMs = this.getProgramFocusTime(program);
         // Try to focus immediately if the cell is already rendered; otherwise defer until renderGridInternal()
-        const cellElement = this.virtualizer.setFocusedCell(channel.id, program.scheduledStartTime);
+        const cellElement = this.virtualizer.setFocusedCell(
+            channel.id,
+            program.scheduledStartTime,
+            focusTimeMs
+        );
         if (didScroll || !cellElement) {
             this.renderGrid();
         }
-
+        this.state.focusTimeMs = focusTimeMs;
         this.state.focusedCell = {
+            kind: 'program',
             channelIndex,
             programIndex,
             program,
+            focusTimeMs,
             cellElement,
         };
 
@@ -496,6 +518,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     focusNow(): void {
         const now = Date.now();
+        this.state.focusTimeMs = now;
 
         // EPG window is anchored to "now"; do not scroll back into the past.
         this.state.scrollPosition.timeOffset = 0;
@@ -542,6 +565,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const previousOffset = this.state.scrollPosition.timeOffset;
         const minutesFromAnchor = (time - this.state.gridAnchorTime) / 60000;
         this.state.scrollPosition.timeOffset = Math.max(0, minutesFromAnchor);
+        this.state.focusTimeMs = time;
 
         this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
         this.renderGrid();
@@ -615,6 +639,67 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         return didScroll;
     }
 
+    private ensureTimeVisible(targetTimeMs: number): boolean {
+        const { visibleHours, totalHours } = this.config;
+        const minutesFromAnchor = (targetTimeMs - this.state.gridAnchorTime) / 60000;
+        const maxOffset = Math.max(0, (totalHours * 60) - (visibleHours * 60));
+        const clampOffset = (minutes: number): number => Math.max(0, Math.min(minutes, maxOffset));
+        let didScroll = false;
+
+        if (minutesFromAnchor < this.state.scrollPosition.timeOffset) {
+            this.state.scrollPosition.timeOffset = clampOffset(minutesFromAnchor);
+            this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
+            didScroll = true;
+        } else if (minutesFromAnchor > this.state.scrollPosition.timeOffset + (visibleHours * 60)) {
+            this.state.scrollPosition.timeOffset = clampOffset(minutesFromAnchor - (visibleHours * 60));
+            this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
+            didScroll = true;
+        }
+
+        return didScroll;
+    }
+
+    private getProgramFocusTime(program: ScheduledProgram): number {
+        const start = program.scheduledStartTime;
+        const end = program.scheduledEndTime;
+        const elapsed = typeof program.elapsedMs === 'number' ? program.elapsedMs : 0;
+        const candidate = start + Math.max(0, elapsed);
+        return Math.min(Math.max(candidate, start), Math.max(start, end - 1));
+    }
+
+    private focusPlaceholder(channelIndex: number, targetTime: number): void {
+        if (channelIndex < 0 || channelIndex >= this.state.channels.length) return;
+
+        const didScroll = this.ensureTimeVisible(targetTime);
+        if (didScroll) {
+            this.renderGrid();
+        }
+
+        const visibleStartMs = this.state.gridAnchorTime + (this.state.scrollPosition.timeOffset * 60000);
+        const visibleEndMs = this.state.gridAnchorTime +
+            ((this.state.scrollPosition.timeOffset + (this.config.visibleHours * 60)) * 60000);
+        const clampedTime = Math.min(Math.max(targetTime, visibleStartMs), Math.max(visibleStartMs, visibleEndMs - 1));
+
+        this.state.focusTimeMs = clampedTime;
+        this.state.focusedCell = {
+            kind: 'placeholder',
+            channelIndex,
+            programIndex: -1,
+            placeholder: {
+                label: 'Loading...',
+                scheduledStartTime: visibleStartMs,
+                scheduledEndTime: visibleEndMs,
+            },
+            focusTimeMs: clampedTime,
+            cellElement: null,
+        };
+
+        this.channelList.setFocusedChannel(channelIndex);
+        this.infoPanel.hide();
+        this.renderGrid();
+        this.emit('focusChange', this.state.focusedCell);
+    }
+
     // ============================================
     // Input Handling Methods
     // ============================================
@@ -662,7 +747,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         if (focusedCell.channelIndex > 0) {
             const prevChannel = focusedCell.channelIndex - 1;
-            const targetTime = focusedCell.program.scheduledStartTime + focusedCell.program.elapsedMs;
+            const targetTime = focusedCell.focusTimeMs ?? this.state.focusTimeMs;
             this.focusProgramAtTime(prevChannel, targetTime);
             return true;
         }
@@ -679,7 +764,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         if (focusedCell.channelIndex < channels.length - 1) {
             const nextChannel = focusedCell.channelIndex + 1;
-            const targetTime = focusedCell.program.scheduledStartTime + focusedCell.program.elapsedMs;
+            const targetTime = focusedCell.focusTimeMs ?? this.state.focusTimeMs;
             this.focusProgramAtTime(nextChannel, targetTime);
             return true;
         }
@@ -693,6 +778,18 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private navigateLeft(): boolean {
         const { focusedCell } = this.state;
         if (!focusedCell) return false;
+
+        if (focusedCell.kind === 'placeholder') {
+            const nextTime = Math.max(
+                this.state.gridAnchorTime,
+                focusedCell.focusTimeMs - (EPG_CONSTANTS.TIME_SCROLL_AMOUNT * 60000)
+            );
+            if (nextTime === focusedCell.focusTimeMs && this.state.scrollPosition.timeOffset === 0) {
+                return false;
+            }
+            this.focusPlaceholder(focusedCell.channelIndex, nextTime);
+            return true;
+        }
 
         if (focusedCell.programIndex > 0) {
             this.focusProgram(focusedCell.channelIndex, focusedCell.programIndex - 1);
@@ -746,6 +843,12 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const { focusedCell } = this.state;
         if (!focusedCell) return false;
 
+        if (focusedCell.kind === 'placeholder') {
+            const nextTime = focusedCell.focusTimeMs + (EPG_CONSTANTS.TIME_SCROLL_AMOUNT * 60000);
+            this.focusPlaceholder(focusedCell.channelIndex, nextTime);
+            return true;
+        }
+
         const channel = this.state.channels[focusedCell.channelIndex];
         if (!channel) return false;
         const schedule = this.state.schedules.get(channel.id);
@@ -793,9 +896,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         const schedule = this.state.schedules.get(channel.id);
         if (!schedule || schedule.programs.length === 0) {
-            this.focusChannel(channelIndex);
+            this.focusPlaceholder(channelIndex, targetTime);
             return;
         }
+
+        this.state.focusTimeMs = targetTime;
 
         // Find program containing the target time
         let programIndex = schedule.programs.findIndex(
@@ -826,6 +931,10 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         const channel = this.state.channels[focusedCell.channelIndex];
         if (!channel) return false;
+
+        if (focusedCell.kind === 'placeholder') {
+            return false;
+        }
 
         this.emit('channelSelected', {
             channel,
@@ -865,14 +974,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         return {
             isVisible,
-            focusedCell: focusedCell
-                ? {
-                    channelIndex: focusedCell.channelIndex,
-                    programIndex: focusedCell.programIndex,
-                    program: focusedCell.program,
-                    cellElement: focusedCell.cellElement,
-                }
-                : null,
+            focusedCell: focusedCell ?? null,
             scrollPosition,
             viewWindow: {
                 startTime: this.state.gridAnchorTime + (scrollPosition.timeOffset * 60000),
@@ -893,7 +995,10 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * @returns Focused program or null
      */
     getFocusedProgram(): ScheduledProgram | null {
-        return this.state.focusedCell ? this.state.focusedCell.program : null;
+        if (this.state.focusedCell?.kind !== 'program') {
+            return null;
+        }
+        return this.state.focusedCell.program;
     }
 
     // ============================================
@@ -917,20 +1022,27 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
             this.virtualizer.updateScrollPosition(this.state.scrollPosition.timeOffset);
             const range = this.virtualizer.calculateVisibleRange(this.state.scrollPosition);
+            this.maybeEmitVisibleRange(range);
             const channelIds = this.state.channels.map((c) => c.id);
             const focused = this.state.focusedCell;
             const focusedChannel = focused ? this.state.channels[focused.channelIndex] : undefined;
             const focusedKey = focused && focusedChannel
-                ? `${focusedChannel.id}-${focused.program.scheduledStartTime}`
+                ? focused.kind === 'program'
+                    ? `${focusedChannel.id}-${focused.program.scheduledStartTime}`
+                    : `${focusedChannel.id}-placeholder-${focused.placeholder.scheduledStartTime}`
                 : undefined;
 
             this.virtualizer.renderVisibleCells(channelIds, this.state.schedules, range, focusedKey);
 
             // Ensure focus styling is applied after (re)rendering.
             if (focused && focusedChannel) {
+                const focusStartTime = focused.kind === 'program'
+                    ? focused.program.scheduledStartTime
+                    : focused.placeholder.scheduledStartTime;
                 focused.cellElement = this.virtualizer.setFocusedCell(
                     focusedChannel.id,
-                    focused.program.scheduledStartTime
+                    focusStartTime,
+                    focused.focusTimeMs
                 );
             }
 
@@ -952,11 +1064,40 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         });
     }
 
+    private maybeEmitVisibleRange(_range: { visibleRows: number[] }): void {
+        if (!this.config.onVisibleRangeChange) {
+            return;
+        }
+
+        const channelStart = this.state.scrollPosition.channelOffset;
+        const channelEnd = Math.min(
+            channelStart + this.config.visibleChannels,
+            this.state.channels.length
+        );
+        const timeStartMs = this.state.gridAnchorTime + (this.state.scrollPosition.timeOffset * 60000);
+        const timeEndMs = this.state.gridAnchorTime +
+            ((this.state.scrollPosition.timeOffset + (this.config.visibleHours * 60)) * 60000);
+
+        const rangeKey = `${channelStart}-${channelEnd}-${timeStartMs}-${timeEndMs}`;
+        if (rangeKey === this.lastVisibleRangeKey) {
+            return;
+        }
+
+        this.lastVisibleRangeKey = rangeKey;
+        this.config.onVisibleRangeChange({
+            channelStart,
+            channelEnd,
+            timeStartMs,
+            timeEndMs,
+        });
+    }
+
     private setTimeOffsetToNow(): void {
         const now = Date.now();
         const minutesFromAnchor = (now - this.state.gridAnchorTime) / 60000;
         const centerOffset = minutesFromAnchor - (this.config.visibleHours * 60 / 2);
         this.state.scrollPosition.timeOffset = Math.max(0, centerOffset);
+        this.state.focusTimeMs = now;
         this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
     }
 }
