@@ -98,7 +98,7 @@ export class EPGChannelList {
     private renderAllRows(): void {
         if (!this.contentElement) return;
 
-        this.contentElement.innerHTML = '';
+        this.contentElement.replaceChildren();
         this.rowElements = [];
         this.topSpacerElement = null;
         this.bottomSpacerElement = null;
@@ -118,7 +118,7 @@ export class EPGChannelList {
     private setupVirtualList(): void {
         if (!this.contentElement) return;
 
-        this.contentElement.innerHTML = '';
+        this.contentElement.replaceChildren();
         this.rowElements = [];
 
         this.topSpacerElement = document.createElement('div');
@@ -188,7 +188,7 @@ export class EPGChannelList {
             row.style.height = `${this.config.rowHeight}px`;
         }
 
-        row.innerHTML = '';
+        row.replaceChildren();
 
         // Channel icon (if available) - validate URL scheme
         if (channel.icon) {

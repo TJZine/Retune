@@ -20,7 +20,7 @@ describe('EPGComponent', () => {
         name: `Channel ${index + 1}`,
         contentSource: { type: 'manual', items: [] },
         playbackMode: 'sequential',
-        filters: [],
+        contentFilters: [],
         skipIntros: false,
         skipCredits: false,
         createdAt: Date.now(),
@@ -29,7 +29,7 @@ describe('EPGComponent', () => {
         itemCount: 10,
         totalDurationMs: 36000000,
         startTimeAnchor: gridAnchorTime,
-    } as ChannelConfig);
+    });
 
     const createMockSchedule = (channelId: string, programCount: number): ScheduleWindow => {
         const programs: ScheduledProgram[] = [];

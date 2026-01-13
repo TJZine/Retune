@@ -116,7 +116,7 @@
 /* Program Cells */
 .epg-cell {
   position: absolute;
-  height: 76px;
+  height: 88px;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;

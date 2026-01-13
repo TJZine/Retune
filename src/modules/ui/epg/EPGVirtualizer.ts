@@ -88,9 +88,15 @@ export class EPGVirtualizer {
         config: EPGConfig,
         gridAnchorTime: number
     ): void {
+        if (this.contentElement) {
+            this.contentElement.remove();
+            this.contentElement = null;
+        }
         this.gridContainer = gridContainer;
         this.config = config;
         this.gridAnchorTime = gridAnchorTime;
+        this.channelOffset = 0;
+        this.totalChannels = 0;
         this.elementPool.clear();
         this.visibleCells.clear();
         this.contentElement = document.createElement('div');
@@ -340,8 +346,9 @@ export class EPGVirtualizer {
                     // Compute isPartial: true if program is clipped by visible window
                     const programStartMinutes = (program.scheduledStartTime - this.gridAnchorTime) / 60000;
                     const programEndMinutes = (program.scheduledEndTime - this.gridAnchorTime) / 60000;
-                    const isPartial = programStartMinutes < range.visibleTimeRange.start ||
-                        programEndMinutes > range.visibleTimeRange.end;
+                    const isPartial =
+                        programStartMinutes < visibleWindowStartMinutes ||
+                        programEndMinutes > visibleWindowEndMinutes;
 
                     addCell({
                         key: cellKey,

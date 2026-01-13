@@ -791,7 +791,8 @@ export class ChannelManager implements IChannelManager {
                 this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
             }
-            const { data, didMutate } = migrated;
+            const { data, didMutate: didMutateFromMigration } = migrated;
+            let didMutate = didMutateFromMigration;
 
             // Restore state
             this._state.channels.clear();
@@ -799,20 +800,23 @@ export class ChannelManager implements IChannelManager {
                 // Prune invalid channels (fix for seeding bug)
                 if (!isValidContentSource(channel.contentSource)) {
                     this._logger.warn(`Pruning invalid channel ${channel.name} (${channel.id})`);
+                    didMutate = true;
                     continue;
                 }
                 this._state.channels.set(channel.id, channel);
             }
 
-            this._state.channelOrder = data.channelOrder.filter((id) =>
-                this._state.channels.has(id)
-            );
+            this._state.channelOrder = data.channelOrder.filter((id) => this._state.channels.has(id));
+            if (this._state.channelOrder.length !== data.channelOrder.length) {
+                didMutate = true;
+            }
 
             // Fallback: if stored order is corrupt/empty but channels exist, rebuild a stable order.
             if (this._state.channelOrder.length === 0 && this._state.channels.size > 0) {
                 this._state.channelOrder = [...this._state.channels.values()]
                     .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))
                     .map((c) => c.id);
+                didMutate = true;
             }
             this._state.currentChannelId = data.currentChannelId;
 
@@ -825,6 +829,7 @@ export class ChannelManager implements IChannelManager {
             // Ensure current channel is valid; fallback to first channel if needed.
             if (this._state.currentChannelId && !this._state.channels.has(this._state.currentChannelId)) {
                 this._state.currentChannelId = this._state.channelOrder[0] ?? null;
+                didMutate = true;
             }
 
             // Persist normalized/migrated channel records once.
