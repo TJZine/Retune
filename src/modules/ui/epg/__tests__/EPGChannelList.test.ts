@@ -16,7 +16,7 @@ describe('EPGChannelList', () => {
         name: `Channel ${index + 1}`,
         contentSource: { type: 'manual', items: [] },
         playbackMode: 'sequential',
-        filters: [],
+        contentFilters: [],
         skipIntros: false,
         skipCredits: false,
         createdAt: Date.now(),
@@ -25,7 +25,7 @@ describe('EPGChannelList', () => {
         itemCount: 10,
         totalDurationMs: 36000000,
         startTimeAnchor: Date.now(),
-    } as ChannelConfig);
+    });
 
     const createConfig = (overrides?: Partial<EPGConfig>): EPGConfig => ({
         containerId: 'epg-container',

@@ -294,6 +294,14 @@ export class ChannelManager implements IChannelManager {
                 this._logger.warn(`Skipping invalid channel ${channel.name} (${channel.id}) during replaceAllChannels`);
                 continue;
             }
+            // Normalize seeds so imported channels behave like newly created ones.
+            // This prevents nondeterministic shuffle order / missing live-drift until next app restart.
+            if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
+                channel.shuffleSeed = hashStringToUint32(`${channel.id}:shuffle`);
+            }
+            if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {
+                channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
+            }
             this._state.channels.set(channel.id, channel);
             this._state.channelOrder.push(channel.id);
         }
@@ -959,6 +967,7 @@ export class ChannelManager implements IChannelManager {
                 },
                 playbackMode: 'shuffle',
                 shuffleSeed: 12345 + chNum,
+                phaseSeed: hashStringToUint32(`${channelId}:phase`),
                 startTimeAnchor: DEMO_ANCHOR_TIME,
                 skipIntros: false,
                 skipCredits: false,

@@ -399,6 +399,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._clearAuthResume();
         this._clearServerResume();
 
+        if (this._pendingDayRolloverTimer !== null) {
+            globalThis.clearTimeout(this._pendingDayRolloverTimer);
+            this._pendingDayRolloverTimer = null;
+        }
+        this._pendingDayRolloverDayKey = null;
+
         // Unregister all event subscriptions (resilient to throwing handlers)
         for (const unsubscribe of this._eventUnsubscribers) {
             try {
