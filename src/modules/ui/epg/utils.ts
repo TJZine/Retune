@@ -85,3 +85,26 @@ export function rafThrottle<T extends (...args: unknown[]) => void>(
         }
     };
 }
+
+/**
+ * Append a debug log entry to localStorage when retune_debug_epg is enabled.
+ * Keeps a bounded log for simulator copy/paste.
+ */
+export function appendEpgDebugLog(event: string, data: unknown): void {
+    try {
+        if (localStorage.getItem('retune_debug_epg') !== '1') {
+            return;
+        }
+        const raw = localStorage.getItem('retune_debug_epg_log');
+        const entries: Array<{ ts: number; event: string; data: unknown }> =
+            raw ? JSON.parse(raw) : [];
+        entries.push({ ts: Date.now(), event, data });
+        const MAX_ENTRIES = 200;
+        if (entries.length > MAX_ENTRIES) {
+            entries.splice(0, entries.length - MAX_ENTRIES);
+        }
+        localStorage.setItem('retune_debug_epg_log', JSON.stringify(entries));
+    } catch {
+        // Ignore storage failures (webOS can throw).
+    }
+}

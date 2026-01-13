@@ -193,12 +193,15 @@ function generateUUID(): string {
 }
 
 /**
- * Get today's midnight timestamp.
+ * Deterministic string -> uint32 hash (FNV-1a).
  */
-function getTodayMidnight(): number {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now.getTime();
+function hashStringToUint32(input: string): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
 }
 
 // ============================================
@@ -291,8 +294,18 @@ export class ChannelManager implements IChannelManager {
                 this._logger.warn(`Skipping invalid channel ${channel.name} (${channel.id}) during replaceAllChannels`);
                 continue;
             }
-            this._state.channels.set(channel.id, channel);
-            this._state.channelOrder.push(channel.id);
+            // Clone to avoid mutating caller-owned channel objects.
+            const normalizedChannel: ChannelConfig = { ...channel };
+            // Normalize seeds so imported channels behave like newly created ones.
+            // This prevents nondeterministic shuffle order / missing live-drift until next app restart.
+            if (typeof normalizedChannel.shuffleSeed !== 'number' || !Number.isFinite(normalizedChannel.shuffleSeed)) {
+                normalizedChannel.shuffleSeed = hashStringToUint32(`${normalizedChannel.id}:shuffle`);
+            }
+            if (typeof normalizedChannel.phaseSeed !== 'number' || !Number.isFinite(normalizedChannel.phaseSeed)) {
+                normalizedChannel.phaseSeed = hashStringToUint32(`${normalizedChannel.id}:phase`);
+            }
+            this._state.channels.set(normalizedChannel.id, normalizedChannel);
+            this._state.channelOrder.push(normalizedChannel.id);
         }
 
         const requestedCurrent = options?.currentChannelId ?? null;
@@ -363,7 +376,7 @@ export class ChannelManager implements IChannelManager {
             startTimeAnchor:
                 typeof config.startTimeAnchor === 'number'
                     ? config.startTimeAnchor
-                    : getTodayMidnight(),
+                    : Date.now(),
             skipIntros: config.skipIntros === true,
             skipCredits: config.skipCredits === true,
             createdAt: Date.now(),
@@ -379,6 +392,8 @@ export class ChannelManager implements IChannelManager {
         if (config.color !== undefined) channel.color = config.color;
         if (typeof config.shuffleSeed === 'number') channel.shuffleSeed = config.shuffleSeed;
         else channel.shuffleSeed = Date.now();
+        if (typeof config.phaseSeed === 'number') channel.phaseSeed = config.phaseSeed;
+        else channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
         if (config.contentFilters !== undefined) channel.contentFilters = config.contentFilters;
         if (config.sortOrder !== undefined) channel.sortOrder = config.sortOrder;
         if (config.maxEpisodeRunTimeMs !== undefined) channel.maxEpisodeRunTimeMs = config.maxEpisodeRunTimeMs;
@@ -773,11 +788,13 @@ export class ChannelManager implements IChannelManager {
             }
 
             const parsed = JSON.parse(json) as Partial<StoredChannelData>;
-            const data = this._migrateStoredChannelData(parsed);
-            if (!data) {
+            const migrated = this._migrateStoredChannelData(parsed);
+            if (!migrated) {
                 this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
             }
+            const { data, didMutate: didMutateFromMigration } = migrated;
+            let didMutate = didMutateFromMigration;
 
             // Restore state
             this._state.channels.clear();
@@ -785,20 +802,23 @@ export class ChannelManager implements IChannelManager {
                 // Prune invalid channels (fix for seeding bug)
                 if (!isValidContentSource(channel.contentSource)) {
                     this._logger.warn(`Pruning invalid channel ${channel.name} (${channel.id})`);
+                    didMutate = true;
                     continue;
                 }
                 this._state.channels.set(channel.id, channel);
             }
 
-            this._state.channelOrder = data.channelOrder.filter((id) =>
-                this._state.channels.has(id)
-            );
+            this._state.channelOrder = data.channelOrder.filter((id) => this._state.channels.has(id));
+            if (this._state.channelOrder.length !== data.channelOrder.length) {
+                didMutate = true;
+            }
 
             // Fallback: if stored order is corrupt/empty but channels exist, rebuild a stable order.
             if (this._state.channelOrder.length === 0 && this._state.channels.size > 0) {
                 this._state.channelOrder = [...this._state.channels.values()]
                     .sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))
                     .map((c) => c.id);
+                didMutate = true;
             }
             this._state.currentChannelId = data.currentChannelId;
 
@@ -811,13 +831,21 @@ export class ChannelManager implements IChannelManager {
             // Ensure current channel is valid; fallback to first channel if needed.
             if (this._state.currentChannelId && !this._state.channels.has(this._state.currentChannelId)) {
                 this._state.currentChannelId = this._state.channelOrder[0] ?? null;
+                didMutate = true;
+            }
+
+            // Persist normalized/migrated channel records once.
+            if (didMutate) {
+                await this.saveChannels();
             }
         } catch (e) {
             this._logger.error('Failed to load channels from storage', e);
         }
     }
 
-    private _migrateStoredChannelData(data: Partial<StoredChannelData>): StoredChannelData | null {
+    private _migrateStoredChannelData(
+        data: Partial<StoredChannelData>
+    ): { data: StoredChannelData; didMutate: boolean } | null {
         if (!Array.isArray(data.channels)) {
             return null;
         }
@@ -834,17 +862,44 @@ export class ChannelManager implements IChannelManager {
         const version =
             typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
 
+        let didMutate = false;
+
         if (version !== STORAGE_VERSION) {
             this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
             // TODO: Implement explicit schema transformations when STORAGE_VERSION increments.
+            didMutate = true;
+        }
+
+        const normalizedChannels: ChannelConfig[] = [];
+        for (const raw of data.channels) {
+            // Keep unknown records as-is; basic field normalization happens below.
+            const channel = raw as ChannelConfig;
+            if (channel && typeof channel === 'object') {
+                if (typeof channel.id !== 'string' || channel.id.length === 0) {
+                    didMutate = true;
+                    continue;
+                }
+                if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
+                    channel.shuffleSeed = hashStringToUint32(`${channel.id}:shuffle`);
+                    didMutate = true;
+                }
+                if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {
+                    channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
+                    didMutate = true;
+                }
+            }
+            normalizedChannels.push(channel);
         }
 
         return {
-            version: STORAGE_VERSION,
-            channels: data.channels,
-            channelOrder: data.channelOrder,
-            currentChannelId,
-            savedAt,
+            data: {
+                version: STORAGE_VERSION,
+                channels: normalizedChannels,
+                channelOrder: data.channelOrder,
+                currentChannelId,
+                savedAt,
+            },
+            didMutate,
         };
     }
 
@@ -923,6 +978,7 @@ export class ChannelManager implements IChannelManager {
                 },
                 playbackMode: 'shuffle',
                 shuffleSeed: 12345 + chNum,
+                phaseSeed: hashStringToUint32(`${channelId}:phase`),
                 startTimeAnchor: DEMO_ANCHOR_TIME,
                 skipIntros: false,
                 skipCredits: false,

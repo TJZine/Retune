@@ -8,7 +8,7 @@
  */
 
 import { EPG_CONSTANTS, EPG_CLASSES } from './constants';
-import { formatTimeRange } from './utils';
+import { formatTimeRange, appendEpgDebugLog } from './utils';
 import type {
     ScheduledProgram,
     ScheduleWindow,
@@ -56,7 +56,9 @@ export function positionCell(
 export class EPGVirtualizer {
     private config: EPGConfig | null = null;
     private gridContainer: HTMLElement | null = null;
+    private contentElement: HTMLElement | null = null;
     private gridAnchorTime: number = 0;
+    private channelOffset: number = 0;
 
     /** Pool of recycled DOM elements */
     private elementPool: Map<string, HTMLElement> = new Map();
@@ -66,6 +68,13 @@ export class EPGVirtualizer {
 
     /** Total channel count */
     private totalChannels: number = 0;
+    private isDebugEnabled(): boolean {
+        try {
+            return localStorage.getItem('retune_debug_epg') === '1';
+        } catch {
+            return false;
+        }
+    }
 
     /**
      * Initialize the virtualizer.
@@ -79,11 +88,22 @@ export class EPGVirtualizer {
         config: EPGConfig,
         gridAnchorTime: number
     ): void {
+        if (this.contentElement) {
+            this.contentElement.remove();
+            this.contentElement = null;
+        }
         this.gridContainer = gridContainer;
         this.config = config;
         this.gridAnchorTime = gridAnchorTime;
+        this.channelOffset = 0;
+        this.totalChannels = 0;
         this.elementPool.clear();
         this.visibleCells.clear();
+        this.contentElement = document.createElement('div');
+        this.contentElement.style.position = 'relative';
+        this.contentElement.style.width = '100%';
+        this.contentElement.style.height = '100%';
+        this.gridContainer.appendChild(this.contentElement);
     }
 
     /**
@@ -93,6 +113,10 @@ export class EPGVirtualizer {
         this.forceRecycleAll();
         this.elementPool.clear();
         this.visibleCells.clear();
+        if (this.contentElement) {
+            this.contentElement.remove();
+        }
+        this.contentElement = null;
         this.gridContainer = null;
         this.config = null;
     }
@@ -130,6 +154,7 @@ export class EPGVirtualizer {
         if (!config) {
             return {
                 visibleRows: [],
+                channelOffset: 0,
                 visibleTimeRange: { start: 0, end: 0 },
                 recycledElements: this.elementPool,
             };
@@ -138,10 +163,14 @@ export class EPGVirtualizer {
         const rowBuffer = EPG_CONSTANTS.ROW_BUFFER;
         const timeBuffer = EPG_CONSTANTS.TIME_BUFFER_MINUTES;
 
-        const startRow = Math.max(0, scrollPosition.channelOffset - rowBuffer);
+        const clampedOffset = Math.max(
+            0,
+            Math.min(scrollPosition.channelOffset, Math.max(0, this.totalChannels - 1))
+        );
+        const startRow = Math.max(0, clampedOffset - rowBuffer);
         const endRow = Math.min(
             this.totalChannels,
-            scrollPosition.channelOffset + config.visibleChannels + rowBuffer
+            clampedOffset + config.visibleChannels + rowBuffer
         );
 
         const visibleRows: number[] = [];
@@ -151,6 +180,7 @@ export class EPGVirtualizer {
 
         return {
             visibleRows,
+            channelOffset: clampedOffset,
             visibleTimeRange: {
                 start: scrollPosition.timeOffset - timeBuffer,
                 end: scrollPosition.timeOffset + (config.visibleHours * 60) + timeBuffer,
@@ -176,6 +206,43 @@ export class EPGVirtualizer {
         return programEndMinutes > timeRange.start && programStartMinutes < timeRange.end;
     }
 
+    private addPlaceholderCell(
+        channelId: string,
+        rowIndex: number,
+        startMinutes: number,
+        endMinutes: number,
+        label: string,
+        addCell: (cellData: CellRenderData, isFocusedCell: boolean) => void
+    ): void {
+        if (!this.config) return;
+
+        const normalizedStart = Math.max(0, startMinutes);
+        const normalizedEnd = Math.max(normalizedStart, endMinutes);
+        if (normalizedEnd <= normalizedStart) return;
+
+        const scheduledStartTime = this.gridAnchorTime + (normalizedStart * 60000);
+        const scheduledEndTime = this.gridAnchorTime + (normalizedEnd * 60000);
+        const cellKey = `${channelId}-placeholder-${scheduledStartTime}`;
+        const left = normalizedStart * this.config.pixelsPerMinute;
+        const width = Math.max((normalizedEnd - normalizedStart) * this.config.pixelsPerMinute, 20);
+        addCell({
+            kind: 'placeholder',
+            key: cellKey,
+            channelId,
+            rowIndex,
+            placeholder: {
+                label,
+                scheduledStartTime,
+                scheduledEndTime,
+            },
+            left,
+            width,
+            isPartial: false,
+            isCurrent: false,
+            cellElement: null,
+        }, false);
+    }
+
     /**
      * Render visible cells with DOM recycling.
      * Main virtualization entry point.
@@ -190,7 +257,9 @@ export class EPGVirtualizer {
         range: VirtualizedGridState,
         focusedCellKey?: string
     ): void {
-        if (!this.gridContainer || !this.config) return;
+        if (!this.contentElement || !this.config) return;
+
+        this.channelOffset = range.channelOffset;
 
         const newVisibleCells = new Map<string, CellRenderData>();
         const now = Date.now();
@@ -198,6 +267,27 @@ export class EPGVirtualizer {
         const visibleRowCount = Math.max(1, range.visibleRows.length);
         const perRowLimit = Math.max(1, Math.ceil(maxDomElements / visibleRowCount));
         const perRowCounts = new Map<number, number>();
+        const timeBuffer = EPG_CONSTANTS.TIME_BUFFER_MINUTES;
+        const visibleWindowStartMinutes = range.visibleTimeRange.start + timeBuffer;
+        const visibleWindowEndMinutes = range.visibleTimeRange.end - timeBuffer;
+
+        const addCell = (cellData: CellRenderData, isFocusedCell: boolean): void => {
+            const currentRowCount = perRowCounts.get(cellData.rowIndex) ?? 0;
+
+            if (!isFocusedCell) {
+                if (newVisibleCells.size >= maxDomElements) {
+                    return;
+                }
+                if (currentRowCount >= perRowLimit) {
+                    return;
+                }
+            }
+
+            newVisibleCells.set(cellData.key, cellData);
+            if (!isFocusedCell) {
+                perRowCounts.set(cellData.rowIndex, currentRowCount + 1);
+            }
+        };
 
         // Determine needed cells
         for (const rowIndex of range.visibleRows) {
@@ -206,48 +296,100 @@ export class EPGVirtualizer {
             const channelId = channelIds[rowIndex];
             if (channelId === undefined) continue;
             const schedule = schedules.get(channelId);
-            if (!schedule) continue;
+            if (!schedule) {
+                this.addPlaceholderCell(
+                    channelId,
+                    rowIndex,
+                    Math.max(0, visibleWindowStartMinutes),
+                    Math.max(0, visibleWindowEndMinutes),
+                    'Loading...',
+                    addCell
+                );
+                continue;
+            }
+
+            let hadVisibleOverlap = false;
+            const visibleWindowStartMs = this.gridAnchorTime + (Math.max(0, visibleWindowStartMinutes) * 60000);
+            const visibleWindowEndMs = this.gridAnchorTime + (Math.max(0, visibleWindowEndMinutes) * 60000);
+            let lastCoveredTimeMs = visibleWindowStartMs;
 
             for (const program of schedule.programs) {
                 if (this.overlapsTimeRange(program, range.visibleTimeRange)) {
                     const cellKey = `${channelId}-${program.scheduledStartTime}`;
                     const isFocusedCell = focusedCellKey === cellKey;
-                    const currentRowCount = perRowCounts.get(rowIndex) ?? 0;
-
-                    // Hard cap: keep DOM under MAX_DOM_ELEMENTS (ADR-003)
-                    if (!isFocusedCell) {
-                        if (newVisibleCells.size >= maxDomElements) {
-                            continue;
-                        }
-                        if (currentRowCount >= perRowLimit) {
-                            continue;
-                        }
+                    const overlapsVisibleWindow = program.scheduledEndTime > visibleWindowStartMs &&
+                        program.scheduledStartTime < visibleWindowEndMs;
+                    if (overlapsVisibleWindow) {
+                        hadVisibleOverlap = true;
                     }
 
                     const cell = positionCell(program, this.gridAnchorTime, this.config.pixelsPerMinute);
+                    // If the program started before the visible guide window, clip to the left edge (no past).
+                    let left = cell.left;
+                    let width = cell.width;
+                    if (left < 0) {
+                        width = Math.max(20, width + left);
+                        left = 0;
+                    }
 
                     // Compute isPartial: true if program is clipped by visible window
                     const programStartMinutes = (program.scheduledStartTime - this.gridAnchorTime) / 60000;
                     const programEndMinutes = (program.scheduledEndTime - this.gridAnchorTime) / 60000;
-                    const isPartial = programStartMinutes < range.visibleTimeRange.start ||
-                        programEndMinutes > range.visibleTimeRange.end;
+                    const isPartial =
+                        programStartMinutes < visibleWindowStartMinutes ||
+                        programEndMinutes > visibleWindowEndMinutes;
 
-                    newVisibleCells.set(cellKey, {
+                    addCell({
+                        kind: 'program',
                         key: cellKey,
                         channelId,
                         rowIndex,
                         program,
-                        left: cell.left,
-                        width: cell.width,
+                        left,
+                        width,
                         isPartial,
                         isCurrent: now >= program.scheduledStartTime && now < program.scheduledEndTime,
                         cellElement: null,
-                    });
+                    }, isFocusedCell);
 
-                    if (!isFocusedCell) {
-                        perRowCounts.set(rowIndex, currentRowCount + 1);
+                    if (overlapsVisibleWindow && program.scheduledStartTime > lastCoveredTimeMs) {
+                        const gapEndMs = Math.min(program.scheduledStartTime, visibleWindowEndMs);
+                        if (gapEndMs > lastCoveredTimeMs) {
+                            this.addPlaceholderCell(
+                                channelId,
+                                rowIndex,
+                                (lastCoveredTimeMs - this.gridAnchorTime) / 60000,
+                                (gapEndMs - this.gridAnchorTime) / 60000,
+                                'No Program',
+                                addCell
+                            );
+                        }
+                    }
+
+                    if (overlapsVisibleWindow) {
+                        lastCoveredTimeMs = Math.max(lastCoveredTimeMs, program.scheduledEndTime);
                     }
                 }
+            }
+
+            if (!hadVisibleOverlap) {
+                this.addPlaceholderCell(
+                    channelId,
+                    rowIndex,
+                    Math.max(0, visibleWindowStartMinutes),
+                    Math.max(0, visibleWindowEndMinutes),
+                    'No Program',
+                    addCell
+                );
+            } else if (lastCoveredTimeMs < visibleWindowEndMs) {
+                this.addPlaceholderCell(
+                    channelId,
+                    rowIndex,
+                    (lastCoveredTimeMs - this.gridAnchorTime) / 60000,
+                    Math.max(0, visibleWindowEndMinutes),
+                    'No Program',
+                    addCell
+                );
             }
         }
 
@@ -288,6 +430,23 @@ export class EPGVirtualizer {
         }
 
         this.visibleCells = newVisibleCells;
+
+        if (this.isDebugEnabled()) {
+            let placeholderCount = 0;
+            for (const key of newVisibleCells.keys()) {
+                if (key.includes('-placeholder-')) {
+                    placeholderCount += 1;
+                }
+            }
+            const payload = {
+                renderedCells: newVisibleCells.size,
+                placeholders: placeholderCount,
+                visibleRows: range.visibleRows.length,
+                timeOffset: range.visibleTimeRange.start + EPG_CONSTANTS.TIME_BUFFER_MINUTES,
+            };
+            console.debug('[EPGVirtualizer] render', payload);
+            appendEpgDebugLog('EPGVirtualizer.render', payload);
+        }
     }
 
     /**
@@ -371,23 +530,31 @@ export class EPGVirtualizer {
      * @param cellData - Cell data to render
      */
     private renderCell(key: string, cellData: CellRenderData): void {
-        if (!this.gridContainer || !this.config) return;
+        if (!this.contentElement || !this.config) return;
 
         const element = this.getOrCreateElement();
 
         // Set content
         const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
-        if (title) title.textContent = cellData.program.item.title;
-        if (time) time.textContent = formatTimeRange(
-            cellData.program.scheduledStartTime,
-            cellData.program.scheduledEndTime
-        );
+        if (cellData.kind === 'program') {
+            if (title) title.textContent = cellData.program.item.title;
+            if (time) time.textContent = formatTimeRange(
+                cellData.program.scheduledStartTime,
+                cellData.program.scheduledEndTime
+            );
+        } else {
+            if (title) title.textContent = cellData.placeholder.label;
+            if (time) time.textContent = formatTimeRange(
+                cellData.placeholder.scheduledStartTime,
+                cellData.placeholder.scheduledEndTime
+            );
+        }
 
         // Calculate position
         element.style.left = `${cellData.left}px`;
         element.style.width = `${cellData.width}px`;
-        element.style.top = `${cellData.rowIndex * this.config.rowHeight}px`;
+        element.style.top = `${(cellData.rowIndex - this.channelOffset) * this.config.rowHeight}px`;
         element.setAttribute('data-key', key);
 
         // Mark current program
@@ -396,7 +563,7 @@ export class EPGVirtualizer {
         }
 
         // Append to grid
-        this.gridContainer.appendChild(element);
+        this.contentElement.appendChild(element);
         cellData.cellElement = element;
     }
 
@@ -411,7 +578,7 @@ export class EPGVirtualizer {
 
         element.style.left = `${cellData.left}px`;
         element.style.width = `${cellData.width}px`;
-        element.style.top = `${cellData.rowIndex * this.config.rowHeight}px`;
+        element.style.top = `${(cellData.rowIndex - this.channelOffset) * this.config.rowHeight}px`;
 
         // Update current state
         if (cellData.isCurrent) {
@@ -433,11 +600,19 @@ export class EPGVirtualizer {
 
         const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
-        if (title) title.textContent = cellData.program.item.title;
-        if (time) time.textContent = formatTimeRange(
-            cellData.program.scheduledStartTime,
-            cellData.program.scheduledEndTime
-        );
+        if (cellData.kind === 'program') {
+            if (title) title.textContent = cellData.program.item.title;
+            if (time) time.textContent = formatTimeRange(
+                cellData.program.scheduledStartTime,
+                cellData.program.scheduledEndTime
+            );
+        } else {
+            if (title) title.textContent = cellData.placeholder.label;
+            if (time) time.textContent = formatTimeRange(
+                cellData.placeholder.scheduledStartTime,
+                cellData.placeholder.scheduledEndTime
+            );
+        }
     }
 
     /**
@@ -496,5 +671,11 @@ export class EPGVirtualizer {
      */
     getPoolSize(): number {
         return this.elementPool.size;
+    }
+
+    updateScrollPosition(timeOffset: number): void {
+        if (!this.contentElement || !this.config) return;
+        const translateX = -(timeOffset * this.config.pixelsPerMinute);
+        this.contentElement.style.transform = `translateX(${translateX}px)`;
     }
 }

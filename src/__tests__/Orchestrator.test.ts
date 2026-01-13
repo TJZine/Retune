@@ -202,6 +202,7 @@ const mockChannel = {
     startTimeAnchor: 0,
     playbackMode: 'sequential' as const,
     shuffleSeed: 12345,
+    phaseSeed: 4242,
 };
 
 const mockChannelManager = {
@@ -219,7 +220,9 @@ const mockChannelManager = {
     deleteChannel: jest.fn().mockResolvedValue(undefined),
     resolveChannelContent: jest.fn().mockResolvedValue({
         channelId: 'ch1',
+        items: [],
         orderedItems: [],
+        totalDurationMs: 0,
         resolvedAt: Date.now(),
     }),
     on: jest.fn(() => jest.fn()),
@@ -832,7 +835,7 @@ describe('AppOrchestrator', () => {
 
             mockChannelManager.resolveChannelContent.mockImplementation(async () => {
                 resolveOrder.push('resolve');
-                return { channelId: 'ch1', orderedItems: [], resolvedAt: Date.now() };
+                return { channelId: 'ch1', items: [], orderedItems: [], totalDurationMs: 0, resolvedAt: Date.now() };
             });
             mockScheduler.loadChannel.mockImplementation(() => {
                 resolveOrder.push('load');
@@ -851,8 +854,8 @@ describe('AppOrchestrator', () => {
             // Make resolveChannelContent take some time
             let resolveDelay: () => void = (): void => { };
             mockChannelManager.resolveChannelContent.mockImplementation(
-                (): Promise<{ channelId: string; orderedItems: never[]; resolvedAt: number }> => new Promise<{ channelId: string; orderedItems: never[]; resolvedAt: number }>((resolve) => {
-                    resolveDelay = (): void => resolve({ channelId: 'ch1', orderedItems: [], resolvedAt: Date.now() });
+                (): Promise<{ channelId: string; items: never[]; orderedItems: never[]; totalDurationMs: number; resolvedAt: number }> => new Promise<{ channelId: string; items: never[]; orderedItems: never[]; totalDurationMs: number; resolvedAt: number }>((resolve) => {
+                    resolveDelay = (): void => resolve({ channelId: 'ch1', items: [], orderedItems: [], totalDurationMs: 0, resolvedAt: Date.now() });
                 })
             );
 
@@ -881,7 +884,9 @@ describe('AppOrchestrator', () => {
         it('should allow sequential channel switches', async () => {
             mockChannelManager.resolveChannelContent.mockResolvedValue({
                 channelId: 'ch1',
+                items: [],
                 orderedItems: [],
+                totalDurationMs: 0,
                 resolvedAt: Date.now(),
             });
 

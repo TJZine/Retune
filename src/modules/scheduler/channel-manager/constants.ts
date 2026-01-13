@@ -21,7 +21,7 @@ export const CURRENT_CHANNEL_KEY = 'retune_current_channel_v4';
 export const LEGACY_CURRENT_CHANNEL_KEY = 'retune_current_channel';
 
 /** Storage schema version for migrations */
-export const STORAGE_VERSION = 2;
+export const STORAGE_VERSION = 3;
 
 // ============================================
 // Caching

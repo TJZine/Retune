@@ -134,6 +134,13 @@ export interface IEPGComponent {
      */
     getFocusedProgram(): ScheduledProgram | null;
 
+    /**
+     * Set the grid anchor time (left edge of the EPG timeline).
+     * This allows the guide to start at "now" instead of midnight.
+     * @param anchorTime - Unix timestamp (ms)
+     */
+    setGridAnchorTime(anchorTime: number): void;
+
     // Events
     /**
      * Subscribe to an EPG event.

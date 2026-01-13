@@ -25,29 +25,7 @@
 </head>
 
 <body>
-    <div id="retune-boot-banner">Retune: booting v1.1 (Patched)...</div>
     <div id="app"></div>
-    <script>
-        (function () {
-            var el = document.getElementById('retune-boot-banner');
-            if (!el) return;
-            el.style.position = 'fixed';
-            el.style.left = '24px';
-            el.style.top = '24px';
-            el.style.padding = '10px 14px';
-            el.style.borderRadius = '6px';
-            el.style.background = 'rgba(0, 0, 0, 0.8)';
-            el.style.color = '#fff';
-            el.style.fontSize = '18px';
-            el.style.lineHeight = '1.2';
-            el.style.zIndex = '2147483647';
-            el.style.pointerEvents = 'none';
-            el.style.maxWidth = '80%';
-            el.style.whiteSpace = 'nowrap';
-            el.style.overflow = 'hidden';
-            el.style.textOverflow = 'ellipsis';
-        })();
-    </script>
     <script type="module" src="/src/index.ts"></script>
 </body>
 

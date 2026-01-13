@@ -20,7 +20,7 @@ describe('EPGComponent', () => {
         name: `Channel ${index + 1}`,
         contentSource: { type: 'manual', items: [] },
         playbackMode: 'sequential',
-        filters: [],
+        contentFilters: [],
         skipIntros: false,
         skipCredits: false,
         createdAt: Date.now(),
@@ -29,7 +29,7 @@ describe('EPGComponent', () => {
         itemCount: 10,
         totalDurationMs: 36000000,
         startTimeAnchor: gridAnchorTime,
-    } as ChannelConfig);
+    });
 
     const createMockSchedule = (channelId: string, programCount: number): ScheduleWindow => {
         const programs: ScheduledProgram[] = [];
@@ -142,6 +142,16 @@ describe('EPGComponent', () => {
 
             epg.hide();
             expect(closeHandler).toHaveBeenCalledTimes(1);
+        });
+
+        it('renders placeholders on open when schedules are missing', () => {
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.show();
+
+            const titles = Array.from(container.querySelectorAll('.epg-cell-title'))
+                .map((el) => el.textContent);
+            expect(titles).toContain('Loading...');
         });
     });
 
@@ -386,6 +396,37 @@ describe('EPGComponent', () => {
             expect(state.isVisible).toBe(true);
             expect(state.scrollPosition).toEqual({ channelOffset: 0, timeOffset: 0 });
             expect(state.currentTime).toBeGreaterThan(0);
+        });
+
+        it('keeps timeOffset at 0 when autoScrollToNow is enabled (window anchored to now)', () => {
+            const now = new Date('2026-01-07T10:00:00Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(now);
+
+            const newEpg = new EPGComponent();
+            const newContainer = document.createElement('div');
+            newContainer.id = 'epg-container-2';
+            document.body.appendChild(newContainer);
+
+            newEpg.initialize({
+                containerId: 'epg-container-2',
+                visibleChannels: 5,
+                timeSlotMinutes: 30,
+                visibleHours: 3,
+                totalHours: 24,
+                pixelsPerMinute: 4,
+                rowHeight: 80,
+                showCurrentTimeIndicator: true,
+                autoScrollToNow: true,
+            });
+
+            newEpg.loadChannels([createMockChannel(0)]);
+            newEpg.show();
+
+            expect(newEpg.getState().scrollPosition.timeOffset).toBe(0);
+
+            newEpg.destroy();
+            newContainer.remove();
+            (Date.now as jest.Mock).mockRestore();
         });
 
         it('should return focused program', () => {

@@ -111,6 +111,8 @@ export interface EPGProgramCell {
 export interface VirtualizedGridState {
     /** Currently rendered channel indices */
     visibleRows: number[];
+    /** Current channel scroll offset */
+    channelOffset: number;
     /** Visible time window */
     visibleTimeRange: { start: number; end: number };
     /** Recycled DOM elements */
@@ -177,26 +179,52 @@ export type EPGErrorType =
 /**
  * Cell render data for virtualization.
  */
-export interface CellRenderData {
-    /** Unique key for this cell */
-    key: string;
-    /** Channel ID */
-    channelId: string;
-    /** Row index */
-    rowIndex: number;
-    /** The scheduled program */
-    program: ScheduledProgram;
-    /** Left position (pixels) */
-    left: number;
-    /** Cell width (pixels) */
-    width: number;
-    /** Whether cell extends beyond visible area */
-    isPartial: boolean;
-    /** Whether program is currently airing */
-    isCurrent: boolean;
-    /** DOM element reference */
-    cellElement: HTMLElement | null;
-}
+export type CellRenderData =
+    | {
+        kind: 'program';
+        /** Unique key for this cell */
+        key: string;
+        /** Channel ID */
+        channelId: string;
+        /** Row index */
+        rowIndex: number;
+        /** The scheduled program */
+        program: ScheduledProgram;
+        /** Left position (pixels) */
+        left: number;
+        /** Cell width (pixels) */
+        width: number;
+        /** Whether cell extends beyond visible area */
+        isPartial: boolean;
+        /** Whether program is currently airing */
+        isCurrent: boolean;
+        /** DOM element reference */
+        cellElement: HTMLElement | null;
+    }
+    | {
+        kind: 'placeholder';
+        /** Unique key for this cell */
+        key: string;
+        /** Channel ID */
+        channelId: string;
+        /** Row index */
+        rowIndex: number;
+        placeholder: {
+            label: string;
+            scheduledStartTime: number;
+            scheduledEndTime: number;
+        };
+        /** Left position (pixels) */
+        left: number;
+        /** Cell width (pixels) */
+        width: number;
+        /** Whether cell extends beyond visible area */
+        isPartial: boolean;
+        /** Whether program is currently airing */
+        isCurrent: boolean;
+        /** DOM element reference */
+        cellElement: HTMLElement | null;
+    };
 
 /**
  * Time header slot data.

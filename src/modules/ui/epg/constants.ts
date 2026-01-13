@@ -19,7 +19,7 @@ export const EPG_CONSTANTS = {
     /** Pixels per minute (width scaling) */
     PIXELS_PER_MINUTE: 4,
     /** Pixels per channel row */
-    ROW_HEIGHT: 80,
+    ROW_HEIGHT: 96,
     /** Virtualization row buffer above/below visible */
     ROW_BUFFER: 2,
     /** Virtualization time buffer (minutes) */
