@@ -192,9 +192,9 @@ export class EPGChannelList {
 
         // Channel icon (if available) - validate URL scheme
         if (channel.icon) {
-            // Only allow http:, https:, or safe data:image/* URLs
+            // Only allow http(s) or safe raster data URIs (avoid svg in img for WebViews)
             const isValidIconUrl = /^https?:\/\//i.test(channel.icon) ||
-                /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);/i.test(channel.icon);
+                /^data:image\/(png|jpeg|jpg|gif|webp);/i.test(channel.icon);
             if (isValidIconUrl) {
                 const icon = document.createElement('img');
                 icon.className = 'epg-channel-icon';
@@ -223,11 +223,15 @@ export class EPGChannelList {
 
         // Apply color if set - validate to prevent CSS injection
         if (channel.color) {
-            // Only allow safe color formats: hex, rgb(), rgba(), or named colors
-            const isValidColor = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(channel.color) ||
+            const supports = typeof CSS !== 'undefined' && typeof CSS.supports === 'function'
+                ? CSS.supports('color', channel.color)
+                : null;
+            // Fallback: safe color formats if CSS.supports is unavailable.
+            const fallbackIsValidColor = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(channel.color) ||
                 /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(channel.color) ||
                 /^rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*[\d.]+\s*\)$/i.test(channel.color) ||
                 /^[a-z]+$/i.test(channel.color); // Named colors (no spaces/special chars)
+            const isValidColor = supports === null ? fallbackIsValidColor : supports;
             if (isValidColor) {
                 row.style.borderLeftColor = channel.color;
                 row.style.borderLeftWidth = '4px';

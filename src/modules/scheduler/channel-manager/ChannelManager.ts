@@ -875,12 +875,16 @@ export class ChannelManager implements IChannelManager {
             // Keep unknown records as-is; basic field normalization happens below.
             const channel = raw as ChannelConfig;
             if (channel && typeof channel === 'object') {
+                if (typeof channel.id !== 'string' || channel.id.length === 0) {
+                    didMutate = true;
+                    continue;
+                }
                 if (typeof channel.shuffleSeed !== 'number' || !Number.isFinite(channel.shuffleSeed)) {
-                    channel.shuffleSeed = hashStringToUint32(`${channel.id ?? ''}:shuffle`);
+                    channel.shuffleSeed = hashStringToUint32(`${channel.id}:shuffle`);
                     didMutate = true;
                 }
                 if (typeof channel.phaseSeed !== 'number' || !Number.isFinite(channel.phaseSeed)) {
-                    channel.phaseSeed = hashStringToUint32(`${channel.id ?? ''}:phase`);
+                    channel.phaseSeed = hashStringToUint32(`${channel.id}:phase`);
                     didMutate = true;
                 }
             }

@@ -2455,6 +2455,13 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         const handler = (payload: { channel: ChannelConfig; program: ScheduledProgram }): void => {
             const now = Date.now();
+            if (
+                payload.program.scheduleIndex === -1 ||
+                payload.program.item.ratingKey.includes('-placeholder-')
+            ) {
+                // Placeholder program (e.g., "Loading..." / "No Program"): never trigger playback.
+                return;
+            }
             if (now < payload.program.scheduledStartTime) {
                 // Future program: keep guide open; info panel already shows details on focus.
                 return;

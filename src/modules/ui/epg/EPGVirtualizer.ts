@@ -163,10 +163,14 @@ export class EPGVirtualizer {
         const rowBuffer = EPG_CONSTANTS.ROW_BUFFER;
         const timeBuffer = EPG_CONSTANTS.TIME_BUFFER_MINUTES;
 
-        const startRow = Math.max(0, scrollPosition.channelOffset - rowBuffer);
+        const clampedOffset = Math.max(
+            0,
+            Math.min(scrollPosition.channelOffset, Math.max(0, this.totalChannels - 1))
+        );
+        const startRow = Math.max(0, clampedOffset - rowBuffer);
         const endRow = Math.min(
             this.totalChannels,
-            scrollPosition.channelOffset + config.visibleChannels + rowBuffer
+            clampedOffset + config.visibleChannels + rowBuffer
         );
 
         const visibleRows: number[] = [];
@@ -176,7 +180,7 @@ export class EPGVirtualizer {
 
         return {
             visibleRows,
-            channelOffset: scrollPosition.channelOffset,
+            channelOffset: clampedOffset,
             visibleTimeRange: {
                 start: scrollPosition.timeOffset - timeBuffer,
                 end: scrollPosition.timeOffset + (config.visibleHours * 60) + timeBuffer,
@@ -219,35 +223,20 @@ export class EPGVirtualizer {
         const scheduledStartTime = this.gridAnchorTime + (normalizedStart * 60000);
         const scheduledEndTime = this.gridAnchorTime + (normalizedEnd * 60000);
         const cellKey = `${channelId}-placeholder-${scheduledStartTime}`;
-        const program: ScheduledProgram = {
-            item: {
-                ratingKey: cellKey,
-                type: 'movie',
-                title: label,
-                fullTitle: label,
-                durationMs: scheduledEndTime - scheduledStartTime,
-                thumb: null,
-                year: 0,
-                scheduledIndex: -1,
-            },
-            scheduledStartTime,
-            scheduledEndTime,
-            elapsedMs: 0,
-            remainingMs: Math.max(0, scheduledEndTime - scheduledStartTime),
-            scheduleIndex: -1,
-            loopNumber: 0,
-            streamDescriptor: null,
-            isCurrent: false,
-        };
-
-        const cell = positionCell(program, this.gridAnchorTime, this.config.pixelsPerMinute);
+        const left = normalizedStart * this.config.pixelsPerMinute;
+        const width = Math.max((normalizedEnd - normalizedStart) * this.config.pixelsPerMinute, 20);
         addCell({
+            kind: 'placeholder',
             key: cellKey,
             channelId,
             rowIndex,
-            program,
-            left: cell.left,
-            width: cell.width,
+            placeholder: {
+                label,
+                scheduledStartTime,
+                scheduledEndTime,
+            },
+            left,
+            width,
             isPartial: false,
             isCurrent: false,
             cellElement: null,
@@ -351,6 +340,7 @@ export class EPGVirtualizer {
                         programEndMinutes > visibleWindowEndMinutes;
 
                     addCell({
+                        kind: 'program',
                         key: cellKey,
                         channelId,
                         rowIndex,
@@ -547,11 +537,19 @@ export class EPGVirtualizer {
         // Set content
         const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
-        if (title) title.textContent = cellData.program.item.title;
-        if (time) time.textContent = formatTimeRange(
-            cellData.program.scheduledStartTime,
-            cellData.program.scheduledEndTime
-        );
+        if (cellData.kind === 'program') {
+            if (title) title.textContent = cellData.program.item.title;
+            if (time) time.textContent = formatTimeRange(
+                cellData.program.scheduledStartTime,
+                cellData.program.scheduledEndTime
+            );
+        } else {
+            if (title) title.textContent = cellData.placeholder.label;
+            if (time) time.textContent = formatTimeRange(
+                cellData.placeholder.scheduledStartTime,
+                cellData.placeholder.scheduledEndTime
+            );
+        }
 
         // Calculate position
         element.style.left = `${cellData.left}px`;
@@ -602,11 +600,19 @@ export class EPGVirtualizer {
 
         const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
-        if (title) title.textContent = cellData.program.item.title;
-        if (time) time.textContent = formatTimeRange(
-            cellData.program.scheduledStartTime,
-            cellData.program.scheduledEndTime
-        );
+        if (cellData.kind === 'program') {
+            if (title) title.textContent = cellData.program.item.title;
+            if (time) time.textContent = formatTimeRange(
+                cellData.program.scheduledStartTime,
+                cellData.program.scheduledEndTime
+            );
+        } else {
+            if (title) title.textContent = cellData.placeholder.label;
+            if (time) time.textContent = formatTimeRange(
+                cellData.placeholder.scheduledStartTime,
+                cellData.placeholder.scheduledEndTime
+            );
+        }
     }
 
     /**
