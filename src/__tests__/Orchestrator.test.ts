@@ -295,6 +295,7 @@ const mockEpg = {
     hide: jest.fn(),
     destroy: jest.fn(),
     isVisible: jest.fn().mockReturnValue(false),
+    focusChannel: jest.fn(),
     focusNow: jest.fn(),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
