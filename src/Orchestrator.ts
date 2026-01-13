@@ -902,10 +902,15 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             // Configure scheduler
             const scheduleConfig = this._buildDailyScheduleConfig(channel, content.items, Date.now());
+            this._pendingNowPlayingChannelId = channelId;
             this._scheduler.loadChannel(scheduleConfig);
             this._activeScheduleDayKey = this._getLocalDayKey(Date.now());
 
-            this._pendingNowPlayingChannelId = channelId;
+            const currentProgram = this._scheduler.getCurrentProgram?.();
+            if (currentProgram) {
+                this._notifyNowPlaying(currentProgram);
+            }
+            this._pendingNowPlayingChannelId = null;
 
             // Sync to current time (this will emit programStart)
             this._scheduler.syncToCurrentTime();
@@ -919,6 +924,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         } finally {
             this._isChannelSwitching = false;
+            if (this._pendingNowPlayingChannelId === channelId) {
+                this._pendingNowPlayingChannelId = null;
+            }
         }
     }
 
@@ -2835,11 +2843,13 @@ export class AppOrchestrator implements IAppOrchestrator {
         switch (event.button) {
             case 'channelUp':
                 this._lastChannelChangeSource = 'remote';
-                this._switchToNextChannel();
+                // Treat channel-up as decrement (reverse wrap) to match user expectation.
+                this._switchToPreviousChannel();
                 break;
             case 'channelDown':
                 this._lastChannelChangeSource = 'remote';
-                this._switchToPreviousChannel();
+                // Treat channel-down as increment (forward wrap) to match user expectation.
+                this._switchToNextChannel();
                 break;
             case 'info':
             case 'blue':
