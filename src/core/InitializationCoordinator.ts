@@ -266,6 +266,9 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             }
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
+            // Avoid leaving stale resume listeners after a fatal startup error.
+            this.clearAuthResume();
+            this.clearServerResume();
             this._callbacks.handleGlobalError(
                 {
                     code: AppErrorCode.INITIALIZATION_FAILED,
@@ -447,12 +450,6 @@ export class InitializationCoordinator implements IInitializationCoordinator {
         this._callbacks.updateModuleStatus('plex-server-discovery', 'initializing');
         try {
             await this._deps.plexDiscovery.initialize();
-            this._callbacks.updateModuleStatus(
-                'plex-server-discovery',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
         } catch (error) {
             console.error('Server discovery failed:', error);
             this._callbacks.updateModuleStatus('plex-server-discovery', 'error');
@@ -462,24 +459,33 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             return false;
         }
 
-        if (!this._deps.plexDiscovery.isConnected()) {
+        const elapsedMs = Date.now() - startTime;
+        const isConnected = this._deps.plexDiscovery.isConnected();
+
+        if (!isConnected) {
+            // Discovery completed, but server selection/connection is still required.
+            this._callbacks.updateModuleStatus('plex-server-discovery', 'pending', undefined, elapsedMs);
+            this._callbacks.updateModuleStatus('plex-library', 'pending', undefined, elapsedMs);
+            this._callbacks.updateModuleStatus('plex-stream-resolver', 'pending', undefined, elapsedMs);
             this._registerServerResume();
             this._deps.navigation.goTo('server-select');
             return false;
         }
 
-        // Mark library and stream resolver as ready (they use discovery)
+        this._callbacks.updateModuleStatus('plex-server-discovery', 'ready', undefined, elapsedMs);
+
+        // Mark library and stream resolver as ready (they use discovery + connection)
         this._callbacks.updateModuleStatus(
             'plex-library',
             'ready',
             undefined,
-            Date.now() - startTime
+            elapsedMs
         );
         this._callbacks.updateModuleStatus(
             'plex-stream-resolver',
             'ready',
             undefined,
-            Date.now() - startTime
+            elapsedMs
         );
 
         return true;
@@ -517,12 +523,16 @@ export class InitializationCoordinator implements IInitializationCoordinator {
         }
 
         // Channel Scheduler (no async init needed)
-        this._callbacks.updateModuleStatus(
-            'channel-scheduler',
-            'ready',
-            undefined,
-            Date.now() - startTime
-        );
+        if (this._deps.scheduler) {
+            this._callbacks.updateModuleStatus(
+                'channel-scheduler',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        } else {
+            this._callbacks.updateModuleStatus('channel-scheduler', 'disabled');
+        }
 
         // Video Player
         if (this._deps.videoPlayer && this._config) {
