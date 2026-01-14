@@ -157,7 +157,7 @@ export class ChannelSetupScreen {
         const token = this._visibilityToken;
         const nav = this._orchestrator.getNavigation();
         const focusedId = nav?.getFocusedElement()?.id ?? null;
-        if (focusedId) {
+        if (focusedId && this._preferredFocusId === null) {
             this._preferredFocusId = focusedId;
         }
         this._unregisterFocusables();
@@ -441,6 +441,7 @@ export class ChannelSetupScreen {
             if (result.created === 0) {
                 this._detailEl.textContent = 'No channels were created. Adjust your selections.';
             }
+            this._unregisterFocusables();
             this._registerFocusables([backButton, doneButton]);
         } catch (error) {
             if (token !== this._visibilityToken) {

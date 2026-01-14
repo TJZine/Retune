@@ -444,6 +444,7 @@ export class EPGVirtualizer {
                 visibleRows: range.visibleRows.length,
                 timeOffset: range.visibleTimeRange.start + EPG_CONSTANTS.TIME_BUFFER_MINUTES,
             };
+            // Using warn level for visibility in webOS DevTools (console.debug/info filtered by default)
             console.warn('[EPGVirtualizer] render', payload);
             appendEpgDebugLog('EPGVirtualizer.render', payload);
         }

@@ -1027,7 +1027,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
             this.virtualizer.updateScrollPosition(this.state.scrollPosition.timeOffset);
             const range = this.virtualizer.calculateVisibleRange(this.state.scrollPosition);
-            this.maybeEmitVisibleRange(range);
+            this.maybeEmitVisibleRange();
             const channelIds = this.state.channels.map((c) => c.id);
             const focused = this.state.focusedCell;
             const focusedChannel = focused ? this.state.channels[focused.channelIndex] : undefined;
@@ -1069,7 +1069,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         });
     }
 
-    private maybeEmitVisibleRange(_range: { visibleRows: number[] }): void {
+    private maybeEmitVisibleRange(): void {
         if (!this.config.onVisibleRangeChange) {
             return;
         }
