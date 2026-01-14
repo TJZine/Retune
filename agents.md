@@ -47,19 +47,26 @@
   - Cross-check impacted files from Codanna’s results against the actual diff; document how tests/rollbacks cover each high-risk area.
   - When context is unclear, prefer broader discovery (lower threshold or higher limit) over assuming coverage.
 
-## Plex API Reference (Project-Specific)
+## Agent Skills
 
-When working with Plex Media Server API endpoints in this project:
+Specialized skills are available in `.agent/skills/` and auto-discovered when relevant:
 
-1. **Official Documentation**: Use Context7 with library ID `/websites/developer_plex_tv_pms` to fetch the latest official Plex API docs.
-2. **Local Reference**: See `spec-pack/artifact-9-plex-api-examples.md` for curated JSON response examples specific to this application.
-3. **Key Endpoints**:
-   - Authentication: `https://plex.tv/api/v2/pins` (OAuth PIN flow)
-   - Server Discovery: `https://plex.tv/api/v2/resources` (server list with connections)
-   - Library Access: `/library/sections`, `/library/metadata/{key}`
-   - Streaming: `/video/:/transcode/universal/start.m3u8` (HLS)
-4. **Required Headers**:
-   - `Accept: application/json` (responses default to XML otherwise)
-   - `X-Plex-Token: {token}` for all authenticated requests
-   - Client identification: `X-Plex-Client-Identifier`, `X-Plex-Product`, `X-Plex-Version`
-5. **JWT Authentication (as of Sept 2025)**: Plex has implemented JWT with short-lived tokens (7-day expiry). Check official docs for current auth patterns.
+| Skill | Triggers On |
+|-------|-------------|
+| `accessibility-patterns` | D-pad navigation, keyboard a11y, ARIA, focus management |
+| `api-client-patterns` | Fetch wrappers, retry logic, caching, request handling |
+| `code-review-checklist` | PR reviews, self-review, quality checks |
+| `error-handling-strategies` | Result/Either patterns, custom errors, recovery |
+| `git-workflow` | Branching, commits, pull requests |
+| `logging-observability` | Structured logs, debugging, correlation IDs |
+| `performance-optimization` | DOM virtualization, lazy loading, debounce |
+| `plex-api-reference` | Plex API, authentication, streaming endpoints |
+| `refactoring-patterns` | Code restructuring, extraction patterns |
+| `security-practices` | Token handling, XSS/CSRF, input validation |
+| `state-management` | Signals, observer pattern, reactive state |
+| `testing-strategies` | Writing tests, debugging test failures |
+| `typescript-patterns` | Type design, TypeScript idioms |
+| `web-research` | External docs, web search, research tasks |
+| `webos-debugging` | TV deployment, ares-CLI, webOS performance |
+
+Skills load only when triggered, keeping base context minimal (~100 tokens per skill at startup).
