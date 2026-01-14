@@ -12,7 +12,7 @@
  * - Phase 5: EPG initialization
  */
 
-import { type IAppLifecycle, type AppError } from '../modules/lifecycle';
+import { AppErrorCode, type IAppLifecycle, type AppError } from '../modules/lifecycle';
 import type { INavigationManager } from '../modules/navigation';
 import type { IPlexAuth } from '../modules/plex/auth';
 import type { IPlexServerDiscovery } from '../modules/plex/discovery';
@@ -59,6 +59,9 @@ export interface InitializationCallbacks {
         error?: AppError,
         loadTimeMs?: number
     ) => void;
+
+    // Module status check (for EPG idempotency guard)
+    getModuleStatus: (id: string) => ModuleStatus['status'] | undefined;
 
     // Error handling
     handleGlobalError: (error: AppError, context: string) => void;
@@ -141,25 +144,144 @@ export class InitializationCoordinator implements IInitializationCoordinator {
     // Public Methods
     // ============================================
 
-    async runStartup(_startPhase: 1 | 2 | 3 | 4 | 5): Promise<void> {
-        // Placeholder references to satisfy noUnusedLocals until implementation is complete
-        // These will be removed as each method gets real implementation in Phase 2-3
-        void this._config;
-        void this._deps;
-        void this._callbacks;
-        void this._mode;
-        void this._startupQueuedPhase;
-        void this._startupQueuedWaiters;
-        void this._epgInitPromise;
-        void this._initPhase1;
-        void this._initPhase2;
-        void this._initPhase3;
-        void this._initPhase4;
-        void this._initPhase5;
-        void this._registerAuthResume;
-        void this._registerServerResume;
-        // TODO: Implement in Phase 3
-        throw new Error('Not implemented');
+    async runStartup(startPhase: 1 | 2 | 3 | 4 | 5): Promise<void> {
+        if (this._startupInProgress) {
+            console.warn('[InitializationCoordinator] Startup already in progress; queuing follow-up run');
+            this._startupQueuedPhase = this._startupQueuedPhase === null
+                ? startPhase
+                : (Math.min(this._startupQueuedPhase, startPhase) as 1 | 2 | 3 | 4 | 5);
+            return new Promise((resolve) => {
+                this._startupQueuedWaiters.push(resolve);
+            });
+        }
+
+        this._startupInProgress = true;
+        let phaseToRun: 1 | 2 | 3 | 4 | 5 = startPhase;
+
+        try {
+            while (true) {
+                this._callbacks.setReady(false);
+
+                // Force phase to initializing to ensure 'ready' event is emitted at the end
+                if (this._deps.lifecycle) {
+                    this._deps.lifecycle.setPhase('initializing');
+                }
+
+                if (phaseToRun <= 1) {
+                    await this._initPhase1();
+                }
+
+                if (phaseToRun <= 2) {
+                    const authValid = await this._initPhase2();
+                    if (!authValid) {
+                        console.warn('[InitializationCoordinator] Phase 2 failed (auth not valid)');
+                        if (this._startupQueuedPhase === null) {
+                            break;
+                        }
+                        phaseToRun = this._startupQueuedPhase;
+                        this._startupQueuedPhase = null;
+                        continue;
+                    }
+                }
+
+                if (phaseToRun <= 3) {
+                    console.warn('[InitializationCoordinator] Starting Phase 3 (Plex Connection)');
+                    const plexConnected = await this._initPhase3();
+                    if (!plexConnected) {
+                        console.warn('[InitializationCoordinator] Phase 3 failed (not connected)');
+                        if (this._startupQueuedPhase === null) {
+                            break;
+                        }
+                        phaseToRun = this._startupQueuedPhase;
+                        this._startupQueuedPhase = null;
+                        continue;
+                    }
+                }
+
+                if (phaseToRun <= 4) {
+                    console.warn('[InitializationCoordinator] Starting Phase 4 (Channels & Player)');
+                    await this._initPhase4();
+                }
+
+                if (phaseToRun <= 5) {
+                    console.warn('[InitializationCoordinator] Starting Phase 5 (EPG)');
+                    await this._initPhase5();
+                }
+
+                console.warn('[InitializationCoordinator] Phases complete. Setting up wiring.');
+                this._callbacks.setupEventWiring();
+                this._callbacks.setReady(true);
+                if (this._deps.lifecycle) {
+                    this._deps.lifecycle.setPhase('ready');
+                }
+
+                if (this._deps.navigation) {
+                    const shouldRunSetup = this._callbacks.shouldRunChannelSetup();
+                    if (shouldRunSetup) {
+                        console.warn('[InitializationCoordinator] Channel setup required. Navigating to setup wizard.');
+                        this._deps.navigation.goTo('channel-setup');
+                    } else {
+                        console.warn('[InitializationCoordinator] Navigating to player');
+                        this._deps.navigation.goTo('player');
+                        if (this._deps.channelManager) {
+                            console.warn('[InitializationCoordinator] Switching to current channel');
+
+                            let channelToPlay = this._deps.channelManager.getCurrentChannel();
+
+                            // Fallback: If no current channel but we have channels, pick the first one
+                            if (!channelToPlay) {
+                                const allChannels = this._deps.channelManager.getAllChannels();
+                                const firstChannel = allChannels[0];
+                                if (firstChannel) {
+                                    channelToPlay = firstChannel;
+                                    console.warn(`[InitializationCoordinator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
+                                }
+                            }
+
+                            if (channelToPlay) {
+                                await this._callbacks.switchToChannel(channelToPlay.id);
+                            } else {
+                                console.warn('[InitializationCoordinator] No current channel found. Redirecting to Server Select.');
+                                this._callbacks.openServerSelect();
+                            }
+                        }
+                    }
+                }
+
+                console.warn('[InitializationCoordinator] Startup sequence finished successfully');
+
+                this.clearAuthResume();
+                this.clearServerResume();
+
+                if (this._startupQueuedPhase === null) {
+                    break;
+                }
+                phaseToRun = this._startupQueuedPhase;
+                this._startupQueuedPhase = null;
+            }
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            this._callbacks.handleGlobalError(
+                {
+                    code: AppErrorCode.INITIALIZATION_FAILED,
+                    message,
+                    recoverable: true,
+                },
+                'start'
+            );
+        } finally {
+            this._startupInProgress = false;
+            this._startupQueuedPhase = null;
+            const waiters = this._startupQueuedWaiters;
+            this._startupQueuedWaiters = [];
+            for (const resolve of waiters) {
+                try {
+                    resolve();
+                } catch {
+                    // Ignore waiter failures
+                }
+            }
+        }
     }
 
     isStartupInProgress(): boolean {
@@ -188,14 +310,104 @@ export class InitializationCoordinator implements IInitializationCoordinator {
      * Phase 1: Initialize core infrastructure (EventEmitter, AppLifecycle, Navigation)
      */
     private async _initPhase1(): Promise<void> {
-        // TODO: Extract from Orchestrator in Phase 2
+        const startTime = Date.now();
+
+        // EventEmitter is already ready (synchronous)
+        this._callbacks.updateModuleStatus('event-emitter', 'ready', undefined, 0);
+
+        // Initialize Lifecycle and Navigation in parallel
+        const promises: Promise<void>[] = [];
+
+        if (this._deps.lifecycle) {
+            this._callbacks.updateModuleStatus('app-lifecycle', 'initializing');
+            promises.push(
+                this._deps.lifecycle.initialize().then(() => {
+                    this._callbacks.updateModuleStatus(
+                        'app-lifecycle',
+                        'ready',
+                        undefined,
+                        Date.now() - startTime
+                    );
+                })
+            );
+        }
+
+        if (this._deps.navigation && this._config) {
+            this._callbacks.updateModuleStatus('navigation', 'initializing');
+            this._deps.navigation.initialize(this._config.navConfig);
+            this._callbacks.updateModuleStatus(
+                'navigation',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
+
+        await Promise.all(promises);
+
+        if (this._deps.lifecycle) {
+            this._deps.lifecycle.setPhase('authenticating');
+        }
     }
 
     /**
      * Phase 2: Validate authentication
      */
     private async _initPhase2(): Promise<boolean> {
-        // TODO: Extract from Orchestrator in Phase 2
+        const startTime = Date.now();
+        this._callbacks.updateModuleStatus('plex-auth', 'initializing');
+
+        if (this._mode === 'demo') {
+            console.warn('[InitializationCoordinator] Phase 2: Skipping Auth (Demo Mode)');
+            this._callbacks.updateModuleStatus('plex-auth', 'ready', undefined, 0);
+            if (this._deps.lifecycle) {
+                this._deps.lifecycle.setPhase('loading_data');
+            }
+            return true;
+        }
+
+        if (!this._deps.plexAuth || !this._deps.navigation) {
+            this._callbacks.updateModuleStatus('plex-auth', 'error');
+            return false;
+        }
+
+        // Check for stored auth credentials (SSOT: PlexAuth storage)
+        const storedCredentials = await this._deps.plexAuth.getStoredCredentials();
+        if (storedCredentials) {
+            try {
+                const isValid = await this._deps.plexAuth.validateToken(
+                    storedCredentials.token.token
+                );
+
+                if (isValid) {
+                    const currentToken =
+                        this._deps.plexAuth.getCurrentUser() ?? storedCredentials.token;
+                    await this._deps.plexAuth.storeCredentials({
+                        token: currentToken,
+                        selectedServerId: null,
+                        selectedServerUri: null,
+                    });
+                    this._callbacks.updateModuleStatus(
+                        'plex-auth',
+                        'ready',
+                        undefined,
+                        Date.now() - startTime
+                    );
+
+                    if (this._deps.lifecycle) {
+                        this._deps.lifecycle.setPhase('loading_data');
+                    }
+                    return true;
+                }
+            } catch (error) {
+                console.error('Token validation failed:', error);
+            }
+        }
+
+        // No valid auth - navigate to auth screen
+        this._callbacks.updateModuleStatus('plex-auth', 'pending');
+        this._registerAuthResume();
+        this._deps.navigation.goTo('auth');
         return false;
     }
 
@@ -203,22 +415,170 @@ export class InitializationCoordinator implements IInitializationCoordinator {
      * Phase 3: Connect to Plex server and initialize Plex services
      */
     private async _initPhase3(): Promise<boolean> {
-        // TODO: Extract from Orchestrator in Phase 2
-        return false;
+        const startTime = Date.now();
+
+        if (
+            !this._deps.plexDiscovery ||
+            !this._deps.plexLibrary ||
+            !this._deps.plexStreamResolver ||
+            !this._deps.navigation
+        ) {
+            return false;
+        }
+
+        if (this._mode === 'demo') {
+            console.warn('[InitializationCoordinator] Phase 3: Skipping Discovery (Demo Mode)');
+            this._callbacks.updateModuleStatus('plex-server-discovery', 'ready', undefined, 0);
+            this._callbacks.updateModuleStatus('plex-library', 'ready', undefined, 0);
+            this._callbacks.updateModuleStatus('plex-stream-resolver', 'ready', undefined, 0);
+            return true;
+        }
+
+        // Discover servers and restore selection (SSOT: discovery storage)
+        this._callbacks.updateModuleStatus('plex-server-discovery', 'initializing');
+        try {
+            await this._deps.plexDiscovery.initialize();
+            this._callbacks.updateModuleStatus(
+                'plex-server-discovery',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        } catch (error) {
+            console.error('Server discovery failed:', error);
+            this._callbacks.updateModuleStatus('plex-server-discovery', 'error');
+            if (this._deps.navigation) {
+                this._deps.navigation.goTo('server-select');
+            }
+            return false;
+        }
+
+        if (!this._deps.plexDiscovery.isConnected()) {
+            this._registerServerResume();
+            this._deps.navigation.goTo('server-select');
+            return false;
+        }
+
+        // Mark library and stream resolver as ready (they use discovery)
+        this._callbacks.updateModuleStatus(
+            'plex-library',
+            'ready',
+            undefined,
+            Date.now() - startTime
+        );
+        this._callbacks.updateModuleStatus(
+            'plex-stream-resolver',
+            'ready',
+            undefined,
+            Date.now() - startTime
+        );
+
+        return true;
     }
 
     /**
      * Phase 4: Initialize Channel Manager, Scheduler, and Video Player
      */
     private async _initPhase4(): Promise<void> {
-        // TODO: Extract from Orchestrator in Phase 2
+        const startTime = Date.now();
+
+        // Channel Manager
+        if (this._deps.channelManager) {
+            this._callbacks.updateModuleStatus('channel-manager', 'initializing');
+            await this._callbacks.configureChannelManagerStorage();
+            await this._deps.channelManager.loadChannels();
+
+            // Demo Mode safety: demo storage must not allow Plex-backed sources.
+            if (this._mode === 'demo') {
+                const channels = this._deps.channelManager.getAllChannels();
+                const hasChannels = channels.length > 0;
+                const allManual = hasChannels && channels.every((c) => c.contentSource?.type === 'manual');
+                if (!hasChannels || !allManual) {
+                    console.warn('[InitializationCoordinator] Demo Mode: pruning non-manual channels via re-seed');
+                    await this._deps.channelManager.seedDemoChannels();
+                }
+            }
+
+            this._callbacks.updateModuleStatus(
+                'channel-manager',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
+
+        // Channel Scheduler (no async init needed)
+        this._callbacks.updateModuleStatus(
+            'channel-scheduler',
+            'ready',
+            undefined,
+            Date.now() - startTime
+        );
+
+        // Video Player
+        if (this._deps.videoPlayer && this._config) {
+            this._callbacks.updateModuleStatus('video-player', 'initializing');
+            await this._deps.videoPlayer.initialize({
+                ...this._config.playerConfig,
+                demoMode: this._mode === 'demo',
+            });
+
+            // Request Media Session integration (once per app lifetime)
+            this._deps.videoPlayer.requestMediaSession();
+
+            this._callbacks.updateModuleStatus(
+                'video-player',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
     }
 
     /**
      * Phase 5: Initialize EPG
      */
     private async _initPhase5(): Promise<void> {
-        // TODO: Extract from Orchestrator in Phase 2
+        if (this._callbacks.getModuleStatus('epg-ui') === 'ready') {
+            return;
+        }
+        if (this._epgInitPromise) {
+            await this._epgInitPromise;
+            return;
+        }
+        if (!this._deps.epg || !this._config) {
+            return;
+        }
+
+        const startTime = Date.now();
+        this._callbacks.updateModuleStatus('epg-ui', 'initializing');
+        const init = async (): Promise<void> => {
+            // Wire thumb resolver callback to convert relative Plex paths to absolute URLs
+            const epgConfigWithResolver = {
+                ...this._config.epgConfig,
+                resolveThumbUrl: (pathOrUrl: string | null): string | null => {
+                    if (!pathOrUrl) return null;
+                    return this._callbacks.buildPlexResourceUrl(pathOrUrl);
+                },
+            };
+            this._deps.epg!.initialize(epgConfigWithResolver);
+            this._callbacks.updateModuleStatus(
+                'epg-ui',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        };
+        this._epgInitPromise = init()
+            .catch((e) => {
+                this._callbacks.updateModuleStatus('epg-ui', 'error');
+                throw e;
+            })
+            .finally(() => {
+                this._epgInitPromise = null;
+            });
+
+        await this._epgInitPromise;
     }
 
     // ============================================
@@ -229,13 +589,41 @@ export class InitializationCoordinator implements IInitializationCoordinator {
      * Register listener for auth state changes to resume startup.
      */
     private _registerAuthResume(): void {
-        // TODO: Extract from Orchestrator in Phase 3
+        if (!this._deps.plexAuth) {
+            return;
+        }
+
+        this.clearAuthResume();
+        const disposable = this._deps.plexAuth.on('authChange', (isAuthenticated) => {
+            if (!isAuthenticated) {
+                return;
+            }
+            this.clearAuthResume();
+            this.runStartup(2).catch((error) => {
+                console.error('[InitializationCoordinator] Auth resume failed:', error);
+            });
+        });
+        this._authResumeDisposable = disposable;
     }
 
     /**
      * Register listener for server connection changes to resume startup.
      */
     private _registerServerResume(): void {
-        // TODO: Extract from Orchestrator in Phase 3
+        if (!this._deps.plexDiscovery) {
+            return;
+        }
+
+        this.clearServerResume();
+        const disposable = this._deps.plexDiscovery.on('connectionChange', (uri) => {
+            if (!uri) {
+                return;
+            }
+            this.clearServerResume();
+            this.runStartup(3).catch((error) => {
+                console.error('[InitializationCoordinator] Server resume failed:', error);
+            });
+        });
+        this._serverResumeDisposable = disposable;
     }
 }
