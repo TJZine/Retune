@@ -120,6 +120,7 @@ export class App {
             // Wire up lifecycle error events before starting
             this._subscribeToLifecycleErrors();
             this._subscribeToLifecycleWarnings();
+            this._wireNowPlayingToasts();
 
             // Start the orchestrator
             await this._orchestrator.start();
@@ -171,6 +172,13 @@ export class App {
         });
     }
 
+    private _wireNowPlayingToasts(): void {
+        if (!this._orchestrator) return;
+        this._orchestrator.setNowPlayingHandler((message) => {
+            this._showToast(message);
+        });
+    }
+
     /**
      * Shutdown the application.
      */
@@ -193,6 +201,7 @@ export class App {
             // ignore
         }
         if (this._orchestrator) {
+            this._orchestrator.setNowPlayingHandler(null);
             await this._orchestrator.shutdown();
         }
     }

@@ -250,6 +250,23 @@ describe('EPGVirtualizer', () => {
             expect(title?.textContent).toBe('Loading...');
         });
 
+        it('can focus a placeholder cell by time when schedules are missing', () => {
+            const channelIds = ['ch0'];
+            const schedules = new Map<string, ScheduleWindow>();
+
+            virtualizer.setChannelCount(1);
+            const range = virtualizer.calculateVisibleRange({
+                channelOffset: 0,
+                timeOffset: 0,
+            });
+            virtualizer.renderVisibleCells(channelIds, schedules, range);
+
+            const focusTimeMs = gridAnchorTime + (30 * 60000);
+            const focused = virtualizer.setFocusedCell('ch0', focusTimeMs, focusTimeMs);
+            expect(focused).not.toBeNull();
+            expect(focused?.classList.contains('focused')).toBe(true);
+        });
+
         it('applies horizontal scroll transform to the content wrapper', () => {
             const channelIds = ['ch0'];
             const schedules = new Map<string, ScheduleWindow>();

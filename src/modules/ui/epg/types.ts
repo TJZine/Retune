@@ -35,6 +35,15 @@ export interface EPGConfig {
     showCurrentTimeIndicator: boolean;
     /** Auto-scroll to current time on open */
     autoScrollToNow: boolean;
+    /** Optional callback when visible range changes */
+    onVisibleRangeChange?: (range: {
+        channelStart: number;
+        channelEnd: number;
+        timeStartMs: number;
+        timeEndMs: number;
+    }) => void;
+    /** Optional callback to resolve relative Plex thumb paths to absolute URLs */
+    resolveThumbUrl?: (pathOrUrl: string | null) => string | null;
 }
 
 /**
@@ -66,16 +75,36 @@ export interface EPGState {
 /**
  * EPG focus position
  */
-export interface EPGFocusPosition {
-    /** Channel row index */
-    channelIndex: number;
-    /** Program index within channel */
-    programIndex: number;
-    /** The focused program */
-    program: ScheduledProgram;
-    /** DOM element reference */
-    cellElement: HTMLElement | null;
-}
+export type EPGFocusPosition =
+    | {
+        kind: 'program';
+        /** Channel row index */
+        channelIndex: number;
+        /** Program index within channel */
+        programIndex: number;
+        /** The focused program */
+        program: ScheduledProgram;
+        /** Focus time used for navigation reconciliation */
+        focusTimeMs: number;
+        /** DOM element reference */
+        cellElement: HTMLElement | null;
+    }
+    | {
+        kind: 'placeholder';
+        /** Channel row index */
+        channelIndex: number;
+        /** Placeholder entries are not tied to a program index */
+        programIndex: -1;
+        placeholder: {
+            label: string;
+            scheduledStartTime: number;
+            scheduledEndTime: number;
+        };
+        /** Focus time used for navigation reconciliation */
+        focusTimeMs: number;
+        /** DOM element reference */
+        cellElement: HTMLElement | null;
+    };
 
 /**
  * EPG channel row data
@@ -150,8 +179,12 @@ export interface EPGInternalState {
     channels: ChannelConfig[];
     /** Schedule windows by channel ID */
     schedules: Map<string, ScheduleWindow>;
+    /** Loaded schedule timestamps by channel ID */
+    scheduleLoadTimes: Map<string, number>;
     /** Currently focused cell */
     focusedCell: EPGFocusPosition | null;
+    /** Last requested focus time (used when schedules are missing) */
+    focusTimeMs: number;
     /** Scroll position */
     scrollPosition: {
         channelOffset: number;

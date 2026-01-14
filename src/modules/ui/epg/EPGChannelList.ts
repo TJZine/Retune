@@ -347,7 +347,8 @@ export class EPGChannelList {
             transform: this.contentElement.style.transform,
             renderedRows: this.rowElements.length,
         };
-        console.debug('[EPGChannelList] scroll', payload);
+        // Using warn level for visibility in webOS DevTools (console.debug/info filtered by default)
+        console.warn('[EPGChannelList] scroll', payload);
         appendEpgDebugLog('EPGChannelList.scroll', payload);
     }
 }

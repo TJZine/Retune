@@ -187,6 +187,7 @@ export interface IAppOrchestrator {
     ): IDisposable;
     getNavigation(): INavigationManager | null;
     toggleDemoMode(): void;
+    setNowPlayingHandler(handler: ((message: string) => void) | null): void;
 }
 
 // Re-export AppErrorCode for consumers
@@ -218,6 +219,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
     private _epgScheduleLoadToken = 0;
+    private _nowPlayingHandler: ((message: string) => void) | null = null;
+    private _pendingNowPlayingChannelId: string | null = null;
+    private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
     private _activeScheduleDayKey: number | null = null;
     private _pendingDayRolloverDayKey: number | null = null;
     private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
@@ -898,8 +902,15 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             // Configure scheduler
             const scheduleConfig = this._buildDailyScheduleConfig(channel, content.items, Date.now());
+            this._pendingNowPlayingChannelId = channelId;
             this._scheduler.loadChannel(scheduleConfig);
             this._activeScheduleDayKey = this._getLocalDayKey(Date.now());
+
+            const currentProgram = this._scheduler.getCurrentProgram?.();
+            if (currentProgram) {
+                this._notifyNowPlaying(currentProgram);
+            }
+            this._pendingNowPlayingChannelId = null;
 
             // Sync to current time (this will emit programStart)
             this._scheduler.syncToCurrentTime();
@@ -913,6 +924,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         } finally {
             this._isChannelSwitching = false;
+            if (this._pendingNowPlayingChannelId === channelId) {
+                this._pendingNowPlayingChannelId = null;
+            }
         }
     }
 
@@ -957,8 +971,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         const show = (): void => {
-            this._epg?.show();
-            this._epg?.focusNow();
+            const preserveFocus = this._lastChannelChangeSource === 'guide';
+            this._epg?.show({ preserveFocus });
+            if (!preserveFocus) {
+                this._focusEpgOnCurrentChannel();
+                this._epg?.focusNow();
+            }
         };
 
         // Allow EPG to be opened even before full app initialization completes
@@ -977,6 +995,21 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         show();
+    }
+
+    private _focusEpgOnCurrentChannel(): void {
+        if (!this._epg || !this._channelManager) {
+            return;
+        }
+        const current = this._channelManager.getCurrentChannel();
+        if (!current) {
+            return;
+        }
+        const channels = this._channelManager.getAllChannels();
+        const index = channels.findIndex((channel) => channel.id === current.id);
+        if (index >= 0) {
+            this._epg.focusChannel(index);
+        }
     }
 
     /**
@@ -1678,7 +1711,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         const startTime = Date.now();
         this._updateModuleStatus('epg-ui', 'initializing');
         const init = async (): Promise<void> => {
-            this._epg!.initialize(this._config!.epgConfig);
+            // Wire thumb resolver callback to convert relative Plex paths to absolute URLs
+            const epgConfigWithResolver = {
+                ...this._config!.epgConfig,
+                resolveThumbUrl: (pathOrUrl: string | null): string | null => {
+                    if (!pathOrUrl) return null;
+                    return this._buildPlexResourceUrl(pathOrUrl);
+                },
+            };
+            this._epg!.initialize(epgConfigWithResolver);
             this._updateModuleStatus(
                 'epg-ui',
                 'ready',
@@ -2371,6 +2412,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (!Number.isFinite(payload.channelNumber)) {
                 return;
             }
+            this._lastChannelChangeSource = 'number';
             this.switchToChannelByNumber(payload.channelNumber).catch(console.error);
         };
         this._navigation.on('channelNumberEntered', channelNumberHandler);
@@ -2427,8 +2469,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Show EPG when entering guide
         if (to === 'guide') {
             if (this._epg) {
-                this._epg.show();
-                this._epg.focusNow();
+                const preserveFocus = this._lastChannelChangeSource === 'guide';
+                this._epg.show({ preserveFocus });
+                if (!preserveFocus) {
+                    this._focusEpgOnCurrentChannel();
+                    this._epg.focusNow();
+                }
             }
         }
 
@@ -2454,6 +2500,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._epg) return;
 
         const handler = (payload: { channel: ChannelConfig; program: ScheduledProgram }): void => {
+            this._lastChannelChangeSource = 'guide';
             const now = Date.now();
             if (
                 payload.program.scheduleIndex === -1 ||
@@ -2517,6 +2564,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         this._currentProgramForPlayback = program;
+        this._notifyNowPlaying(program);
 
         try {
             const stream =
@@ -2542,6 +2590,34 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return;
             }
             this._handlePlaybackFailure('programStart', error);
+        }
+    }
+
+    private _notifyNowPlaying(program: ScheduledProgram): void {
+        if (!this._nowPlayingHandler || !this._channelManager) {
+            return;
+        }
+
+        const pendingId = this._pendingNowPlayingChannelId;
+        if (!pendingId) {
+            return;
+        }
+        const currentChannel = this._channelManager.getCurrentChannel();
+        const pendingChannel = pendingId ? this._channelManager.getChannel(pendingId) : null;
+        const resolvedChannel = pendingChannel ?? currentChannel;
+        const channelId = resolvedChannel?.id ?? null;
+        const channelName = resolvedChannel?.name ?? 'Channel';
+        const channelNumber = resolvedChannel?.number;
+        const prefix = channelNumber ? `${channelNumber} ${channelName}` : channelName;
+
+        const subtitle = program.item.fullTitle && program.item.fullTitle !== program.item.title
+            ? ` • ${program.item.fullTitle}`
+            : '';
+        const message = `${prefix} • ${program.item.title}${subtitle}`;
+        this._nowPlayingHandler(message);
+
+        if (pendingId && pendingId === channelId) {
+            this._pendingNowPlayingChannelId = null;
         }
     }
 
@@ -2774,10 +2850,14 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         switch (event.button) {
             case 'channelUp':
-                this._switchToNextChannel();
+                this._lastChannelChangeSource = 'remote';
+                // Treat channel-up as decrement (reverse wrap) to match user expectation.
+                this._switchToPreviousChannel();
                 break;
             case 'channelDown':
-                this._switchToPreviousChannel();
+                this._lastChannelChangeSource = 'remote';
+                // Treat channel-down as increment (forward wrap) to match user expectation.
+                this._switchToNextChannel();
                 break;
             case 'info':
             case 'blue':
@@ -2847,6 +2927,10 @@ export class AppOrchestrator implements IAppOrchestrator {
             void this._lifecycle?.saveState();
             window.location.reload();
         }
+    }
+
+    setNowPlayingHandler(handler: ((message: string) => void) | null): void {
+        this._nowPlayingHandler = handler;
     }
 
     /**

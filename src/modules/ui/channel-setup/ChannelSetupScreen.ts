@@ -40,6 +40,7 @@ export class ChannelSetupScreen {
     };
     private _step: SetupStep = 1;
     private _focusableIds: string[] = [];
+    private _preferredFocusId: string | null = null;
     private _isLoading: boolean = false;
     private _isBuilding: boolean = false;
     private _buildSummary: ChannelBuildSummary | null = null;
@@ -154,6 +155,11 @@ export class ChannelSetupScreen {
 
     private _renderStep(): void {
         const token = this._visibilityToken;
+        const nav = this._orchestrator.getNavigation();
+        const focusedId = nav?.getFocusedElement()?.id ?? null;
+        if (focusedId && this._preferredFocusId === null) {
+            this._preferredFocusId = focusedId;
+        }
         this._unregisterFocusables();
         if (token !== this._visibilityToken) {
             return;
@@ -209,6 +215,7 @@ export class ChannelSetupScreen {
             button.appendChild(state);
 
             button.addEventListener('click', () => {
+                this._preferredFocusId = button.id;
                 if (this._selectedLibraryIds.has(library.id)) {
                     this._selectedLibraryIds.delete(library.id);
                 } else {
@@ -294,6 +301,7 @@ export class ChannelSetupScreen {
             button.appendChild(state);
 
             button.addEventListener('click', () => {
+                this._preferredFocusId = button.id;
                 this._strategies[strategy.key] = !this._strategies[strategy.key];
                 this._renderStep();
             });
@@ -378,7 +386,9 @@ export class ChannelSetupScreen {
             if (nav) {
                 nav.goTo('player');
             }
-            this._orchestrator.switchToChannelByNumber(1).catch(console.error);
+            this._orchestrator.switchToChannelByNumber(1)
+                .then(() => this._orchestrator.openEPG())
+                .catch(console.error);
         });
         actions.appendChild(doneButton);
 
@@ -386,10 +396,14 @@ export class ChannelSetupScreen {
 
         this._registerFocusables([backButton, doneButton]);
 
-        this._startBuild(summary, doneButton).catch(console.error);
+        this._startBuild(summary, backButton, doneButton).catch(console.error);
     }
 
-    private async _startBuild(summaryEl: HTMLElement, doneButton: HTMLButtonElement): Promise<void> {
+    private async _startBuild(
+        summaryEl: HTMLElement,
+        backButton: HTMLButtonElement,
+        doneButton: HTMLButtonElement
+    ): Promise<void> {
         const token = this._visibilityToken;
         if (this._isBuilding) {
             return;
@@ -427,6 +441,8 @@ export class ChannelSetupScreen {
             if (result.created === 0) {
                 this._detailEl.textContent = 'No channels were created. Adjust your selections.';
             }
+            this._unregisterFocusables();
+            this._registerFocusables([backButton, doneButton]);
         } catch (error) {
             if (token !== this._visibilityToken) {
                 return;
@@ -480,6 +496,13 @@ export class ChannelSetupScreen {
                 focusable.neighbors.down = down.id;
             }
             nav.registerFocusable(focusable);
+        }
+
+        const preferred = this._preferredFocusId;
+        if (preferred && focusableButtons.some((button) => button.id === preferred)) {
+            nav.setFocus(preferred);
+            this._preferredFocusId = null;
+            return;
         }
 
         const first = focusableButtons[0];

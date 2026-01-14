@@ -247,7 +247,11 @@ describe('EPGComponent', () => {
             const moved = epg.handleNavigation('left');
 
             expect(moved).toBe(true);
-            expect(epg.getState().focusedCell!.programIndex).toBe(0);
+            const focused = epg.getState().focusedCell;
+            expect(focused?.kind).toBe('program');
+            if (focused?.kind === 'program') {
+                expect(focused.programIndex).toBe(0);
+            }
         });
 
         it('should move focus up/down between channels', () => {
@@ -280,6 +284,7 @@ describe('EPGComponent', () => {
 
             expect(handler).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    kind: 'program',
                     channelIndex: 0,
                     programIndex: 0,
                 })
@@ -398,6 +403,24 @@ describe('EPGComponent', () => {
             expect(state.currentTime).toBeGreaterThan(0);
         });
 
+        it('updates time header transform when timeOffset changes via scrollToTime', () => {
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 10));
+            epg.show();
+
+            const header = container.querySelector('.epg-time-header') as HTMLElement;
+            expect(header).not.toBeNull();
+
+            // Scroll to 2 hours from anchor
+            const twoHoursFromAnchor = epg.getState().viewWindow.startTime + (2 * 60 * 60000);
+            epg.scrollToTime(twoHoursFromAnchor);
+
+            // Header transform should be updated (negative translateX)
+            expect(header.style.transform).toMatch(/translateX\(-?\d+px\)/);
+            expect(epg.getState().scrollPosition.timeOffset).toBeGreaterThan(0);
+        });
+
         it('keeps timeOffset at 0 when autoScrollToNow is enabled (window anchored to now)', () => {
             const now = new Date('2026-01-07T10:00:00Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(now);
@@ -439,6 +462,20 @@ describe('EPGComponent', () => {
 
             epg.focusProgram(0, 0);
             expect(epg.getFocusedProgram()).not.toBeNull();
+        });
+
+        it('keeps focusTime even when schedule is missing', () => {
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.show();
+
+            epg.handleNavigation('down');
+
+            const focused = epg.getState().focusedCell;
+            expect(focused?.kind).toBe('placeholder');
+            if (focused?.kind === 'placeholder') {
+                expect(focused.focusTimeMs).toBeGreaterThan(0);
+            }
         });
     });
 

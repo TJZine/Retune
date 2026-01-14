@@ -92,6 +92,13 @@
   cursor: default;
 }
 
+.screen-button.focused,
+.screen-button:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 168, 225, 0.45);
+}
+
 .server-list {
   display: flex;
   flex-direction: column;
@@ -186,6 +193,12 @@
 .setup-toggle.selected {
   background: rgba(0, 168, 225, 0.2);
   border-color: rgba(0, 168, 225, 0.6);
+}
+
+.setup-toggle.focused,
+.setup-toggle:focus {
+  border-color: rgba(0, 168, 225, 0.9);
+  box-shadow: 0 0 0 3px rgba(0, 168, 225, 0.35);
 }
 
 .setup-toggle-label {
