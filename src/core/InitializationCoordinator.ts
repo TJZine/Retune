@@ -99,6 +99,11 @@ export interface IInitializationCoordinator {
     isStartupInProgress(): boolean;
 
     /**
+     * Ensure EPG is initialized (for lazy initialization outside startup flow).
+     */
+    ensureEPGInitialized(): Promise<void>;
+
+    /**
      * Clear auth resume listener (cleanup).
      */
     clearAuthResume(): void;
@@ -286,6 +291,10 @@ export class InitializationCoordinator implements IInitializationCoordinator {
 
     isStartupInProgress(): boolean {
         return this._startupInProgress;
+    }
+
+    async ensureEPGInitialized(): Promise<void> {
+        await this._initPhase5();
     }
 
     clearAuthResume(): void {
