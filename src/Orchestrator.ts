@@ -85,6 +85,10 @@ import {
     type IEPGComponent,
     type EPGConfig,
 } from './modules/ui/epg';
+import {
+    InitializationCoordinator,
+    type IInitializationCoordinator,
+} from './core';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
@@ -241,6 +245,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _authResumeDisposable: IDisposable | null = null;
     private _serverResumeDisposable: IDisposable | null = null;
     private _channelSetupRerunRequested: boolean = false;
+    private _initCoordinator: IInitializationCoordinator | null = null;
 
     // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
     private _playbackFailureWindowStartMs: number = 0;
@@ -376,6 +381,40 @@ export class AppOrchestrator implements IAppOrchestrator {
         // EPGComponent - no constructor args, initialize later
         this._epg = new EPGComponent();
 
+        // Create InitializationCoordinator with dependencies and callbacks
+        this._initCoordinator = new InitializationCoordinator(
+            config,
+            {
+                lifecycle: this._lifecycle,
+                navigation: this._navigation,
+                plexAuth: this._plexAuth,
+                plexDiscovery: this._plexDiscovery,
+                plexLibrary: this._plexLibrary,
+                plexStreamResolver: this._plexStreamResolver,
+                channelManager: this._channelManager,
+                scheduler: this._scheduler,
+                videoPlayer: this._videoPlayer,
+                epg: this._epg,
+            },
+            {
+                updateModuleStatus: this._updateModuleStatus.bind(this),
+                getModuleStatus: (id: string): ModuleStatus['status'] | undefined => this._moduleStatus.get(id)?.status,
+                handleGlobalError: this.handleGlobalError.bind(this),
+                setReady: (ready: boolean): void => { this._ready = ready; },
+                setupEventWiring: this._setupEventWiring.bind(this),
+                configureChannelManagerStorage: this._configureChannelManagerStorageForSelectedServer.bind(this),
+                getSelectedServerId: this._getSelectedServerId.bind(this),
+                shouldRunChannelSetup: this._shouldRunChannelSetup.bind(this),
+                switchToChannel: this.switchToChannel.bind(this),
+                openServerSelect: this.openServerSelect.bind(this),
+                buildPlexResourceUrl: (pathOrUrl: string | null): string | null => {
+                    if (!pathOrUrl) return null;
+                    return this._buildPlexResourceUrl(pathOrUrl);
+                },
+            },
+            this._mode
+        );
+
         // Update status for all modules
         this._updateModuleStatus('event-emitter', 'ready');
     }
@@ -386,7 +425,10 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     async start(): Promise<void> {
         this._resetPlaybackFailureGuard();
-        await this._runStartup(1);
+        if (!this._initCoordinator) {
+            throw new Error('Orchestrator must be initialized before starting');
+        }
+        await this._initCoordinator.runStartup(1);
     }
 
     /**
@@ -400,8 +442,10 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
-        this._clearAuthResume();
-        this._clearServerResume();
+        if (this._initCoordinator) {
+            this._initCoordinator.clearAuthResume();
+            this._initCoordinator.clearServerResume();
+        }
 
         if (this._pendingDayRolloverTimer !== null) {
             globalThis.clearTimeout(this._pendingDayRolloverTimer);
@@ -578,7 +622,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (ok) {
             // If we're already running (or resuming from the server-select screen),
             // re-run the channel/player/EPG phases to swap to the selected server.
-            await this._runStartup(4);
+            if (this._initCoordinator) {
+                await this._initCoordinator.runStartup(4);
+            }
             return this._ready;
         }
         return ok;
