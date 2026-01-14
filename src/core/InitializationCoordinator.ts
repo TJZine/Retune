@@ -129,7 +129,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
     // Startup state
     private _startupInProgress = false;
     private _startupQueuedPhase: 1 | 2 | 3 | 4 | 5 | null = null;
-    private _startupQueuedWaiters: Array<() => void> = [];
+    private _startupQueuedWaiters: Array<{ resolve: () => void; reject: (err: unknown) => void }> = [];
 
     // Resume listeners
     private _authResumeDisposable: IDisposable | null = null;
@@ -155,13 +155,14 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             this._startupQueuedPhase = this._startupQueuedPhase === null
                 ? startPhase
                 : (Math.min(this._startupQueuedPhase, startPhase) as 1 | 2 | 3 | 4 | 5);
-            return new Promise((resolve) => {
-                this._startupQueuedWaiters.push(resolve);
+            return new Promise((resolve, reject) => {
+                this._startupQueuedWaiters.push({ resolve, reject });
             });
         }
 
         this._startupInProgress = true;
         let phaseToRun: 1 | 2 | 3 | 4 | 5 = startPhase;
+        let caughtError: unknown = null;
 
         try {
             while (true) {
@@ -265,6 +266,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                 this._startupQueuedPhase = null;
             }
         } catch (error: unknown) {
+            caughtError = error;
             const message = error instanceof Error ? error.message : String(error);
             // Avoid leaving stale resume listeners after a fatal startup error.
             this.clearAuthResume();
@@ -282,13 +284,22 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             this._startupQueuedPhase = null;
             const waiters = this._startupQueuedWaiters;
             this._startupQueuedWaiters = [];
-            for (const resolve of waiters) {
+            for (const waiter of waiters) {
                 try {
-                    resolve();
+                    if (caughtError) {
+                        waiter.reject(caughtError);
+                    } else {
+                        waiter.resolve();
+                    }
                 } catch {
                     // Ignore waiter failures
                 }
             }
+        }
+
+        // Rethrow after cleanup so direct callers receive a rejected Promise
+        if (caughtError) {
+            throw caughtError;
         }
     }
 
