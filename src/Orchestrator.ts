@@ -85,6 +85,10 @@ import {
     type IEPGComponent,
     type EPGConfig,
 } from './modules/ui/epg';
+import {
+    InitializationCoordinator,
+    type IInitializationCoordinator,
+} from './core';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
@@ -225,7 +229,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _activeScheduleDayKey: number | null = null;
     private _pendingDayRolloverDayKey: number | null = null;
     private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
-    private _epgInitPromise: Promise<void> | null = null;
 
     private _config: OrchestratorConfig | null = null;
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
@@ -235,12 +238,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _eventsWired: boolean = false;
     private _ready: boolean = false;
     private _isChannelSwitching: boolean = false;
-    private _startupInProgress: boolean = false;
-    private _startupQueuedPhase: (1 | 2 | 3 | 4 | 5) | null = null;
-    private _startupQueuedWaiters: Array<() => void> = [];
-    private _authResumeDisposable: IDisposable | null = null;
-    private _serverResumeDisposable: IDisposable | null = null;
     private _channelSetupRerunRequested: boolean = false;
+    private _initCoordinator: IInitializationCoordinator | null = null;
 
     // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
     private _playbackFailureWindowStartMs: number = 0;
@@ -376,6 +375,40 @@ export class AppOrchestrator implements IAppOrchestrator {
         // EPGComponent - no constructor args, initialize later
         this._epg = new EPGComponent();
 
+        // Create InitializationCoordinator with dependencies and callbacks
+        this._initCoordinator = new InitializationCoordinator(
+            config,
+            {
+                lifecycle: this._lifecycle,
+                navigation: this._navigation,
+                plexAuth: this._plexAuth,
+                plexDiscovery: this._plexDiscovery,
+                plexLibrary: this._plexLibrary,
+                plexStreamResolver: this._plexStreamResolver,
+                channelManager: this._channelManager,
+                scheduler: this._scheduler,
+                videoPlayer: this._videoPlayer,
+                epg: this._epg,
+            },
+            {
+                updateModuleStatus: this._updateModuleStatus.bind(this),
+                getModuleStatus: (id: string): ModuleStatus['status'] | undefined => this._moduleStatus.get(id)?.status,
+                handleGlobalError: this.handleGlobalError.bind(this),
+                setReady: (ready: boolean): void => { this._ready = ready; },
+                setupEventWiring: this._setupEventWiring.bind(this),
+                configureChannelManagerStorage: this._configureChannelManagerStorageForSelectedServer.bind(this),
+                getSelectedServerId: this._getSelectedServerId.bind(this),
+                shouldRunChannelSetup: this._shouldRunChannelSetup.bind(this),
+                switchToChannel: this.switchToChannel.bind(this),
+                openServerSelect: this.openServerSelect.bind(this),
+                buildPlexResourceUrl: (pathOrUrl: string | null): string | null => {
+                    if (!pathOrUrl) return null;
+                    return this._buildPlexResourceUrl(pathOrUrl);
+                },
+            },
+            this._mode
+        );
+
         // Update status for all modules
         this._updateModuleStatus('event-emitter', 'ready');
     }
@@ -386,7 +419,10 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     async start(): Promise<void> {
         this._resetPlaybackFailureGuard();
-        await this._runStartup(1);
+        if (!this._initCoordinator) {
+            throw new Error('Orchestrator must be initialized before starting');
+        }
+        await this._initCoordinator.runStartup(1);
     }
 
     /**
@@ -400,8 +436,10 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
-        this._clearAuthResume();
-        this._clearServerResume();
+        if (this._initCoordinator) {
+            this._initCoordinator.clearAuthResume();
+            this._initCoordinator.clearServerResume();
+        }
 
         if (this._pendingDayRolloverTimer !== null) {
             globalThis.clearTimeout(this._pendingDayRolloverTimer);
@@ -578,7 +616,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (ok) {
             // If we're already running (or resuming from the server-select screen),
             // re-run the channel/player/EPG phases to swap to the selected server.
-            await this._runStartup(4);
+            if (this._initCoordinator) {
+                await this._initCoordinator.runStartup(4);
+            }
             return this._ready;
         }
         return ok;
@@ -984,13 +1024,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
             // Best-effort attempt immediately (helps in tests/mocks and if already initialized).
             show();
-            void this._initPhase5()
-                .then(() => {
-                    this._primeEpgChannels();
-                    void this._refreshEpgSchedules();
-                    show();
-                })
-                .catch((error) => console.error('[Orchestrator] Failed to init EPG:', error));
+            if (this._initCoordinator) {
+                void this._initCoordinator.ensureEPGInitialized()
+                    .then(() => {
+                        this._primeEpgChannels();
+                        void this._refreshEpgSchedules();
+                        show();
+                    })
+                    .catch((error: unknown) => console.error('[Orchestrator] Failed to init EPG:', error));
+            }
             return;
         }
 
@@ -1463,462 +1505,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-    /**
-     * Phase 1: Initialize core infrastructure (EventEmitter, AppLifecycle, Navigation)
-     */
-    private async _initPhase1(): Promise<void> {
-        const startTime = Date.now();
-
-        // EventEmitter is already ready (synchronous)
-        this._updateModuleStatus('event-emitter', 'ready', undefined, 0);
-
-        // Initialize Lifecycle and Navigation in parallel
-        const promises: Promise<void>[] = [];
-
-        if (this._lifecycle) {
-            this._updateModuleStatus('app-lifecycle', 'initializing');
-            promises.push(
-                this._lifecycle.initialize().then(() => {
-                    this._updateModuleStatus(
-                        'app-lifecycle',
-                        'ready',
-                        undefined,
-                        Date.now() - startTime
-                    );
-                })
-            );
-        }
-
-        if (this._navigation && this._config) {
-            this._updateModuleStatus('navigation', 'initializing');
-            this._navigation.initialize(this._config.navConfig);
-            this._updateModuleStatus(
-                'navigation',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
-        }
-
-        await Promise.all(promises);
-
-        if (this._lifecycle) {
-            this._lifecycle.setPhase('authenticating');
-        }
-    }
-
-    /**
-     * Phase 2: Validate authentication
-     */
-    private async _initPhase2(): Promise<boolean> {
-        const startTime = Date.now();
-        this._updateModuleStatus('plex-auth', 'initializing');
-
-        if (this._mode === 'demo') {
-            console.warn('[Orchestrator] Phase 2: Skipping Auth (Demo Mode)');
-            this._updateModuleStatus('plex-auth', 'ready', undefined, 0);
-            if (this._lifecycle) {
-                this._lifecycle.setPhase('loading_data');
-            }
-            return true;
-        }
-
-        if (!this._plexAuth || !this._navigation) {
-            this._updateModuleStatus('plex-auth', 'error');
-            return false;
-        }
-
-        // Check for stored auth credentials (SSOT: PlexAuth storage)
-        const storedCredentials = await this._plexAuth.getStoredCredentials();
-        if (storedCredentials) {
-            try {
-                const isValid = await this._plexAuth.validateToken(
-                    storedCredentials.token.token
-                );
-
-                if (isValid) {
-                    const currentToken =
-                        this._plexAuth.getCurrentUser() ?? storedCredentials.token;
-                    await this._plexAuth.storeCredentials({
-                        token: currentToken,
-                        selectedServerId: null,
-                        selectedServerUri: null,
-                    });
-                    this._updateModuleStatus(
-                        'plex-auth',
-                        'ready',
-                        undefined,
-                        Date.now() - startTime
-                    );
-
-                    if (this._lifecycle) {
-                        this._lifecycle.setPhase('loading_data');
-                    }
-                    return true;
-                }
-            } catch (error) {
-                console.error('Token validation failed:', error);
-            }
-        }
-
-        // No valid auth - navigate to auth screen
-        this._updateModuleStatus('plex-auth', 'pending');
-        this._registerAuthResume();
-        this._navigation.goTo('auth');
-        return false;
-    }
-
-    /**
-     * Phase 3: Connect to Plex server and initialize Plex services
-     */
-    private async _initPhase3(): Promise<boolean> {
-        const startTime = Date.now();
-
-        if (
-            !this._plexDiscovery ||
-            !this._plexLibrary ||
-            !this._plexStreamResolver ||
-            !this._navigation
-        ) {
-            return false;
-        }
-
-        if (this._mode === 'demo') {
-            console.warn('[Orchestrator] Phase 3: Skipping Discovery (Demo Mode)');
-            this._updateModuleStatus('plex-server-discovery', 'ready', undefined, 0);
-            this._updateModuleStatus('plex-library', 'ready', undefined, 0);
-            this._updateModuleStatus('plex-stream-resolver', 'ready', undefined, 0);
-            return true;
-        }
-
-        // Discover servers and restore selection (SSOT: discovery storage)
-        this._updateModuleStatus('plex-server-discovery', 'initializing');
-        try {
-            await this._plexDiscovery.initialize();
-            this._updateModuleStatus(
-                'plex-server-discovery',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
-        } catch (error) {
-            console.error('Server discovery failed:', error);
-            this._updateModuleStatus('plex-server-discovery', 'error');
-            if (this._navigation) {
-                this._navigation.goTo('server-select');
-            }
-            return false;
-        }
-
-        if (!this._plexDiscovery.isConnected()) {
-            this._registerServerResume();
-            this._navigation.goTo('server-select');
-            return false;
-        }
-
-        // Mark library and stream resolver as ready (they use discovery)
-        this._updateModuleStatus(
-            'plex-library',
-            'ready',
-            undefined,
-            Date.now() - startTime
-        );
-        this._updateModuleStatus(
-            'plex-stream-resolver',
-            'ready',
-            undefined,
-            Date.now() - startTime
-        );
-
-        return true;
-    }
-
-    /**
-     * Phase 4: Initialize Channel Manager, Scheduler, and Video Player
-     */
-    private async _initPhase4(): Promise<void> {
-        const startTime = Date.now();
-
-        // Channel Manager
-        if (this._channelManager) {
-            this._updateModuleStatus('channel-manager', 'initializing');
-            await this._configureChannelManagerStorageForSelectedServer();
-            await this._channelManager.loadChannels();
-
-            // Demo Mode safety: demo storage must not allow Plex-backed sources.
-            if (this._mode === 'demo') {
-                const channels = this._channelManager.getAllChannels();
-                const hasChannels = channels.length > 0;
-                const allManual = hasChannels && channels.every((c) => c.contentSource?.type === 'manual');
-                if (!hasChannels || !allManual) {
-                    console.warn('[Orchestrator] Demo Mode: pruning non-manual channels via re-seed');
-                    await this._channelManager.seedDemoChannels();
-                }
-            }
-
-            this._updateModuleStatus(
-                'channel-manager',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
-        }
-
-        // Channel Scheduler (no async init needed)
-        this._updateModuleStatus(
-            'channel-scheduler',
-            'ready',
-            undefined,
-            Date.now() - startTime
-        );
-
-        // Video Player
-        if (this._videoPlayer && this._config) {
-            this._updateModuleStatus('video-player', 'initializing');
-            await this._videoPlayer.initialize({
-                ...this._config.playerConfig,
-                demoMode: this._mode === 'demo',
-            });
-
-            // Request Media Session integration (once per app lifetime)
-            // Enables Now Playing metadata and transport controls on supported platforms
-            this._videoPlayer.requestMediaSession();
-
-            this._updateModuleStatus(
-                'video-player',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
-        }
-    }
-
-    /**
-     * Phase 5: Initialize EPG
-     */
-    private async _initPhase5(): Promise<void> {
-        if (this._moduleStatus.get('epg-ui')?.status === 'ready') {
-            return;
-        }
-        if (this._epgInitPromise) {
-            await this._epgInitPromise;
-            return;
-        }
-        if (!this._epg || !this._config) {
-            return;
-        }
-
-        const startTime = Date.now();
-        this._updateModuleStatus('epg-ui', 'initializing');
-        const init = async (): Promise<void> => {
-            // Wire thumb resolver callback to convert relative Plex paths to absolute URLs
-            const epgConfigWithResolver = {
-                ...this._config!.epgConfig,
-                resolveThumbUrl: (pathOrUrl: string | null): string | null => {
-                    if (!pathOrUrl) return null;
-                    return this._buildPlexResourceUrl(pathOrUrl);
-                },
-            };
-            this._epg!.initialize(epgConfigWithResolver);
-            this._updateModuleStatus(
-                'epg-ui',
-                'ready',
-                undefined,
-                Date.now() - startTime
-            );
-        };
-        this._epgInitPromise = init()
-            .catch((e) => {
-                this._updateModuleStatus('epg-ui', 'error');
-                throw e;
-            })
-            .finally(() => {
-                this._epgInitPromise = null;
-            });
-
-        await this._epgInitPromise;
-    }
-
-    private async _runStartup(startPhase: 1 | 2 | 3 | 4 | 5): Promise<void> {
-        if (!this._config) {
-            throw new Error('Orchestrator must be initialized before starting');
-        }
-
-        if (this._startupInProgress) {
-            console.warn('[Orchestrator] Startup already in progress; queuing follow-up run');
-            this._startupQueuedPhase = this._startupQueuedPhase === null
-                ? startPhase
-                : (Math.min(this._startupQueuedPhase, startPhase) as 1 | 2 | 3 | 4 | 5);
-            return new Promise((resolve) => {
-                this._startupQueuedWaiters.push(resolve);
-            });
-        }
-
-        this._startupInProgress = true;
-        let phaseToRun: 1 | 2 | 3 | 4 | 5 = startPhase;
-
-        try {
-            while (true) {
-                this._ready = false;
-
-                // Force phase to initializing to ensure 'ready' event is emitted at the end
-                // even if we were already ready (e.g. changing server via 'I' key).
-                if (this._lifecycle) {
-                    this._lifecycle.setPhase('initializing');
-                }
-
-                if (phaseToRun <= 1) {
-                    await this._initPhase1();
-                }
-
-                if (phaseToRun <= 2) {
-                    const authValid = await this._initPhase2();
-                    if (!authValid) {
-                        console.warn('[Orchestrator] Phase 2 failed (auth not valid)');
-                        if (this._startupQueuedPhase === null) {
-                            break;
-                        }
-                        phaseToRun = this._startupQueuedPhase;
-                        this._startupQueuedPhase = null;
-                        continue;
-                    }
-                }
-
-                if (phaseToRun <= 3) {
-                    console.warn('[Orchestrator] Starting Phase 3 (Plex Connection)');
-                    const plexConnected = await this._initPhase3();
-                    if (!plexConnected) {
-                        console.warn('[Orchestrator] Phase 3 failed (not connected)');
-                        if (this._startupQueuedPhase === null) {
-                            break;
-                        }
-                        phaseToRun = this._startupQueuedPhase;
-                        this._startupQueuedPhase = null;
-                        continue;
-                    }
-                }
-
-                if (phaseToRun <= 4) {
-                    console.warn('[Orchestrator] Starting Phase 4 (Channels & Player)');
-                    await this._initPhase4();
-                }
-
-                if (phaseToRun <= 5) {
-                    console.warn('[Orchestrator] Starting Phase 5 (EPG)');
-                    await this._initPhase5();
-                }
-
-                console.warn('[Orchestrator] Phases complete. Setting up wiring.');
-                this._setupEventWiring();
-                this._ready = true;
-                if (this._lifecycle) {
-                    this._lifecycle.setPhase('ready');
-                }
-
-                if (this._navigation) {
-                    const shouldRunSetup = this._shouldRunChannelSetup();
-                    if (shouldRunSetup) {
-                        console.warn('[Orchestrator] Channel setup required. Navigating to setup wizard.');
-                        this._navigation.goTo('channel-setup');
-                    } else {
-                        console.warn('[Orchestrator] Navigating to player');
-                        this._navigation.goTo('player');
-                        if (this._channelManager) {
-                            console.warn('[Orchestrator] Switching to current channel');
-
-                            let channelToPlay = this._channelManager.getCurrentChannel();
-
-                            // Fallback: If no current channel but we have channels, pick the first one
-                            if (!channelToPlay) {
-                                const allChannels = this._channelManager.getAllChannels();
-                                const firstChannel = allChannels[0];
-                                if (firstChannel) {
-                                    channelToPlay = firstChannel;
-                                    console.warn(`[Orchestrator] No current channel set. Defaulting to first channel: ${firstChannel.name}`);
-                                }
-                            }
-
-                            if (channelToPlay) {
-                                await this.switchToChannel(channelToPlay.id);
-                            } else {
-                                console.warn('[Orchestrator] No current channel found. Redirecting to Server Select.');
-                                this.openServerSelect();
-                            }
-                        }
-                    }
-                }
-
-                console.warn('[Orchestrator] Startup sequence finished successfully');
-
-                this._clearAuthResume();
-                this._clearServerResume();
-
-                if (this._startupQueuedPhase === null) {
-                    break;
-                }
-                phaseToRun = this._startupQueuedPhase;
-                this._startupQueuedPhase = null;
-            }
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.handleGlobalError(
-                {
-                    code: AppErrorCode.INITIALIZATION_FAILED,
-                    message,
-                    recoverable: true,
-                },
-                'start'
-            );
-        } finally {
-            this._startupInProgress = false;
-            this._startupQueuedPhase = null;
-            const waiters = this._startupQueuedWaiters;
-            this._startupQueuedWaiters = [];
-            for (const resolve of waiters) {
-                try {
-                    resolve();
-                } catch {
-                    // Ignore waiter failures
-                }
-            }
-        }
-    }
-
-    private _registerAuthResume(): void {
-        if (!this._plexAuth) {
-            return;
-        }
-
-        this._clearAuthResume();
-        const disposable = this._plexAuth.on('authChange', (isAuthenticated) => {
-            if (!isAuthenticated) {
-                return;
-            }
-            this._clearAuthResume();
-            this._runStartup(2).catch((error) => {
-                console.error('[Orchestrator] Auth resume failed:', error);
-            });
-        });
-        this._authResumeDisposable = disposable;
-    }
-
-    private _registerServerResume(): void {
-        if (!this._plexDiscovery) {
-            return;
-        }
-
-        this._clearServerResume();
-        const disposable = this._plexDiscovery.on('connectionChange', (uri) => {
-            if (!uri) {
-                return;
-            }
-            this._clearServerResume();
-            this._runStartup(3).catch((error) => {
-                console.error('[Orchestrator] Server resume failed:', error);
-            });
-        });
-        this._serverResumeDisposable = disposable;
-    }
 
     private _getSelectedServerId(): string | null {
         if (!this._plexDiscovery) {
@@ -2197,20 +1783,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         await this._refreshEpgSchedules();
         this._activeScheduleDayKey = dayKey;
         this._pendingDayRolloverDayKey = null;
-    }
-
-    private _clearAuthResume(): void {
-        if (this._authResumeDisposable) {
-            this._authResumeDisposable.dispose();
-            this._authResumeDisposable = null;
-        }
-    }
-
-    private _clearServerResume(): void {
-        if (this._serverResumeDisposable) {
-            this._serverResumeDisposable.dispose();
-            this._serverResumeDisposable = null;
-        }
     }
 
     // ============================================
