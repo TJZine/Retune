@@ -137,10 +137,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 audioCodec = 'aac';
             }
 
-            // 5. Find selected tracks
-            const audioStream = this._findStream(
+            // 5. Find selected tracks with audio fallback for TrueHD/DTS-HD
+            const audioStream = this._selectCompatibleAudioTrack(
                 part.streams,
-                2,
                 request.audioStreamId
             );
             const subtitleStream = this._findStream(
@@ -405,6 +404,22 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 }
             })();
 
+            // Debug logging for MKV direct play decisions
+            try {
+                if (localStorage.getItem('retune_debug_transcode') === '1') {
+                    const ua = navigator?.userAgent || '';
+                    const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                    console.warn('[PlexStreamResolver] MKV direct play check:', {
+                        container: media.container,
+                        isLegacyWebOs,
+                        chromiumVersion: chromeMatch ? chromeMatch[1] : 'unknown',
+                        willDirectPlay: !isLegacyWebOs,
+                    });
+                }
+            } catch {
+                // Ignore logging failures
+            }
+
             if (isLegacyWebOs) {
                 return false;
             }
@@ -416,7 +431,38 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
-        if (!SUPPORTED_AUDIO_CODECS.includes(media.audioCodec)) {
+        const audioCodec = media.audioCodec.toLowerCase();
+
+        // DTS passthrough requires BOTH:
+        // 1. webOS 23+ (C3/C4/C5) - hardware support
+        // 2. User opt-in setting - confirms they have an eARC receiver
+        // Without a receiver, DTS passthrough = silent audio
+        if (audioCodec === 'dts' || audioCodec === 'dca') {
+            const isDtsEnabled = ((): boolean => {
+                try {
+                    // Check user setting first (must explicitly enable)
+                    if (localStorage.getItem('retune_enable_dts_passthrough') !== '1') {
+                        return false;
+                    }
+                    // Check device capability (webOS 23+ = Chromium 108+)
+                    if (typeof navigator !== 'undefined') {
+                        const ua = navigator.userAgent || '';
+                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                        if (chromeMatch) {
+                            const chromeMajor = Number(chromeMatch[1]);
+                            return chromeMajor >= 108;
+                        }
+                    }
+                    return false;
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (!isDtsEnabled) {
+                return false; // DTS not enabled or device too old
+            }
+        } else if (!SUPPORTED_AUDIO_CODECS.includes(audioCodec)) {
             return false;
         }
 
@@ -595,7 +641,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         params.set(
             'X-Plex-Client-Capabilities',
-            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000}`
+            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000},dts{bitrate:1536000},dca{bitrate:1536000}`
         );
 
         // Add client params (video element requests cannot include headers, so use query params)
@@ -713,7 +759,42 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('X-Plex-Device-Name', 'Retune');
         }
         if (!params.has('X-Plex-Platform-Version')) {
-            params.set('X-Plex-Platform-Version', '6.0');
+            // Detect actual webOS version instead of hardcoding 6.0
+            // This ensures PMS uses the correct device profile for the TV's capabilities
+            const detectedVersion = ((): string => {
+                try {
+                    // Try webOSTV API first (most accurate)
+                    if (typeof window !== 'undefined') {
+                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
+                        if (webOSTV?.platform?.version) {
+                            return webOSTV.platform.version;
+                        }
+                    }
+                    // Fallback: infer from Chromium version in User Agent
+                    // Chromium versions mapped to webOS versions:
+                    // - webOS 25 (C5, 2025): Chromium 120+
+                    // - webOS 24 (C4, 2024): Chromium 108-119
+                    // - webOS 23 (C3, 2023): Chromium 108
+                    // - webOS 22: Chromium 94-107
+                    // - webOS 21: Chromium 87-93
+                    // - webOS 6.x and older: Chromium <87
+                    if (typeof navigator !== 'undefined') {
+                        const ua = navigator.userAgent || '';
+                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                        if (chromeMatch) {
+                            const chromeMajor = Number(chromeMatch[1]);
+                            if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
+                            if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
+                            if (chromeMajor >= 94) return '22.0';   // webOS 22
+                            if (chromeMajor >= 87) return '21.0';   // webOS 21
+                        }
+                    }
+                    return '6.0'; // Conservative fallback for older TVs
+                } catch {
+                    return '6.0';
+                }
+            })();
+            params.set('X-Plex-Platform-Version', detectedVersion);
         }
         // Plex server profile matching frequently requires a non-empty model; provide a sane default.
         if (!params.has('X-Plex-Model')) {
@@ -932,6 +1013,99 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const ofType = streams.filter((s) => s.streamType === streamType);
         const defaultStream = ofType.find((s) => s.default);
         return defaultStream || ofType[0] || null;
+    }
+
+    /**
+     * Select a compatible audio track, falling back from incompatible codecs.
+     * TrueHD and DTS-HD Master Audio cannot passthrough on webOS internal apps,
+     * so we auto-select AC3/EAC3 compatibility tracks when available.
+     * 
+     * @param streams - All streams from the media part
+     * @param requestedId - Optional user-requested audio stream ID
+     * @returns Selected audio stream or null
+     */
+    private _selectCompatibleAudioTrack(
+        streams: PlexStream[],
+        requestedId?: string
+    ): PlexStream | null {
+        const audioStreams = streams.filter((s) => s.streamType === 2);
+        if (audioStreams.length === 0) {
+            return null;
+        }
+
+        // If user explicitly requested a track, honor it
+        if (requestedId) {
+            const requested = audioStreams.find((s) => s.id === requestedId);
+            if (requested) {
+                return requested;
+            }
+        }
+
+        // Codecs webOS can decode or passthrough
+        const compatibleCodecs = ['eac3', 'ac3', 'aac', 'dts', 'dca', 'flac', 'mp3', 'opus', 'vorbis', 'pcm'];
+        // Codecs that CANNOT passthrough on webOS internal apps (require external device)
+        const incompatibleCodecs = ['truehd', 'dts-hd', 'dtshd', 'dts-hd ma', 'mlp'];
+
+        // Find default track
+        const defaultTrack = audioStreams.find((s) => s.default) || audioStreams[0];
+        if (!defaultTrack) {
+            return null;
+        }
+
+        const defaultCodec = (defaultTrack.codec || '').toLowerCase().replace(/[\s-]/g, '');
+
+        // Check if default is incompatible
+        const isIncompatible = incompatibleCodecs.some((ic) =>
+            defaultCodec.includes(ic.replace(/[\s-]/g, ''))
+        );
+
+        if (!isIncompatible) {
+            return defaultTrack; // Default is fine
+        }
+
+        // Default is TrueHD/DTS-HD - try to find compatible fallback
+        // Prefer same language, then prefer EAC3 > AC3 > AAC
+        const defaultLang = (defaultTrack.languageCode || defaultTrack.language || '').toLowerCase();
+
+        const fallbackCandidates = audioStreams
+            .filter((s) => {
+                const codec = (s.codec || '').toLowerCase();
+                return compatibleCodecs.includes(codec) && s.id !== defaultTrack.id;
+            })
+            .sort((a, b) => {
+                // Prefer same language
+                const aLang = (a.languageCode || a.language || '').toLowerCase();
+                const bLang = (b.languageCode || b.language || '').toLowerCase();
+                if (aLang === defaultLang && bLang !== defaultLang) return -1;
+                if (bLang === defaultLang && aLang !== defaultLang) return 1;
+
+                // Prefer higher quality compatible codec
+                const codecPriority = ['eac3', 'ac3', 'aac', 'dts', 'dca'];
+                const aCodec = (a.codec || '').toLowerCase();
+                const bCodec = (b.codec || '').toLowerCase();
+                const aPriority = codecPriority.indexOf(aCodec);
+                const bPriority = codecPriority.indexOf(bCodec);
+                return (aPriority === -1 ? 99 : aPriority) - (bPriority === -1 ? 99 : bPriority);
+            });
+
+        const fallback = fallbackCandidates[0];
+
+        // Debug logging
+        if (fallback) {
+            try {
+                if (localStorage.getItem('retune_debug_transcode') === '1') {
+                    console.warn('[PlexStreamResolver] Audio fallback selected:', {
+                        from: { codec: defaultTrack.codec, language: defaultTrack.language },
+                        to: { codec: fallback.codec, language: fallback.language },
+                        reason: 'TrueHD/DTS-HD cannot passthrough on webOS',
+                    });
+                }
+            } catch {
+                // Ignore logging failures
+            }
+        }
+
+        return fallback || defaultTrack; // Use fallback if found, otherwise stick with default
     }
 
     // ========================================

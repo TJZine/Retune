@@ -192,11 +192,13 @@ describe('PlexStreamResolver', () => {
             expect(resolver.canDirectPlay(item)).toBe(false);
         });
 
-        it('should return false for unsupported audio codec (DTS)', () => {
+        it('should return false for unsupported audio codec (TrueHD)', () => {
+            // TrueHD cannot passthrough on webOS internal apps (platform limitation)
+            // DTS is now supported for passthrough to external receivers
             const item = createMockMediaItem({
                 container: 'mkv',
                 videoCodec: 'h264',
-                audioCodec: 'dts',
+                audioCodec: 'truehd',
             });
             const config = createMockConfig();
             const resolver = new PlexStreamResolver(config);
