@@ -19,6 +19,8 @@ import { AuthScreen } from './modules/ui/auth';
 import { ChannelSetupScreen } from './modules/ui/channel-setup';
 import { ServerSelectScreen } from './modules/ui/server-select';
 import { SplashScreen } from './modules/ui/splash';
+import { SettingsScreen } from './modules/ui/settings';
+import { AudioSetupScreen } from './modules/ui/audio-setup';
 import { STORAGE_KEYS } from './types';
 import {
     safeClearRetuneStorage,
@@ -90,6 +92,10 @@ export class App {
     private _authScreen: AuthScreen | null = null;
     private _serverSelectScreen: ServerSelectScreen | null = null;
     private _channelSetupScreen: ChannelSetupScreen | null = null;
+    private _audioSetupContainer: HTMLElement | null = null;
+    private _audioSetupScreen: AudioSetupScreen | null = null;
+    private _settingsContainer: HTMLElement | null = null;
+    private _settingsScreen: SettingsScreen | null = null;
 
     private _splashContainer: HTMLElement | null = null;
     private _splashScreen: SplashScreen | null = null;
@@ -266,6 +272,20 @@ export class App {
         root.appendChild(channelSetupContainer);
         this._channelSetupContainer = channelSetupContainer;
 
+        // Audio setup container
+        const audioSetupContainer = document.createElement('div');
+        audioSetupContainer.id = 'audio-setup-container';
+        audioSetupContainer.className = 'screen';
+        root.appendChild(audioSetupContainer);
+        this._audioSetupContainer = audioSetupContainer;
+
+        // Settings container
+        const settingsContainer = document.createElement('div');
+        settingsContainer.id = 'settings-container';
+        settingsContainer.className = 'screen';
+        root.appendChild(settingsContainer);
+        this._settingsContainer = settingsContainer;
+
         // Error overlay container
         const errorOverlay = document.createElement('div');
         errorOverlay.id = 'error-overlay';
@@ -354,6 +374,26 @@ export class App {
             this._channelSetupContainer,
             this._orchestrator
         );
+        if (this._settingsContainer && this._orchestrator) {
+            this._settingsScreen = new SettingsScreen(
+                this._settingsContainer,
+                () => this._orchestrator?.getNavigation() ?? null
+            );
+        }
+        if (this._audioSetupContainer && this._orchestrator) {
+            this._audioSetupScreen = new AudioSetupScreen(
+                this._audioSetupContainer,
+                () => this._orchestrator?.getNavigation() ?? null,
+                () => this._onAudioSetupComplete()
+            );
+        }
+    }
+
+    private _onAudioSetupComplete(): void {
+        // Navigate to channel-setup after audio setup
+        if (this._orchestrator) {
+            this._orchestrator.getNavigation()?.replaceScreen('channel-setup');
+        }
     }
 
     private _wireScreenVisibility(): void {
@@ -380,24 +420,31 @@ export class App {
     }
 
     private _applyScreenVisibility(screen: string): void {
-        // Guard: If app is ready, we force player visibility unless explicitly navigating to an overlay
+        // Guard: If app is ready, hide setup screens unless navigating to them
+        // Settings is handled separately below (it's an overlay, not a setup flow)
         if (
             this._orchestrator &&
             this._orchestrator.isReady() &&
             screen !== 'auth' &&
             screen !== 'server-select' &&
-            screen !== 'channel-setup'
+            screen !== 'audio-setup' &&
+            screen !== 'channel-setup' &&
+            screen !== 'settings'
         ) {
             this._splashScreen?.hide();
             this._authScreen?.hide();
             this._serverSelectScreen?.hide();
+            this._audioSetupScreen?.hide();
             this._channelSetupScreen?.hide();
+            this._settingsScreen?.hide();
             return;
         }
         const showSplash = screen === 'splash';
         const showAuth = screen === 'auth';
         const showServerSelect = screen === 'server-select';
+        const showAudioSetup = screen === 'audio-setup';
         const showChannelSetup = screen === 'channel-setup';
+        const showSettings = screen === 'settings';
 
         if (this._splashScreen) {
             if (showSplash) {
@@ -423,11 +470,27 @@ export class App {
             }
         }
 
+        if (this._audioSetupScreen) {
+            if (showAudioSetup) {
+                this._audioSetupScreen.show();
+            } else {
+                this._audioSetupScreen.hide();
+            }
+        }
+
         if (this._channelSetupScreen) {
             if (showChannelSetup) {
                 this._channelSetupScreen.show();
             } else {
                 this._channelSetupScreen.hide();
+            }
+        }
+
+        if (this._settingsScreen) {
+            if (showSettings) {
+                this._settingsScreen.show();
+            } else {
+                this._settingsScreen.hide();
             }
         }
     }

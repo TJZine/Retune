@@ -1,0 +1,162 @@
+/**
+ * Design System Tokens
+ * Centralized CSS variables for colors, typography, spacing, and effects.
+ * 
+ * Philosophy: "Retro Elegance" - CRT-era nostalgia with modern polish.
+ */
+
+:root {
+    /* =========================================
+       Color Palette - Dark Theme (Default)
+       ========================================= */
+
+    /* Primary */
+    --color-primary: #00a8e1;
+    --color-primary-dark: #0086b3;
+    --color-primary-light: #4bc4eb;
+
+    /* Accent - Phosphor */
+    --color-accent-green: #33ff66;
+    --color-accent-amber: #ffcc00;
+
+    /* Background */
+    --color-bg-deep: #000000;
+    --color-bg-surface: rgba(8, 10, 12, 0.92);
+    --color-bg-elevated: rgba(20, 24, 28, 0.95);
+    --color-bg-overlay: rgba(0, 0, 0, 0.82);
+
+    /* Text */
+    --color-text-primary: #ffffff;
+    --color-text-secondary: rgba(255, 255, 255, 0.7);
+    --color-text-muted: rgba(255, 255, 255, 0.5);
+    --color-text-disabled: rgba(255, 255, 255, 0.35);
+
+    /* Borders */
+    --color-border-subtle: rgba(255, 255, 255, 0.08);
+    --color-border-default: rgba(255, 255, 255, 0.12);
+    --color-border-focus: var(--color-primary);
+
+    /* Status */
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-error: #ef4444;
+
+    /* =========================================
+       Focus States (Critical for TV)
+       ========================================= */
+    --focus-color: var(--color-primary);
+    --focus-ring-width: 3px;
+    --focus-ring-offset: 2px;
+    --focus-glow-color: rgba(0, 168, 225, 0.4);
+    --focus-glow-size: 0 0 12px 4px;
+
+    /* =========================================
+       Typography
+       ========================================= */
+    --font-family-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    --font-family-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+    --font-family-retro: 'VT323', 'Press Start 2P', monospace;
+
+    /* 10-foot UI Sizes */
+    --text-xs: 14px;
+    --text-sm: 16px;
+    --text-base: 20px;
+    --text-lg: 24px;
+    --text-xl: 30px;
+    --text-2xl: 36px;
+    --text-3xl: 48px;
+
+    /* Weights */
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* =========================================
+       Spacing System
+       ========================================= */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* =========================================
+       Border Radius
+       ========================================= */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-full: 9999px;
+
+    /* =========================================
+       Shadows
+       ========================================= */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.6);
+
+    /* =========================================
+       Transitions
+       ========================================= */
+    --transition-fast: 100ms ease;
+    --transition-normal: 200ms ease;
+    --transition-slow: 300ms ease;
+
+    /* =========================================
+       Z-Index Scale
+       ========================================= */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-modal: 1000;
+    --z-overlay: 5000;
+    --z-toast: 9000;
+    --z-max: 10000;
+}
+
+/* =========================================
+   Theme Variants
+   ========================================= */
+
+.theme-retro-green {
+    --color-primary: var(--color-accent-green);
+    --color-primary-dark: #29cc52;
+    --color-primary-light: #66ff8c;
+    --focus-color: var(--color-accent-green);
+    --focus-glow-color: rgba(51, 255, 102, 0.35);
+}
+
+.theme-retro-amber {
+    --color-primary: var(--color-accent-amber);
+    --color-primary-dark: #cc9900;
+    --color-primary-light: #ffd633;
+    --focus-color: var(--color-accent-amber);
+    --focus-glow-color: rgba(255, 204, 0, 0.35);
+}
+
+/* =========================================
+   Scanline Overlay Effect
+   ========================================= */
+
+.scanline-effect::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: var(--z-max);
+    background: repeating-linear-gradient(0deg,
+            transparent 0px,
+            transparent 2px,
+            rgba(0, 0, 0, 0.15) 2px,
+            rgba(0, 0, 0, 0.15) 4px);
+}

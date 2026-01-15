@@ -5,7 +5,9 @@
  */
 
 import { App } from './App';
+import './styles/tokens.css';
 import './modules/ui/epg/styles.css';
+import './modules/ui/settings/styles.css';
 import './styles/shell.css';
 
 // ============================================

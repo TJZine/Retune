@@ -40,6 +40,8 @@ import { generateUUID } from './utils';
 // Re-export types for consumers
 export { PlexStreamErrorCode } from './types';
 
+const isStoredTrue = (value: string | null): boolean => value === '1' || value === 'true';
+
 /**
  * Plex Stream Resolver implementation.
  * Resolves stream URLs and manages playback sessions.
@@ -406,7 +408,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             // Debug logging for MKV direct play decisions
             try {
-                if (localStorage.getItem('retune_debug_transcode') === '1') {
+                if (isStoredTrue(localStorage.getItem('retune_debug_transcode'))) {
                     const ua = navigator?.userAgent || '';
                     const chromeMatch = ua.match(/Chrome\/(\d+)/);
                     console.warn('[PlexStreamResolver] MKV direct play check:', {
@@ -441,7 +443,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             const isDtsEnabled = ((): boolean => {
                 try {
                     // Check user setting first (must explicitly enable)
-                    if (localStorage.getItem('retune_enable_dts_passthrough') !== '1') {
+                    if (!isStoredTrue(localStorage.getItem('retune_enable_dts_passthrough'))) {
                         return false;
                     }
                     // Check device capability (webOS 23+ = Chromium 108+)
@@ -806,7 +808,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         try {
             const shouldLogTranscodeDebug = ((): boolean => {
                 try {
-                    return localStorage.getItem('retune_debug_transcode') === '1';
+                    return isStoredTrue(localStorage.getItem('retune_debug_transcode'));
                 } catch {
                     return false;
                 }
@@ -1093,7 +1095,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Debug logging
         if (fallback) {
             try {
-                if (localStorage.getItem('retune_debug_transcode') === '1') {
+                if (isStoredTrue(localStorage.getItem('retune_debug_transcode'))) {
                     console.warn('[PlexStreamResolver] Audio fallback selected:', {
                         from: { codec: defaultTrack.codec, language: defaultTrack.language },
                         to: { codec: fallback.codec, language: fallback.language },

@@ -75,6 +75,7 @@ export interface InitializationCallbacks {
     // Server/storage operations (kept in Orchestrator)
     configureChannelManagerStorage: () => Promise<void>;
     getSelectedServerId: () => string | null;
+    shouldRunAudioSetup: () => boolean;
     shouldRunChannelSetup: () => boolean;
     switchToChannel: (id: string) => Promise<void>;
     openServerSelect: () => void;
@@ -222,8 +223,14 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                 }
 
                 if (this._deps.navigation) {
+                    const shouldRunAudioSetup = this._callbacks.shouldRunAudioSetup();
                     const shouldRunSetup = this._callbacks.shouldRunChannelSetup();
-                    if (shouldRunSetup) {
+
+                    if (shouldRunAudioSetup && shouldRunSetup) {
+                        // First-time user: audio setup → channel setup
+                        console.warn('[InitializationCoordinator] Audio setup required. Navigating to audio setup wizard.');
+                        this._deps.navigation.goTo('audio-setup');
+                    } else if (shouldRunSetup) {
                         console.warn('[InitializationCoordinator] Channel setup required. Navigating to setup wizard.');
                         this._deps.navigation.goTo('channel-setup');
                     } else {

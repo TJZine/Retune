@@ -683,10 +683,15 @@ export class NavigationManager
                 break;
 
             case 'guide':
-            case 'yellow':
+            case 'green':
                 // Emit guide event for orchestrator to handle (toggle EPG)
-                // User requested moving to color button due to OS interception
+                // Green used as fallback since OS may intercept native guide button
                 this.emit('guide', undefined);
+                break;
+
+            case 'yellow':
+                // Emit settings event for orchestrator to handle (open Settings)
+                this.emit('settings', undefined);
                 break;
 
             default:

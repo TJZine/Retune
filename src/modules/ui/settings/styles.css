@@ -1,0 +1,79 @@
+/* Settings Screen Styles */
+
+.settings-screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 20% 20%, rgba(0, 168, 225, 0.15), transparent 45%),
+    radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.08), transparent 40%),
+    var(--color-bg-overlay);
+  color: var(--color-text-primary);
+  z-index: var(--z-overlay);
+  font-family: var(--font-family-sans);
+}
+
+.settings-screen.visible {
+  display: flex;
+}
+
+.settings-panel {
+  width: min(920px, 90%);
+  max-height: 85vh;
+  background: rgba(8, 10, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 28px 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  overflow-y: auto;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.settings-title {
+  font-size: 34px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.settings-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Toggle disabled state */
+.setup-toggle.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setup-toggle.disabled .setup-toggle-meta {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
