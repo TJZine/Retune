@@ -152,7 +152,7 @@ export function mapMediaType(type: string): PlexMediaType {
         case 'movie':
             return 'movie';
         case 'show':
-            return 'movie';
+            return 'show';
         case 'episode':
             return 'episode';
         case 'track':

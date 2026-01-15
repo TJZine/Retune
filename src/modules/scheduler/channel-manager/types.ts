@@ -51,7 +51,7 @@ export type SortOrder =
 /**
  * Plex media item types
  */
-export type PlexMediaType = 'movie' | 'episode' | 'track' | 'clip';
+export type PlexMediaType = 'movie' | 'show' | 'episode' | 'track' | 'clip';
 
 // ============================================
 // Content Filter

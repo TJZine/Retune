@@ -14,7 +14,7 @@ import { AppErrorCode } from '../../../types/app-errors';
 /**
  * Plex media item types
  */
-export type PlexMediaType = 'movie' | 'episode' | 'track' | 'clip';
+export type PlexMediaType = 'movie' | 'show' | 'episode' | 'track' | 'clip';
 
 /**
  * A stream within a media file (video, audio, or subtitle track)
