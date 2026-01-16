@@ -238,7 +238,7 @@ export interface IPlexLibraryMinimal {
  */
 export interface PlexMediaItemMinimal {
     ratingKey: string;
-    type: 'movie' | 'episode' | 'track' | 'clip';
+    type: 'movie' | 'show' | 'episode' | 'track' | 'clip';
     title: string;
     year: number;
     durationMs: number;

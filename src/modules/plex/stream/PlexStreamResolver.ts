@@ -36,6 +36,8 @@ import {
     DEFAULT_HLS_OPTIONS,
 } from './constants';
 import { generateUUID } from './utils';
+import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
+import { isStoredTrue, safeLocalStorageGet } from '../../../utils/storage';
 
 // Re-export types for consumers
 export { PlexStreamErrorCode } from './types';
@@ -101,6 +103,21 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             );
         }
 
+        // Track selection (used for UI and optional HLS stream selection)
+        const audioStream = this._selectCompatibleAudioTrack(
+            part.streams,
+            request.audioStreamId
+        );
+        const subtitleStream = this._findStream(
+            part.streams,
+            3,
+            request.subtitleStreamId
+        );
+        const shouldForceAudioStreamId = this._shouldForceTranscodeAudioStreamId(
+            part.streams,
+            request.audioStreamId
+        );
+
         // 3. Start a playback session early so the same sessionId can be used for:
         // - Timeline updates (`X-Plex-Session-Identifier`)
         // - Transcoding session binding (`session` + `X-Plex-Session-Identifier`)
@@ -129,7 +146,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 const maxBitrate = typeof request.maxBitrate === 'number'
                     ? request.maxBitrate
                     : DEFAULT_HLS_OPTIONS.maxBitrate;
-                playbackUrl = this.getTranscodeUrl(request.itemKey, { maxBitrate, sessionId });
+                const options: HlsOptions = { maxBitrate, sessionId };
+                if (shouldForceAudioStreamId && audioStream?.id) {
+                    options.audioStreamId = audioStream.id;
+                }
+                playbackUrl = this.getTranscodeUrl(request.itemKey, options);
                 protocol = 'hls';
                 isTranscoding = true;
                 container = 'mpegts';
@@ -137,19 +158,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 audioCodec = 'aac';
             }
 
-            // 5. Find selected tracks
-            const audioStream = this._findStream(
-                part.streams,
-                2,
-                request.audioStreamId
-            );
-            const subtitleStream = this._findStream(
-                part.streams,
-                3,
-                request.subtitleStreamId
-            );
-
-            // 6. Determine subtitle delivery
+            // 5. Determine subtitle delivery
             const subtitleDelivery = this._getSubtitleDelivery(
                 subtitleStream,
                 isTranscoding
@@ -405,6 +414,22 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 }
             })();
 
+            // Debug logging for MKV direct play decisions
+            try {
+                if (isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING))) {
+                    const ua = navigator?.userAgent || '';
+                    const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                    console.warn('[PlexStreamResolver] MKV direct play check:', {
+                        container: media.container,
+                        isLegacyWebOs,
+                        chromiumVersion: chromeMatch ? chromeMatch[1] : 'unknown',
+                        willDirectPlay: !isLegacyWebOs,
+                    });
+                }
+            } catch {
+                // Ignore logging failures
+            }
+
             if (isLegacyWebOs) {
                 return false;
             }
@@ -416,7 +441,38 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
-        if (!SUPPORTED_AUDIO_CODECS.includes(media.audioCodec)) {
+        const audioCodec = media.audioCodec.toLowerCase();
+
+        // DTS passthrough requires BOTH:
+        // 1. webOS 23+ (C3/C4/C5) - hardware support
+        // 2. User opt-in setting - confirms they have an eARC receiver
+        // Without a receiver, DTS passthrough = silent audio
+        if (audioCodec === 'dts' || audioCodec === 'dca' || audioCodec.startsWith('dts')) {
+            const isDtsEnabled = ((): boolean => {
+                try {
+                    // Check user setting first (must explicitly enable)
+                    if (!isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH))) {
+                        return false;
+                    }
+                    // Check device capability (webOS 23+ = Chromium 108+)
+                    if (typeof navigator !== 'undefined') {
+                        const ua = navigator.userAgent || '';
+                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                        if (chromeMatch) {
+                            const chromeMajor = Number(chromeMatch[1]);
+                            return chromeMajor >= 108;
+                        }
+                    }
+                    return false;
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (!isDtsEnabled) {
+                return false; // DTS not enabled or device too old
+            }
+        } else if (!SUPPORTED_AUDIO_CODECS.includes(audioCodec)) {
             return false;
         }
 
@@ -467,7 +523,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         const compatMode = ((): boolean => {
             try {
-                return localStorage.getItem('retune_transcode_compat') === '1';
+                return safeLocalStorageGet(RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT) === '1';
             } catch {
                 return false;
             }
@@ -523,6 +579,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Bind the transcoder session key to our app sessionId so we can terminate it later
         params.set('session', sessionId);
         params.set('X-Plex-Session-Identifier', sessionId);
+        if (options.audioStreamId) {
+            params.set('audioStreamID', options.audioStreamId);
+        }
 
         if (!compatMode) {
             // Default: richer set aligned with Plex examples
@@ -595,7 +654,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         params.set(
             'X-Plex-Client-Capabilities',
-            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000}`
+            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000},dts{bitrate:1536000},dca{bitrate:1536000}`
         );
 
         // Add client params (video element requests cannot include headers, so use query params)
@@ -713,7 +772,42 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('X-Plex-Device-Name', 'Retune');
         }
         if (!params.has('X-Plex-Platform-Version')) {
-            params.set('X-Plex-Platform-Version', '6.0');
+            // Detect actual webOS version instead of hardcoding 6.0
+            // This ensures PMS uses the correct device profile for the TV's capabilities
+            const detectedVersion = ((): string => {
+                try {
+                    // Try webOSTV API first (most accurate)
+                    if (typeof window !== 'undefined') {
+                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
+                        if (webOSTV?.platform?.version) {
+                            return webOSTV.platform.version;
+                        }
+                    }
+                    // Fallback: infer from Chromium version in User Agent
+                    // Chromium versions mapped to webOS versions:
+                    // - webOS 25 (C5, 2025): Chromium 120+
+                    // - webOS 24 (C4, 2024): Chromium 108-119
+                    // - webOS 23 (C3, 2023): Chromium 108
+                    // - webOS 22: Chromium 94-107
+                    // - webOS 21: Chromium 87-93
+                    // - webOS 6.x and older: Chromium <87
+                    if (typeof navigator !== 'undefined') {
+                        const ua = navigator.userAgent || '';
+                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                        if (chromeMatch) {
+                            const chromeMajor = Number(chromeMatch[1]);
+                            if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
+                            if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
+                            if (chromeMajor >= 94) return '22.0';   // webOS 22
+                            if (chromeMajor >= 87) return '21.0';   // webOS 21
+                        }
+                    }
+                    return '6.0'; // Conservative fallback for older TVs
+                } catch {
+                    return '6.0';
+                }
+            })();
+            params.set('X-Plex-Platform-Version', detectedVersion);
         }
         // Plex server profile matching frequently requires a non-empty model; provide a sane default.
         if (!params.has('X-Plex-Model')) {
@@ -725,7 +819,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         try {
             const shouldLogTranscodeDebug = ((): boolean => {
                 try {
-                    return localStorage.getItem('retune_debug_transcode') === '1';
+                    return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
                 } catch {
                     return false;
                 }
@@ -932,6 +1026,111 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const ofType = streams.filter((s) => s.streamType === streamType);
         const defaultStream = ofType.find((s) => s.default);
         return defaultStream || ofType[0] || null;
+    }
+
+    /**
+     * Select a compatible audio track, falling back from incompatible codecs.
+     * TrueHD cannot be decoded on LG webOS internal apps, so we auto-select an
+     * AC3/EAC3/AAC fallback track (non-commentary) when available.
+     * 
+     * @param streams - All streams from the media part
+     * @param requestedId - Optional user-requested audio stream ID
+     * @returns Selected audio stream or null
+     */
+    private _selectCompatibleAudioTrack(
+        streams: PlexStream[],
+        requestedId?: string
+    ): PlexStream | null {
+        const audioStreams = streams.filter((s) => s.streamType === 2);
+        if (audioStreams.length === 0) {
+            return null;
+        }
+
+        // If user explicitly requested a track, honor it
+        if (requestedId) {
+            const requested = audioStreams.find((s) => s.id === requestedId);
+            if (requested) {
+                return requested;
+            }
+        }
+
+        const fallbackCodecs = ['eac3', 'ac3', 'aac'];
+
+        // Find default track
+        const defaultTrack = audioStreams.find((s) => s.default) || audioStreams[0];
+        if (!defaultTrack) {
+            return null;
+        }
+
+        if (!this._isTrueHdCodec(defaultTrack.codec)) {
+            return defaultTrack; // Default is fine
+        }
+
+        // Default is TrueHD - try to find a compatible fallback
+        // Prefer same language, then prefer EAC3 > AC3 > AAC
+        const defaultLang = (defaultTrack.languageCode || defaultTrack.language || '').toLowerCase();
+
+        const fallbackCandidates = audioStreams
+            .filter((s) => {
+                const codec = (s.codec || '').toLowerCase();
+                if (s.id === defaultTrack.id) return false;
+                if (!fallbackCodecs.includes(codec)) return false;
+                if (this._isCommentaryStream(s)) return false;
+                return true;
+            })
+            .sort((a, b) => {
+                // Prefer same language
+                const aLang = (a.languageCode || a.language || '').toLowerCase();
+                const bLang = (b.languageCode || b.language || '').toLowerCase();
+                if (aLang === defaultLang && bLang !== defaultLang) return -1;
+                if (bLang === defaultLang && aLang !== defaultLang) return 1;
+
+                // Prefer higher quality compatible codec
+                const codecPriority = ['eac3', 'ac3', 'aac'];
+                const aCodec = (a.codec || '').toLowerCase();
+                const bCodec = (b.codec || '').toLowerCase();
+                const aPriority = codecPriority.indexOf(aCodec);
+                const bPriority = codecPriority.indexOf(bCodec);
+                return (aPriority === -1 ? 99 : aPriority) - (bPriority === -1 ? 99 : bPriority);
+            });
+
+        const fallback = fallbackCandidates[0];
+
+        // Debug logging
+        if (fallback) {
+            try {
+                if (isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING))) {
+                    console.warn('[PlexStreamResolver] Audio fallback selected:', {
+                        from: { codec: defaultTrack.codec, language: defaultTrack.language },
+                        to: { codec: fallback.codec, language: fallback.language },
+                        reason: 'TrueHD cannot be decoded on webOS',
+                    });
+                }
+            } catch {
+                // Ignore logging failures
+            }
+        }
+
+        return fallback || defaultTrack; // Use fallback if found, otherwise stick with default
+    }
+
+    private _isTrueHdCodec(codec: string | null | undefined): boolean {
+        const normalized = (codec || '').toLowerCase().replace(/[\s-]/g, '');
+        return normalized === 'truehd' || normalized === 'mlp';
+    }
+
+    private _isCommentaryStream(stream: PlexStream): boolean {
+        const title = (stream.title || '').toLowerCase();
+        return title.includes('commentary');
+    }
+
+    private _shouldForceTranscodeAudioStreamId(
+        streams: PlexStream[],
+        requestedId?: string
+    ): boolean {
+        if (requestedId) return true;
+        const defaultAudio = this._findStream(streams, 2);
+        return defaultAudio ? this._isTrueHdCodec(defaultAudio.codec) : false;
     }
 
     // ========================================

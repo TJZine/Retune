@@ -56,23 +56,41 @@ export class ContentResolver {
      * @throws Error if resolution fails (for cached fallback handling by caller)
      */
     async resolveSource(source: ChannelContentSource): Promise<ResolvedContentItem[]> {
+        let items: ResolvedContentItem[];
+
         switch (source.type) {
             case 'library':
-                return this._resolveLibrarySource(source);
+                items = await this._resolveLibrarySource(source);
+                break;
             case 'collection':
-                return this._resolveCollectionSource(source);
+                items = await this._resolveCollectionSource(source);
+                break;
             case 'show':
-                return this._resolveShowSource(source);
+                items = await this._resolveShowSource(source);
+                break;
             case 'playlist':
-                return this._resolvePlaylistSource(source);
+                items = await this._resolvePlaylistSource(source);
+                break;
             case 'manual':
-                return this._resolveManualSource(source);
+                items = await this._resolveManualSource(source);
+                break;
             case 'mixed':
-                return this._resolveMixedSource(source);
+                items = await this._resolveMixedSource(source);
+                break;
             default:
                 this._logger.warn(`Unknown source type: ${(source as BaseContentSource).type}`);
-                return [];
+                items = [];
         }
+
+        // Defensive filter: Shows are containers, not playable items.
+        // They should have been expanded to episodes, but filter out any that slipped through.
+        const playable = items.filter((item) => item.type !== 'show');
+        if (playable.length < items.length) {
+            const skipped = items.length - playable.length;
+            this._logger.warn(`Filtered out ${skipped} unexpanded show(s) from resolved content`);
+        }
+
+        return playable;
     }
 
     /**

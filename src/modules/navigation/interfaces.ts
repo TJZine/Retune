@@ -144,6 +144,7 @@ export type Screen =
     | 'splash'
     | 'auth'
     | 'server-select'
+    | 'audio-setup'
     | 'channel-setup'
     | 'home'
     | 'player'
@@ -240,4 +241,6 @@ export interface NavigationEventMap {
     pointerModeChange: { active: boolean };
     channelInputUpdate: { digits: string; isComplete: boolean };
     channelNumberEntered: { channelNumber: number };
+    guide: undefined;
+    settings: undefined;
 }

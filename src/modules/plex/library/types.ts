@@ -19,7 +19,7 @@ export type PlexLibraryType = 'movie' | 'show' | 'artist' | 'photo';
 /**
  * Plex media item types
  */
-export type PlexMediaType = 'movie' | 'episode' | 'track' | 'clip';
+export type PlexMediaType = 'movie' | 'show' | 'episode' | 'track' | 'clip';
 
 /**
  * A library section in Plex

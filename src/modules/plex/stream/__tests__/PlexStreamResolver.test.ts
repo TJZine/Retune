@@ -38,6 +38,10 @@ function createMockMediaItem(
         height: number;
         bitrate: number;
         durationMs: number;
+    }> = {},
+    options: Partial<{
+        extraStreams: PlexStream[];
+        partKey: string;
     }> = {}
 ): PlexMediaItem {
     const defaults = {
@@ -68,6 +72,7 @@ function createMockMediaItem(
         channels: 2,
         default: true,
     };
+    const extraStreams = options.extraStreams ?? [];
 
     const media: PlexMediaFile = {
         id: 'media-1',
@@ -84,12 +89,12 @@ function createMockMediaItem(
         parts: [
             {
                 id: 'part-1',
-                key: '/library/parts/12345/file.mp4',
+                key: options.partKey ?? '/library/parts/12345/file.mp4',
                 duration: merged.durationMs,
                 file: '/path/to/file.mp4',
                 size: 1000000000,
                 container: merged.container,
-                streams: [videoStream, audioStream],
+                streams: [videoStream, audioStream, ...extraStreams],
             },
         ],
     };
@@ -117,13 +122,37 @@ function createMockMediaItem(
 
 describe('PlexStreamResolver', () => {
     let mockFetch: jest.Mock;
+    let originalNavigator: unknown;
+    let originalLocalStorage: unknown;
 
     beforeEach(() => {
         mockFetch = jest.fn().mockResolvedValue({ ok: true });
         global.fetch = mockFetch;
+
+        originalNavigator = (globalThis as unknown as { navigator?: unknown }).navigator;
+        originalLocalStorage = (globalThis as unknown as { localStorage?: unknown }).localStorage;
     });
 
     afterEach(() => {
+        if (originalNavigator === undefined) {
+            delete (globalThis as unknown as { navigator?: unknown }).navigator;
+        } else {
+            Object.defineProperty(globalThis, 'navigator', {
+                value: originalNavigator,
+                configurable: true,
+                writable: true,
+            });
+        }
+
+        if (originalLocalStorage === undefined) {
+            delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+        } else {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: originalLocalStorage,
+                configurable: true,
+                writable: true,
+            });
+        }
         jest.resetAllMocks();
     });
 
@@ -192,16 +221,58 @@ describe('PlexStreamResolver', () => {
             expect(resolver.canDirectPlay(item)).toBe(false);
         });
 
-        it('should return false for unsupported audio codec (DTS)', () => {
+        it('should return false for unsupported audio codec (TrueHD)', () => {
+            // TrueHD cannot passthrough on webOS internal apps (platform limitation)
+            // DTS is now supported for passthrough to external receivers
             const item = createMockMediaItem({
                 container: 'mkv',
                 videoCodec: 'h264',
-                audioCodec: 'dts',
+                audioCodec: 'truehd',
             });
             const config = createMockConfig();
             const resolver = new PlexStreamResolver(config);
 
             expect(resolver.canDirectPlay(item)).toBe(false);
+        });
+
+        it('should return false for DTS when passthrough is disabled', () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: { getItem: jest.fn().mockReturnValue('0') },
+                configurable: true,
+            });
+            Object.defineProperty(globalThis, 'navigator', {
+                value: { userAgent: 'Mozilla/5.0 (Web0S) AppleWebKit/537.36 Chrome/108.0.0.0 Safari/537.36' },
+                configurable: true,
+            });
+
+            const item = createMockMediaItem({
+                container: 'mkv',
+                videoCodec: 'h264',
+                audioCodec: 'dts',
+            });
+            const resolver = new PlexStreamResolver(createMockConfig());
+
+            expect(resolver.canDirectPlay(item)).toBe(false);
+        });
+
+        it('should return true for DTS when passthrough is enabled on webOS 23+', () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: { getItem: jest.fn().mockReturnValue('1') },
+                configurable: true,
+            });
+            Object.defineProperty(globalThis, 'navigator', {
+                value: { userAgent: 'Mozilla/5.0 (Web0S) AppleWebKit/537.36 Chrome/108.0.0.0 Safari/537.36' },
+                configurable: true,
+            });
+
+            const item = createMockMediaItem({
+                container: 'mkv',
+                videoCodec: 'h264',
+                audioCodec: 'dts',
+            });
+            const resolver = new PlexStreamResolver(createMockConfig());
+
+            expect(resolver.canDirectPlay(item)).toBe(true);
         });
 
         it('should return false for resolution above 4K', () => {
@@ -270,6 +341,72 @@ describe('PlexStreamResolver', () => {
             expect(decision.isTranscoding).toBe(true);
             expect(decision.protocol).toBe('hls');
             expect(decision.playbackUrl).toContain('/transcode/universal/start.m3u8');
+        });
+
+        it('should pick an AC3/EAC3 fallback when default is TrueHD', async () => {
+            const mockItem = createMockMediaItem(
+                {
+                    container: 'mkv',
+                    videoCodec: 'h264',
+                    audioCodec: 'truehd',
+                },
+                {
+                    extraStreams: [
+                        {
+                            id: 'audio-2',
+                            streamType: 2,
+                            codec: 'eac3',
+                            language: 'English',
+                            languageCode: 'en',
+                            channels: 6,
+                            title: 'English (EAC3)',
+                        },
+                    ],
+                }
+            );
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(mockItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isTranscoding).toBe(true);
+            expect(decision.selectedAudioStream?.id).toBe('audio-2');
+            expect(decision.playbackUrl).toContain('audioStreamID=audio-2');
+        });
+
+        it('should avoid commentary-only fallbacks for TrueHD and transcode the default track', async () => {
+            const mockItem = createMockMediaItem(
+                {
+                    container: 'mkv',
+                    videoCodec: 'h264',
+                    audioCodec: 'truehd',
+                },
+                {
+                    extraStreams: [
+                        {
+                            id: 'audio-2',
+                            streamType: 2,
+                            codec: 'ac3',
+                            language: 'English',
+                            languageCode: 'en',
+                            channels: 2,
+                            title: 'Director Commentary',
+                        },
+                    ],
+                }
+            );
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(mockItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isTranscoding).toBe(true);
+            expect(decision.selectedAudioStream?.id).toBe('audio-1');
+            expect(decision.playbackUrl).toContain('audioStreamID=audio-1');
         });
 
         it('should start a playback session', async () => {

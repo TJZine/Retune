@@ -92,6 +92,7 @@ import {
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 
 // ============================================
 // Types
@@ -398,6 +399,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 setupEventWiring: this._setupEventWiring.bind(this),
                 configureChannelManagerStorage: this._configureChannelManagerStorageForSelectedServer.bind(this),
                 getSelectedServerId: this._getSelectedServerId.bind(this),
+                shouldRunAudioSetup: this._shouldRunAudioSetup.bind(this),
                 shouldRunChannelSetup: this._shouldRunChannelSetup.bind(this),
                 switchToChannel: this.switchToChannel.bind(this),
                 openServerSelect: this.openServerSelect.bind(this),
@@ -1596,6 +1598,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
+    private _shouldRunAudioSetup(): boolean {
+        if (this._mode === 'demo') {
+            return false;
+        }
+        // Check if audio setup has been completed
+        const completed = safeLocalStorageGet(RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE);
+        return completed !== '1';
+    }
+
     private _shouldRunChannelSetup(): boolean {
         if (this._mode === 'demo') {
             return false;
@@ -2003,6 +2014,20 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._eventUnsubscribers.push(() => {
             if (this._navigation) {
                 this._navigation.off('guide', guideHandler);
+            }
+        });
+
+        // Settings Toggle Handler
+        const settingsHandler = (): void => {
+            const currentScreen = this._navigation?.getCurrentScreen();
+            if (currentScreen === 'player' || currentScreen === 'guide') {
+                this._navigation?.goTo('settings');
+            }
+        };
+        this._navigation.on('settings', settingsHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('settings', settingsHandler);
             }
         });
 

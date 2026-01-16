@@ -52,6 +52,8 @@ export const SUPPORTED_AUDIO_CODECS: readonly string[] = [
     'opus',
     'mp3', // Kept but may transcode if bitrate conditional fails
     'pcm',
+    'dts',  // DTS Core - supported via passthrough on LG C-series and newer
+    'dca',  // DTS alias used by some media files
 ] as const;
 
 /**
