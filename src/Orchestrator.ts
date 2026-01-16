@@ -92,6 +92,7 @@ import {
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 
 // ============================================
 // Types
@@ -1602,8 +1603,8 @@ export class AppOrchestrator implements IAppOrchestrator {
             return false;
         }
         // Check if audio setup has been completed
-        const completed = safeLocalStorageGet('retune_audio_setup_complete');
-        return completed !== 'true';
+        const completed = safeLocalStorageGet(RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE);
+        return completed !== '1';
     }
 
     private _shouldRunChannelSetup(): boolean {

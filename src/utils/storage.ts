@@ -33,6 +33,17 @@ export function safeLocalStorageRemove(key: string): boolean {
     }
 }
 
+export function parseStoredBoolean(value: string | null): boolean | null {
+    if (value === null) return null;
+    if (value === '1') return true;
+    if (value === '0') return false;
+    return null;
+}
+
+export function isStoredTrue(value: string | null): boolean {
+    return value === '1';
+}
+
 /**
  * Clear only Retune-owned keys (prefix-based).
  * Does not call localStorage.clear() to avoid clobbering unrelated app data.
@@ -53,4 +64,3 @@ export function safeClearRetuneStorage(): void {
         // Ignore storage failures (storage may be blocked)
     }
 }
-

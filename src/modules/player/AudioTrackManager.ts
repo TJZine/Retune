@@ -9,7 +9,8 @@ import type { AudioTrack, PlaybackError } from './types';
 import { PlayerErrorCode as ErrorCode } from './types';
 import { AUDIO_TRACK_SWITCH_TIMEOUT_MS } from './constants';
 import { SUPPORTED_AUDIO_CODECS } from '../plex/stream/constants';
-import { safeLocalStorageGet } from '../../utils/storage';
+import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
+import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
 
 // ============================================
 // Type Augmentation for AudioTrackList
@@ -51,9 +52,6 @@ const AUDIO_TRACK_MAX_RETRIES = 1;
 
 /** Polling interval for track switch verification */
 const TRACK_SWITCH_POLL_INTERVAL_MS = 100;
-const DTS_PASSTHROUGH_KEY = 'retune_enable_dts_passthrough';
-
-const isStoredTrue = (value: string | null): boolean => value === '1' || value === 'true';
 
 
 // ============================================
@@ -215,7 +213,7 @@ export class AudioTrackManager {
     private _isCodecSupported(codec: string): boolean {
         const normalizedCodec = codec.toLowerCase().trim();
         if (normalizedCodec === 'dts' || normalizedCodec === 'dca' || normalizedCodec.startsWith('dts')) {
-            return isStoredTrue(safeLocalStorageGet(DTS_PASSTHROUGH_KEY));
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH));
         }
         return SUPPORTED_AUDIO_CODECS.some(
             (supported) => normalizedCodec === supported || normalizedCodec.startsWith(supported)

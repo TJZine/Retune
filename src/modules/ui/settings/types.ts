@@ -10,8 +10,6 @@
 export interface AudioSettings {
     /** Enable DTS passthrough for external receivers (requires webOS 23+) */
     dtsPassthrough: boolean;
-    /** Prefer AC3/EAC3 over TrueHD for compatibility */
-    preferCompatibleAudio: boolean;
 }
 
 /**

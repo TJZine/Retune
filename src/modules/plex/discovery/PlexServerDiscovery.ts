@@ -705,7 +705,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
     private _parseXmlBoolean(value: string | null): boolean {
         if (!value) return false;
-        return value === '1' || value.toLowerCase() === 'true';
+        return value === '1';
     }
 
     /**

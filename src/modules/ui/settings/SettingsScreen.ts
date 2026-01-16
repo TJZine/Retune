@@ -8,7 +8,7 @@ import type { INavigationManager, FocusableElement } from '../../navigation';
 import { createSettingsToggle } from './SettingsToggle';
 import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from './constants';
 import type { SettingsSectionConfig } from './types';
-import { safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
+import { parseStoredBoolean, safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
 
 /**
  * Settings screen component.
@@ -19,6 +19,10 @@ export class SettingsScreen {
     private _getNavigation: () => INavigationManager | null;
     private _focusableIds: string[] = [];
     private _toggleElements: Map<string, ReturnType<typeof createSettingsToggle>> = new Map();
+    private _toggleMetadata: Map<
+        string,
+        { storageKey: string; defaultValue: boolean; onRefresh?: (value: boolean) => void }
+    > = new Map();
 
     constructor(
         container: HTMLElement,
@@ -85,13 +89,6 @@ export class SettingsScreen {
                         value: this._loadBoolSetting(SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH, DEFAULT_SETTINGS.audio.dtsPassthrough),
                         onChange: (value) => this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH, value),
                     },
-                    {
-                        id: 'settings-prefer-compat-audio',
-                        label: 'Prefer Compatible Audio',
-                        description: 'Auto-select AC3/EAC3 when available',
-                        value: this._loadBoolSetting(SETTINGS_STORAGE_KEYS.PREFER_COMPAT_AUDIO, DEFAULT_SETTINGS.audio.preferCompatibleAudio),
-                        onChange: (value) => this._saveBoolSetting(SETTINGS_STORAGE_KEYS.PREFER_COMPAT_AUDIO, value),
-                    },
                 ],
             },
             {
@@ -142,6 +139,10 @@ export class SettingsScreen {
         for (const item of config.items) {
             const toggle = createSettingsToggle(item);
             this._toggleElements.set(item.id, toggle);
+            const meta = this._inferToggleMetadata(item.id);
+            if (meta) {
+                this._toggleMetadata.set(item.id, meta);
+            }
             items.appendChild(toggle.element);
         }
 
@@ -154,6 +155,7 @@ export class SettingsScreen {
      */
     public show(): void {
         this._container.classList.add('visible');
+        this._refreshValues();
         this._registerFocusables();
     }
 
@@ -222,11 +224,8 @@ export class SettingsScreen {
      * Load a boolean setting from localStorage.
      */
     private _loadBoolSetting(key: string, defaultValue: boolean): boolean {
-        const stored = safeLocalStorageGet(key);
-        if (stored === null) return defaultValue;
-        if (stored === '1' || stored === 'true') return true;
-        if (stored === '0' || stored === 'false') return false;
-        return defaultValue;
+        const parsed = parseStoredBoolean(safeLocalStorageGet(key));
+        return parsed === null ? defaultValue : parsed;
     }
 
     /**
@@ -247,12 +246,49 @@ export class SettingsScreen {
         }
     }
 
+    private _refreshValues(): void {
+        for (const [id, meta] of this._toggleMetadata.entries()) {
+            const toggle = this._toggleElements.get(id);
+            if (!toggle) continue;
+            const value = this._loadBoolSetting(meta.storageKey, meta.defaultValue);
+            toggle.update(value);
+            meta.onRefresh?.(value);
+        }
+    }
+
+    private _inferToggleMetadata(
+        id: string
+    ): { storageKey: string; defaultValue: boolean; onRefresh?: (value: boolean) => void } | null {
+        switch (id) {
+            case 'settings-dts-passthrough':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH,
+                    defaultValue: DEFAULT_SETTINGS.audio.dtsPassthrough,
+                };
+            case 'settings-scanline-effect':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SCANLINE_EFFECT,
+                    defaultValue: DEFAULT_SETTINGS.display.scanlineEffect,
+                    onRefresh: (value) => this._applyScanlineEffect(value),
+                };
+            case 'settings-debug-logging':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
+                    defaultValue: DEFAULT_SETTINGS.developer.debugLogging,
+                };
+            default:
+                // If we can't infer the key, don't attempt refresh.
+                return null;
+        }
+    }
+
     /**
      * Destroy the component.
      */
     public destroy(): void {
         this._unregisterFocusables();
         this._toggleElements.clear();
+        this._toggleMetadata.clear();
         this._container.innerHTML = '';
     }
 }

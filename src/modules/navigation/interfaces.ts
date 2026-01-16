@@ -241,4 +241,6 @@ export interface NavigationEventMap {
     pointerModeChange: { active: boolean };
     channelInputUpdate: { digits: string; isComplete: boolean };
     channelNumberEntered: { channelNumber: number };
+    guide: undefined;
+    settings: undefined;
 }

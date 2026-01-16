@@ -545,7 +545,7 @@ describe('AppOrchestrator', () => {
             mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-1' });
             mockChannelManager.getAllChannels.mockReturnValue([]);
             mockLocalStorage.getItem.mockImplementation((key: string) => {
-                if (key === 'retune_audio_setup_complete') return 'true';
+                if (key === 'retune_audio_setup_complete') return '1';
                 if (key === 'retune_channel_setup_v1:server-1') return null;
                 if (key === 'retune_channels_server_v1') return null;
                 return null;
@@ -568,7 +568,7 @@ describe('AppOrchestrator', () => {
             mockPlexDiscovery.getSelectedServer.mockReturnValue({ id: 'server-2' });
             mockChannelManager.getAllChannels.mockReturnValue([mockChannel]);
             mockLocalStorage.getItem.mockImplementation((key: string) => {
-                if (key === 'retune_audio_setup_complete') return 'true';
+                if (key === 'retune_audio_setup_complete') return '1';
                 if (key === 'retune_channels_server_v1') return 'server-1';
                 return null;
             });

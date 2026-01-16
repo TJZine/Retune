@@ -153,9 +153,13 @@ export class AudioSetupScreen {
             continueBtn.disabled = false;
         }
 
+        const nav = this._getNavigation();
+        const focusedId = nav?.getFocusedElement()?.id ?? null;
+        const desiredFocusId = focusedId ?? `audio-choice-${choiceId}`;
+
         // Re-register focusables to update continue button state
         this._unregisterFocusables();
-        this._registerFocusables();
+        this._registerFocusables(desiredFocusId);
     }
 
     /**
@@ -166,17 +170,16 @@ export class AudioSetupScreen {
 
         // Apply settings based on choice
         if (this._selectedChoice === 'external') {
-            // External receiver: enable DTS passthrough, disable compat mode
+            // External receiver: enable DTS passthrough
             safeLocalStorageSet(SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH, '1');
-            safeLocalStorageSet(SETTINGS_STORAGE_KEYS.PREFER_COMPAT_AUDIO, '0');
         } else {
-            // TV speakers: disable DTS passthrough, enable compat mode
+            // TV speakers: disable DTS passthrough
             safeLocalStorageSet(SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH, '0');
-            safeLocalStorageSet(SETTINGS_STORAGE_KEYS.PREFER_COMPAT_AUDIO, '1');
         }
 
         // Mark audio setup as complete
-        safeLocalStorageSet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, 'true');
+        // Store as '1'
+        safeLocalStorageSet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, '1');
 
         this._onComplete();
     }
@@ -185,7 +188,7 @@ export class AudioSetupScreen {
      * Check if audio setup is already complete.
      */
     public static isSetupComplete(): boolean {
-        return safeLocalStorageGet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE) === 'true';
+        return safeLocalStorageGet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE) === '1';
     }
 
     /**
@@ -207,7 +210,7 @@ export class AudioSetupScreen {
     /**
      * Register focusable elements.
      */
-    private _registerFocusables(): void {
+    private _registerFocusables(preferredFocusId?: string): void {
         const nav = this._getNavigation();
         if (!nav) return;
 
@@ -246,10 +249,11 @@ export class AudioSetupScreen {
             nav.registerFocusable(focusable);
         }
 
-        // Set initial focus
-        const firstBtn = buttons[0];
-        if (firstBtn) {
-            nav.setFocus(firstBtn.id);
+        const focusId = preferredFocusId && this._focusableIds.includes(preferredFocusId)
+            ? preferredFocusId
+            : (buttons[0]?.id ?? null);
+        if (focusId) {
+            nav.setFocus(focusId);
         }
     }
 

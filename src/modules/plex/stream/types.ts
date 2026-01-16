@@ -291,6 +291,8 @@ export interface HlsOptions {
     subtitleSize?: number;
     /** Audio boost percentage */
     audioBoost?: number;
+    /** Preferred audio stream ID (Plex stream id) */
+    audioStreamId?: string;
     /**
      * Optional Plex session identifier to bind the transcode session to.
      * When provided, `getTranscodeUrl()` will use this value for both

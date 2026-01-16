@@ -5,25 +5,24 @@
  */
 
 import type { SettingsConfig } from './types';
+import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 
 /**
  * localStorage keys for persisting settings.
  */
 export const SETTINGS_STORAGE_KEYS = {
     /** DTS passthrough enabled */
-    DTS_PASSTHROUGH: 'retune_enable_dts_passthrough',
-    /** Prefer compatible audio codecs */
-    PREFER_COMPAT_AUDIO: 'retune_prefer_compatible_audio',
+    DTS_PASSTHROUGH: RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH,
     /** Color theme */
-    THEME: 'retune_theme',
+    THEME: RETUNE_STORAGE_KEYS.THEME,
     /** Scanline effect enabled */
-    SCANLINE_EFFECT: 'retune_scanline_effect',
+    SCANLINE_EFFECT: RETUNE_STORAGE_KEYS.SCANLINE_EFFECT,
     /** Debug logging enabled */
-    DEBUG_LOGGING: 'retune_debug_transcode',
+    DEBUG_LOGGING: RETUNE_STORAGE_KEYS.DEBUG_LOGGING,
     /** FPS counter enabled */
-    SHOW_FPS: 'retune_show_fps',
+    SHOW_FPS: RETUNE_STORAGE_KEYS.SHOW_FPS,
     /** Audio setup completed flag */
-    AUDIO_SETUP_COMPLETE: 'retune_audio_setup_complete',
+    AUDIO_SETUP_COMPLETE: RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE,
 } as const;
 
 /**
@@ -32,7 +31,6 @@ export const SETTINGS_STORAGE_KEYS = {
 export const DEFAULT_SETTINGS: SettingsConfig = {
     audio: {
         dtsPassthrough: false,
-        preferCompatibleAudio: true,
     },
     display: {
         theme: 'dark',
