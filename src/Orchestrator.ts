@@ -135,6 +135,64 @@ export interface ChannelSetupRecord extends ChannelSetupConfig {
     updatedAt: number;
 }
 
+export interface PlaybackInfoSnapshot {
+    mode: AppMode;
+    channel: { id: string; number: number; name: string } | null;
+    program:
+        | {
+            itemKey: string;
+            title: string;
+            fullTitle: string;
+            type: string;
+            scheduledStartTime: number;
+            scheduledEndTime: number;
+            elapsedMs: number;
+            remainingMs: number;
+        }
+        | null;
+    stream:
+        | {
+            protocol: StreamDescriptor['protocol'];
+            mimeType: string;
+            isDirectPlay: boolean;
+            isTranscoding: boolean;
+            container: string;
+            videoCodec: string;
+            audioCodec: string;
+            subtitleDelivery: StreamDecision['subtitleDelivery'];
+            bitrate: number;
+            width: number;
+            height: number;
+            sessionId: string;
+            selectedAudio:
+                | {
+                    id: string;
+                    codec: string | null | undefined;
+                    channels?: number;
+                    language?: string;
+                    title?: string;
+                    default?: boolean;
+                }
+                | null;
+            selectedSubtitle:
+                | {
+                    id: string;
+                    codec: string | null | undefined;
+                    language?: string;
+                    title?: string;
+                    format?: string;
+                    default?: boolean;
+                }
+                | null;
+            directPlay?: StreamDecision['directPlay'];
+            audioFallback?: StreamDecision['audioFallback'];
+            source?: StreamDecision['source'];
+            transcodeRequest?: StreamDecision['transcodeRequest'];
+            serverDecision?: StreamDecision['serverDecision'];
+        }
+        | null;
+}
+
 /**
  * Orchestrator configuration (module configs passed at initialization)
  */
@@ -166,6 +224,8 @@ export interface IAppOrchestrator {
     isReady(): boolean;
     getCurrentScreen(): Screen | null;
     onScreenChange(handler: (from: string, to: string) => void): IDisposable;
+    getPlaybackInfoSnapshot(): PlaybackInfoSnapshot;
+    refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot>;
     switchToChannel(channelId: string): Promise<void>;
     switchToChannelByNumber(number: number): Promise<void>;
     openEPG(): void;
@@ -252,6 +312,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     // Playback fallback: when a Direct stream fails due to container/codec support, retry via HLS Direct Stream.
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
+    private _currentStreamDecision: StreamDecision | null = null;
     private _directFallbackAttemptedForItemKey: Set<string> = new Set();
     private _streamRecoveryInProgress: boolean = false;
 
@@ -527,6 +588,118 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     getNavigation(): INavigationManager | null {
         return this._navigation;
+    }
+
+    getPlaybackInfoSnapshot(): PlaybackInfoSnapshot {
+        const channel = this._channelManager?.getCurrentChannel() ?? null;
+        const program = this._currentProgramForPlayback;
+        const decision = this._currentStreamDecision;
+        const descriptor = this._currentStreamDescriptor;
+
+        return {
+            mode: this._mode,
+            channel: channel ? { id: channel.id, number: channel.number, name: channel.name } : null,
+            program: program
+                ? {
+                    itemKey: program.item.ratingKey,
+                    title: program.item.title,
+                    fullTitle: program.item.fullTitle,
+                    type: program.item.type,
+                    scheduledStartTime: program.scheduledStartTime,
+                    scheduledEndTime: program.scheduledEndTime,
+                    elapsedMs: program.elapsedMs,
+                    remainingMs: program.remainingMs,
+                }
+                : null,
+            stream:
+                decision && descriptor
+                    ? {
+                        protocol: descriptor.protocol,
+                        mimeType: descriptor.mimeType,
+                        isDirectPlay: decision.isDirectPlay,
+                        isTranscoding: decision.isTranscoding,
+                        container: decision.container,
+                        videoCodec: decision.videoCodec,
+                        audioCodec: decision.audioCodec,
+                        subtitleDelivery: decision.subtitleDelivery,
+                        bitrate: decision.bitrate,
+                        width: decision.width,
+                        height: decision.height,
+                        sessionId: decision.sessionId,
+                        selectedAudio: (() => {
+                            const a = decision.selectedAudioStream;
+                            if (!a) return null;
+                            const out: {
+                                id: string;
+                                codec: string | null | undefined;
+                                channels?: number;
+                                language?: string;
+                                title?: string;
+                                default?: boolean;
+                            } = { id: a.id, codec: a.codec };
+                            if (typeof a.channels === 'number') out.channels = a.channels;
+                            if (typeof a.language === 'string') out.language = a.language;
+                            if (typeof a.title === 'string') out.title = a.title;
+                            if (typeof a.default === 'boolean') out.default = a.default;
+                            return out;
+                        })(),
+                        selectedSubtitle: (() => {
+                            const s = decision.selectedSubtitleStream;
+                            if (!s) return null;
+                            const out: {
+                                id: string;
+                                codec: string | null | undefined;
+                                language?: string;
+                                title?: string;
+                                format?: string;
+                                default?: boolean;
+                            } = { id: s.id, codec: s.codec };
+                            if (typeof s.language === 'string') out.language = s.language;
+                            if (typeof s.title === 'string') out.title = s.title;
+                            if (typeof s.format === 'string') out.format = s.format;
+                            if (typeof s.default === 'boolean') out.default = s.default;
+                            return out;
+                        })(),
+                        directPlay: decision.directPlay,
+                        audioFallback: decision.audioFallback,
+                        source: decision.source,
+                        transcodeRequest: decision.transcodeRequest,
+                        serverDecision: decision.serverDecision,
+                    }
+                    : null,
+        };
+    }
+
+    async refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot> {
+        if (this._mode === 'demo') {
+            return this.getPlaybackInfoSnapshot();
+        }
+        const program = this._currentProgramForPlayback;
+        const decision = this._currentStreamDecision;
+        if (!program || !decision || !this._plexStreamResolver) {
+            return this.getPlaybackInfoSnapshot();
+        }
+
+        if (decision.isTranscoding && decision.transcodeRequest) {
+            try {
+                const req = decision.transcodeRequest;
+                const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
+                    sessionId: req.sessionId,
+                    maxBitrate: req.maxBitrate,
+                };
+                if (typeof req.audioStreamId === 'string') {
+                    opts.audioStreamId = req.audioStreamId;
+                }
+                decision.serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
+                    program.item.ratingKey,
+                    opts
+                );
+            } catch (error) {
+                console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
+            }
+        }
+
+        return this.getPlaybackInfoSnapshot();
     }
 
     /**
@@ -1171,12 +1344,28 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Safety limit to avoid long blocking loops on TV hardware.
         const MAX_CHANNELS_TO_PRELOAD = 100;
         const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
+        const liveChannelId = this._channelManager.getCurrentChannel()?.id ?? null;
 
         for (const channel of channelsToLoad) {
             if (loadToken !== this._epgScheduleLoadToken) {
                 return;
             }
             try {
+                // If the scheduler has been manually shifted (e.g., auto-skip on playback failures),
+                // the "daily schedule" will no longer match live playback for the active channel.
+                // Use the scheduler's own window for the currently playing channel.
+                if (liveChannelId && channel.id === liveChannelId && this._scheduler) {
+                    const state = this._scheduler.getState();
+                    if (state.isActive && state.channelId === channel.id) {
+                        const window = this._scheduler.getScheduleWindow(startTime, endTime);
+                        this._epg.loadScheduleForChannel(channel.id, {
+                            ...window,
+                            programs: [...window.programs],
+                        });
+                        continue;
+                    }
+                }
+
                 const resolved = await this._channelManager.resolveChannelContent(channel.id);
 
                 const scheduleConfig = this._buildDailyScheduleConfig(channel, resolved.items, startTime);
@@ -1201,6 +1390,43 @@ export class AppOrchestrator implements IAppOrchestrator {
             !this._epg.getFocusedProgram()
         ) {
             this._epg.focusNow();
+        }
+    }
+
+    private _refreshEpgScheduleForLiveChannel(): void {
+        if (!this._epg || !this._channelManager || !this._scheduler) {
+            return;
+        }
+        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
+            return;
+        }
+        if (!this._epg.isVisible()) {
+            return;
+        }
+
+        const range = this._getEpgScheduleRangeMs();
+        if (!range) {
+            return;
+        }
+
+        const current = this._channelManager.getCurrentChannel();
+        if (!current) {
+            return;
+        }
+
+        const state = this._scheduler.getState();
+        if (!state.isActive || state.channelId !== current.id) {
+            return;
+        }
+
+        try {
+            const window = this._scheduler.getScheduleWindow(range.startTime, range.endTime);
+            this._epg.loadScheduleForChannel(current.id, {
+                ...window,
+                programs: [...window.programs],
+            });
+        } catch (error) {
+            console.warn('[Orchestrator] Failed to refresh live EPG schedule:', error);
         }
     }
 
@@ -2162,6 +2388,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         this._currentProgramForPlayback = program;
         this._notifyNowPlaying(program);
+        this._refreshEpgScheduleForLiveChannel();
 
         try {
             const stream =
@@ -2253,6 +2480,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 startOffsetMs: clampedOffset,
                 directPlay: false,
             });
+            this._currentStreamDecision = decision;
 
             const metadata: StreamDescriptor['mediaMetadata'] = {
                 title: program.item.title,
@@ -2317,6 +2545,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             startOffsetMs: clampedOffset,
             directPlay: true,
         });
+        this._currentStreamDecision = decision;
 
         // Build mediaMetadata carefully for exactOptionalPropertyTypes
         const metadata: StreamDescriptor['mediaMetadata'] = {
@@ -2467,6 +2696,17 @@ export class AppOrchestrator implements IAppOrchestrator {
                         this._navigation.goTo('auth');
                     } else {
                         this._navigation.goTo('server-select');
+                    }
+                }
+                break;
+            case 'yellow':
+                // Developer convenience: toggle the Dev Menu overlay (implemented in App.ts).
+                // Use long-press to avoid stealing Yellow for future user-facing shortcuts.
+                if (event.isLongPress) {
+                    try {
+                        (window as unknown as { retune?: { toggleDevMenu?: () => void } }).retune?.toggleDevMenu?.();
+                    } catch {
+                        // ignore
                     }
                 }
                 break;

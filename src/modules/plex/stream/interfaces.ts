@@ -180,6 +180,16 @@ export interface IPlexStreamResolver {
      */
     getTranscodeUrl(itemKey: string, options: HlsOptions): string;
 
+    /**
+     * Fetch Plex's "universal transcode decision" response for a session.
+     * This is a best-effort diagnostic helper to show whether PMS is copying
+     * video (Direct Stream) vs transcoding video/audio.
+     */
+    fetchUniversalTranscodeDecision(
+        itemKey: string,
+        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string }
+    ): Promise<NonNullable<StreamDecision['serverDecision']>>;
+
     // ========================================
     // Events
     // ========================================

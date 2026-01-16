@@ -279,6 +279,65 @@ export interface StreamDecision {
     height: number;
     /** Output bitrate in kbps */
     bitrate: number;
+
+    // ========================================
+    // Diagnostics (best-effort)
+    // ========================================
+
+    /**
+     * Summary of the selected source media version (before any server-side transcode/remux).
+     * This is what Retune evaluated for direct play capability.
+     */
+    source?: {
+        container: string;
+        videoCodec: string;
+        audioCodec: string;
+        width: number;
+        height: number;
+        bitrate: number;
+    };
+
+    /**
+     * Retune's local direct-play eligibility decision for the selected media version.
+     * If `allowed` is false, `reasons` explains which constraint blocked direct play.
+     */
+    directPlay?: {
+        allowed: boolean;
+        reasons: string[];
+    };
+
+    /**
+     * When the default Plex audio track is TrueHD/MLP, Retune will prefer an AC3/EAC3/AAC
+     * fallback track (non-commentary) if available. This records that selection.
+     */
+    audioFallback?: {
+        fromCodec: string;
+        toCodec: string;
+        reason: string;
+    };
+
+    /**
+     * Parameters Retune used when requesting an HLS session (transcode or direct-stream).
+     * Note: Plex may still decide to direct-stream video while transcoding only audio.
+     */
+    transcodeRequest?: {
+        sessionId: string;
+        maxBitrate: number;
+        audioStreamId?: string;
+    };
+
+    /**
+     * Parsed response from Plex's universal transcode decision endpoint (if fetched).
+     * Useful for showing what PMS actually decided (video vs audio transcode).
+     */
+    serverDecision?: {
+        fetchedAt: number;
+        videoDecision?: string;
+        audioDecision?: string;
+        subtitleDecision?: string;
+        decisionCode?: string;
+        decisionText?: string;
+    };
 }
 
 /**
