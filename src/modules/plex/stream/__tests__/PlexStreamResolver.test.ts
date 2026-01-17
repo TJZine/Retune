@@ -597,6 +597,8 @@ describe('PlexStreamResolver', () => {
             const resolver = new PlexStreamResolver(config);
 
             mockFetch.mockResolvedValue({
+                ok: true,
+                status: 200,
                 text: async () =>
                     '<MediaContainer decisionCode="1000" decisionText="Transcode"><TranscodeSession videoDecision="copy" audioDecision="transcode" subtitleDecision="none" /></MediaContainer>',
             });

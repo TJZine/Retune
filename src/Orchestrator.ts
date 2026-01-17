@@ -289,22 +289,22 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _plexDiscovery: IPlexServerDiscovery | null = null;
     private _plexLibrary: IPlexLibrary | null = null;
     private _plexStreamResolver: IPlexStreamResolver | null = null;
-	    private _channelManager: IChannelManager | null = null;
-	    private _scheduler: IChannelScheduler | null = null;
-	    private _videoPlayer: IVideoPlayer | null = null;
-	    private _epg: IEPGComponent | null = null;
-	    private _epgScheduleLoadToken = 0;
-	    private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
-	    private _nowPlayingInfoFetchToken = 0;
-	    private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
-	    private _nowPlayingStreamDecisionFetchToken = 0;
-	    private _nowPlayingStreamDecisionFetchedForSessionId: string | null = null;
-	    private _nowPlayingHandler: ((message: string) => void) | null = null;
-	    private _pendingNowPlayingChannelId: string | null = null;
-	    private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
-	    private _activeScheduleDayKey: number | null = null;
-	    private _pendingDayRolloverDayKey: number | null = null;
-	    private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
+    private _channelManager: IChannelManager | null = null;
+    private _scheduler: IChannelScheduler | null = null;
+    private _videoPlayer: IVideoPlayer | null = null;
+    private _epg: IEPGComponent | null = null;
+    private _epgScheduleLoadToken = 0;
+    private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
+    private _nowPlayingInfoFetchToken = 0;
+    private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+    private _nowPlayingStreamDecisionFetchToken = 0;
+    private _nowPlayingStreamDecisionFetchedForSessionId: string | null = null;
+    private _nowPlayingHandler: ((message: string) => void) | null = null;
+    private _pendingNowPlayingChannelId: string | null = null;
+    private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
+    private _activeScheduleDayKey: number | null = null;
+    private _pendingDayRolloverDayKey: number | null = null;
+    private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
     private _config: OrchestratorConfig | null = null;
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
@@ -2729,28 +2729,28 @@ export class AppOrchestrator implements IAppOrchestrator {
 	        return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
 	    }
 
-	    private _isNowPlayingStreamDebugEnabled(): boolean {
-	        try {
-	            return (
-	                isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG)) ||
-	                isStoredTrue(
-	                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW)
-	                )
-	            );
-	        } catch {
-	            return false;
-	        }
-	    }
+    private _isNowPlayingStreamDebugEnabled(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG)
+            );
+        } catch {
+            return false;
+        }
+    }
 
-	    private _isNowPlayingStreamDebugAutoShowEnabled(): boolean {
-	        try {
-	            return isStoredTrue(
-	                safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW)
-	            );
-	        } catch {
-	            return false;
-	        }
-	    }
+    private _isNowPlayingStreamDebugAutoShowEnabled(): boolean {
+        try {
+            return (
+                this._isNowPlayingStreamDebugEnabled() &&
+                isStoredTrue(
+                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW)
+                )
+            );
+        } catch {
+            return false;
+        }
+    }
 
 	    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
         if (!this._navigation || !this._nowPlayingInfo) return;
@@ -2819,62 +2819,63 @@ export class AppOrchestrator implements IAppOrchestrator {
 	        return lines.slice(0, 6).join('\n');
 	    }
 
-	    private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
+    private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
         if (!this._isNowPlayingStreamDebugEnabled()) return;
         if (!this._plexStreamResolver) return;
 
-	        const program = this._currentProgramForPlayback;
-	        const decision = this._currentStreamDecision;
-	        if (!program || !decision || !decision.isTranscoding || !decision.transcodeRequest) {
-	            return;
-	        }
+        const program = this._currentProgramForPlayback;
+        const decision = this._currentStreamDecision;
+        if (!program || !decision || !decision.isTranscoding || !decision.transcodeRequest) {
+            return;
+        }
 
-	        const sessionId = decision.transcodeRequest.sessionId;
-	        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
-	            return;
-	        }
+        const sessionId = decision.transcodeRequest.sessionId;
+        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
+            return;
+        }
 
-	        const token = ++this._nowPlayingStreamDecisionFetchToken;
-	        try {
-	            const req = decision.transcodeRequest;
-	            const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-	                sessionId: req.sessionId,
-	                maxBitrate: req.maxBitrate,
-	            };
-	            if (typeof req.audioStreamId === 'string') {
-	                opts.audioStreamId = req.audioStreamId;
-	            }
+        const token = ++this._nowPlayingStreamDecisionFetchToken;
+        try {
+            const req = decision.transcodeRequest;
+            const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
+                sessionId: req.sessionId,
+                maxBitrate: req.maxBitrate,
+            };
+            if (typeof req.audioStreamId === 'string') {
+                opts.audioStreamId = req.audioStreamId;
+            }
 
-	            const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
-	                program.item.ratingKey,
-	                opts
-	            );
-	            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
+            const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
+                program.item.ratingKey,
+                opts
+            );
+            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
+            if (this._currentStreamDecision !== decision) return;
 
-	            decision.serverDecision = serverDecision;
-	            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
+            decision.serverDecision = serverDecision;
+            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
 
-	            if (this._nowPlayingInfo && this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-	                try {
-	                    const freshProgram =
-	                        this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
-	                    const channel = this._channelManager?.getCurrentChannel() ?? null;
-	                    if (freshProgram) {
-	                        const viewModel = this._buildNowPlayingInfoViewModel(
-	                            freshProgram,
-	                            channel,
-	                            null
-	                        );
-	                        this._nowPlayingInfo.update(viewModel);
-	                    }
-	                } catch {
-	                    // ignore
-	                }
-	            }
-	        } catch {
-	            // Debug-only; ignore failures.
-	        }
-	    }
+            if (this._nowPlayingInfo && this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+                try {
+                    const freshProgram =
+                        this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
+                    const channel = this._channelManager?.getCurrentChannel() ?? null;
+                    if (freshProgram) {
+                        const viewModel = this._buildNowPlayingInfoViewModel(
+                            freshProgram,
+                            channel,
+                            null
+                        );
+                        this._nowPlayingInfo.update(viewModel);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        } catch {
+            // Debug-only; ignore failures.
+        }
+    }
 
     private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
         if (this._streamRecoveryInProgress) {

@@ -1025,6 +1025,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             { method: 'GET', headers: this._config.getAuthHeaders() },
             4000
         );
+        if (!response.ok) {
+            throw new Error(`PMS decision request failed: ${response.status}`);
+        }
         const raw = await response.text();
 
         const parsed = this._parseUniversalDecisionResponse(raw);

@@ -705,31 +705,32 @@ export class App {
 	        }, 5000) as unknown as number;
 	    }
 
-	    private async _copyToClipboard(text: string): Promise<boolean> {
-	        try {
-	            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-	                await navigator.clipboard.writeText(text);
-	                return true;
-	            }
-	        } catch {
-	            // fall through to legacy path
-	        }
-	        try {
-	            const ta = document.createElement('textarea');
-	            ta.value = text;
-	            ta.style.position = 'fixed';
-	            ta.style.left = '-9999px';
-	            ta.style.top = '0';
-	            document.body.appendChild(ta);
-	            ta.focus();
-	            ta.select();
-	            const ok = document.execCommand('copy');
-	            ta.remove();
-	            return ok;
-	        } catch {
-	            return false;
-	        }
-	    }
+    private async _copyToClipboard(text: string): Promise<boolean> {
+        try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch {
+            // fall through to legacy path
+        }
+        let ta: HTMLTextAreaElement | null = null;
+        try {
+            ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            return document.execCommand('copy');
+        } catch {
+            return false;
+        } finally {
+            ta?.remove();
+        }
+    }
 
     private _toggleDevMenu(): void {
         if (!this._devMenuContainer) return;
@@ -991,7 +992,7 @@ export class App {
                 return `${kbps} kbps`;
             };
 
-	            const rawJson = JSON.stringify(snapshot, null, 2);
+            const rawJson = JSON.stringify(snapshot, null, 2);
 
             const lines: string[] = [];
             lines.push('PLAYBACK INFO');
