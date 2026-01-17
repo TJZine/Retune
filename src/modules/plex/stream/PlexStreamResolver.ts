@@ -103,17 +103,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             // Fallback: infer from Chromium version in User Agent
             // Chromium versions mapped to webOS versions:
             // - webOS 25 (C5, 2025): Chromium 120+
-            // - webOS 24 (C4, 2024): Chromium 108-119
-            // - webOS 23 (C3, 2023): Chromium 108
-            // - webOS 22: Chromium 94-107
-            // - webOS 21: Chromium 87-93
+            // - webOS 24 (C4, 2024): Chromium 108
+            // - webOS 23 (C3, 2023): Chromium 94
+            // - webOS 22: Chromium 87
             // - webOS 6.x and older: Chromium <87
             const chromeMajor = this._getChromeMajor();
             if (chromeMajor !== null) {
                 if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
-                if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
-                if (chromeMajor >= 94) return '23.0';   // webOS 22
-                if (chromeMajor >= 87) return '22.0';   // webOS 21
+                if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4)
+                if (chromeMajor >= 94) return '23.0';   // webOS 23
+                if (chromeMajor >= 87) return '22.0';   // webOS 22
             }
 
             return '6.0'; // Conservative fallback for older TVs
@@ -801,8 +800,6 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     'aac{bitrate:800000}',
                     'ac3{bitrate:800000}',
                     'eac3{bitrate:800000}',
-                    'dts{bitrate:1536000}',
-                    'dca{bitrate:1536000}',
                 ];
 
                 // If user explicitly enabled DTS passthrough and we're on a modern webOS stack,
@@ -814,8 +811,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                         return false;
                     }
                 })();
-                if (dtsEnabled && isWebOs && chromeMajor !== null && chromeMajor >= 108) {
-                    audioDecoders.push('dca-ma{bitrate:1536000}');
+                if (dtsEnabled) {
+                    audioDecoders.push('dts{bitrate:1536000}');
+                    audioDecoders.push('dca{bitrate:1536000}');
+                    if (isWebOs && chromeMajor !== null && chromeMajor >= 108) {
+                        audioDecoders.push('dca-ma{bitrate:1536000}');
+                    }
                 }
 
                 return `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=${audioDecoders.join(',')}`;

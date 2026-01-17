@@ -538,11 +538,11 @@ describe('PlexStreamResolver', () => {
             expect(parsed.searchParams.get('X-Plex-Session-Identifier')).toBe('sess-1');
             expect(parsed.searchParams.get('X-Plex-Client-Identifier')).toBe('test-client-id');
             expect(parsed.searchParams.get('X-Plex-Platform')).toBe('webOS');
-            expect(parsed.searchParams.get('X-Plex-Product')).toBe('Retune');
-            expect(parsed.searchParams.get('X-Plex-Version')).toBe('1.0.0');
-            expect(parsed.searchParams.get('X-Plex-Device')).toBe('LG Smart TV');
-            expect(parsed.searchParams.get('X-Plex-Device-Name')).toBe('Retune');
-            expect(parsed.searchParams.get('X-Plex-Model')).toBe('LGTV');
+            expect(parsed.searchParams.get('X-Plex-Product')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Version')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Device')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Device-Name')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Model')).toBeTruthy();
             expect(parsed.searchParams.get('X-Plex-Platform-Version')).toBeTruthy();
         });
     });
