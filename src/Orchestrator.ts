@@ -62,6 +62,7 @@ import {
     type ResolvedChannelContent,
 } from './modules/scheduler/channel-manager';
 import {
+    DEFAULT_CHANNEL_SETUP_MAX,
     MAX_CHANNELS,
 } from './modules/scheduler/channel-manager/constants';
 import {
@@ -114,6 +115,7 @@ export interface ModuleStatus {
 export interface ChannelSetupConfig {
     serverId: string;
     selectedLibraryIds: string[];
+    maxChannels: number;
     enabledStrategies: {
         collections: boolean;
         libraryFallback: boolean;
@@ -847,6 +849,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         let errorCount = 0;
         const errors: string[] = [];
 
+        const requestedMax = Number.isFinite(config.maxChannels) ? config.maxChannels : DEFAULT_CHANNEL_SETUP_MAX;
+        const effectiveMaxChannels = Math.min(
+            Math.max(Math.floor(requestedMax), 1),
+            MAX_CHANNELS
+        );
+
         const shuffleSeedFor = (value: string): number => this._hashSeed(value);
         const MAX_SCAN_ITEMS = 500;
 
@@ -923,7 +931,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     : [];
 
                 for (const genre of uniqueGenres) {
-                    if (pending.length >= MAX_CHANNELS) {
+                    if (pending.length >= effectiveMaxChannels) {
                         reachedMaxChannels = true;
                         break;
                     }
@@ -942,7 +950,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 }
 
                 for (const director of uniqueDirectors) {
-                    if (pending.length >= MAX_CHANNELS) {
+                    if (pending.length >= effectiveMaxChannels) {
                         reachedMaxChannels = true;
                         break;
                     }
@@ -972,7 +980,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         try {
             for (const ch of pending) {
-                if (created >= MAX_CHANNELS) {
+                if (created >= effectiveMaxChannels) {
                     reachedMaxChannels = true;
                     break;
                 }
@@ -1043,6 +1051,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             serverId,
             selectedLibraryIds: [...setupConfig.selectedLibraryIds],
             enabledStrategies: { ...setupConfig.enabledStrategies },
+            maxChannels: setupConfig.maxChannels,
             createdAt,
             updatedAt: Date.now(),
         };
@@ -1818,7 +1827,18 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (typeof parsed.updatedAt !== 'number' || !Number.isFinite(parsed.updatedAt)) {
                 return null;
             }
-            return parsed as ChannelSetupRecord;
+            const maxChannels = typeof parsed.maxChannels === 'number' && Number.isFinite(parsed.maxChannels)
+                ? parsed.maxChannels
+                : DEFAULT_CHANNEL_SETUP_MAX;
+
+            return {
+                serverId: parsed.serverId,
+                selectedLibraryIds: parsed.selectedLibraryIds,
+                enabledStrategies: strategies as ChannelSetupConfig['enabledStrategies'],
+                maxChannels,
+                createdAt: parsed.createdAt,
+                updatedAt: parsed.updatedAt,
+            };
         } catch {
             return null;
         }
@@ -2696,17 +2716,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                         this._navigation.goTo('auth');
                     } else {
                         this._navigation.goTo('server-select');
-                    }
-                }
-                break;
-            case 'yellow':
-                // Developer convenience: toggle the Dev Menu overlay (implemented in App.ts).
-                // Use long-press to avoid stealing Yellow for future user-facing shortcuts.
-                if (event.isLongPress) {
-                    try {
-                        (window as unknown as { retune?: { toggleDevMenu?: () => void } }).retune?.toggleDevMenu?.();
-                    } catch {
-                        // ignore
                     }
                 }
                 break;

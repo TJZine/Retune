@@ -108,11 +108,14 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             part.streams,
             request.audioStreamId
         );
-        const subtitleStream = this._findStream(
-            part.streams,
-            3,
+        // Subtitles are not user-selectable in Retune yet; do not auto-select defaults.
+        // This prevents accidental burn-in which forces video transcoding.
+        const subtitleStream =
             request.subtitleStreamId
-        );
+                ? (part.streams.find(
+                    (s) => s.streamType === 3 && s.id === request.subtitleStreamId
+                ) ?? null)
+                : null;
         const shouldForceAudioStreamId = this._shouldForceTranscodeAudioStreamId(
             part.streams,
             request.audioStreamId
@@ -178,7 +181,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             if (canDirect && request.directPlay !== false) {
                 // Direct play
-                playbackUrl = this._buildDirectPlayUrl(part.key);
+                playbackUrl = this._buildDirectPlayUrl(part.key, sessionId);
                 protocol = 'http';
                 container = media.container;
                 videoCodec = media.videoCodec;
@@ -501,7 +504,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
         const audioCodec = media.audioCodec.toLowerCase();
-        if (audioCodec === 'dts' || audioCodec === 'dca' || audioCodec.startsWith('dts')) {
+        const isDtsFamily =
+            audioCodec === 'dts' ||
+            audioCodec.startsWith('dts') ||
+            audioCodec === 'dca' ||
+            audioCodec.startsWith('dca'); // includes dca-ma (DTS-HD MA)
+        if (isDtsFamily) {
             const isDtsEnabled = ((): boolean => {
                 try {
                     if (!isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH))) {
@@ -652,6 +660,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('mediaBufferSize', '102400');
             // Retune does not yet provide subtitle track selection. Avoid forcing burn-in, which can trigger video transcode.
             params.set('subtitles', 'none');
+            // Redundant belt-and-suspenders for servers that ignore `subtitles=none`.
+            params.set('subtitleStreamID', '0');
+            params.set('subtitleFormat', 'none');
             params.set('Accept-Language', 'en');
         } else {
             // Compat: minimal, conservative set for older/stricter servers
@@ -677,10 +688,33 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
         };
 
+        const chromeMajor = ((): number | null => {
+            try {
+                if (typeof navigator === 'undefined') return null;
+                const ua = navigator.userAgent || '';
+                const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                if (!chromeMatch) return null;
+                const n = Number(chromeMatch[1]);
+                return Number.isFinite(n) ? n : null;
+            } catch {
+                return null;
+            }
+        })();
+        const isWebOs = ((): boolean => {
+            try {
+                if (typeof navigator === 'undefined') return false;
+                return /Web0S|webOS/i.test(navigator.userAgent || '');
+            } catch {
+                return false;
+            }
+        })();
+
         // HEVC detection (common for 4K MKV libraries).
         const supportsHevc =
             canPlay('video/mp4; codecs="hvc1.1.6.L93.B0"') ||
-            canPlay('video/mp4; codecs="hev1.1.6.L93.B0"');
+            canPlay('video/mp4; codecs="hev1.1.6.L93.B0"') ||
+            // Fallback: webOS 23+ (Chromium 108+) should support HEVC decode.
+            (isWebOs && chromeMajor !== null && chromeMajor >= 108);
 
         const supportsVp9 =
             canPlay('video/webm; codecs="vp9"') ||
@@ -705,7 +739,31 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         params.set(
             'X-Plex-Client-Capabilities',
-            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000},dts{bitrate:1536000},dca{bitrate:1536000}`
+            (() => {
+                const audioDecoders: string[] = [
+                    'mp3',
+                    'aac{bitrate:800000}',
+                    'ac3{bitrate:800000}',
+                    'eac3{bitrate:800000}',
+                    'dts{bitrate:1536000}',
+                    'dca{bitrate:1536000}',
+                ];
+
+                // If user explicitly enabled DTS passthrough and we're on a modern webOS stack,
+                // advertise DTS-HD MA as well (Plex often labels it as `dca-ma`).
+                const dtsEnabled = ((): boolean => {
+                    try {
+                        return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH));
+                    } catch {
+                        return false;
+                    }
+                })();
+                if (dtsEnabled && isWebOs && chromeMajor !== null && chromeMajor >= 108) {
+                    audioDecoders.push('dca-ma{bitrate:1536000}');
+                }
+
+                return `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=${audioDecoders.join(',')}`;
+            })()
         );
 
         // Add client params (video element requests cannot include headers, so use query params)
@@ -1029,7 +1087,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @param partKey - Media part key
      * @returns Full playback URL
      */
-    private _buildDirectPlayUrl(partKey: string): string {
+    private _buildDirectPlayUrl(partKey: string, sessionId: string): string {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             throw this._createError(
@@ -1040,13 +1098,13 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         const baseUri = this._selectBaseUriForMixedContent(serverUri);
-        return this._buildUrlWithToken(baseUri, partKey);
+        return this._buildUrlWithToken(baseUri, partKey, sessionId);
     }
 
     /**
      * Build URL with auth token.
      */
-    private _buildUrlWithToken(baseUri: string, partKey: string): string {
+    private _buildUrlWithToken(baseUri: string, partKey: string, sessionId: string): string {
         const headers = this._config.getAuthHeaders();
         const token = headers['X-Plex-Token'];
         const baseUrl = new URL(baseUri);
@@ -1058,6 +1116,67 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         );
         if (token) {
             url.searchParams.set('X-Plex-Token', token);
+        }
+        url.searchParams.set('X-Plex-Session-Identifier', sessionId);
+
+        // Video element requests cannot include headers; attach identity via query params.
+        for (const [key, value] of Object.entries(headers)) {
+            if (!key.startsWith('X-Plex-')) {
+                continue;
+            }
+            if (typeof value !== 'string' || value.length === 0) {
+                continue;
+            }
+            url.searchParams.set(key, value);
+        }
+
+        if (!url.searchParams.has('X-Plex-Client-Identifier')) {
+            url.searchParams.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
+        }
+        if (!url.searchParams.has('X-Plex-Platform')) {
+            url.searchParams.set('X-Plex-Platform', 'webOS');
+        }
+        if (!url.searchParams.has('X-Plex-Product')) {
+            url.searchParams.set('X-Plex-Product', 'Retune');
+        }
+        if (!url.searchParams.has('X-Plex-Version')) {
+            url.searchParams.set('X-Plex-Version', '1.0.0');
+        }
+        if (!url.searchParams.has('X-Plex-Device')) {
+            url.searchParams.set('X-Plex-Device', 'LG Smart TV');
+        }
+        if (!url.searchParams.has('X-Plex-Device-Name')) {
+            url.searchParams.set('X-Plex-Device-Name', 'Retune');
+        }
+        if (!url.searchParams.has('X-Plex-Platform-Version')) {
+            const detectedVersion = ((): string => {
+                try {
+                    if (typeof window !== 'undefined') {
+                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
+                        if (webOSTV?.platform?.version) {
+                            return webOSTV.platform.version;
+                        }
+                    }
+                    if (typeof navigator !== 'undefined') {
+                        const ua = navigator.userAgent || '';
+                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
+                        if (chromeMatch) {
+                            const chromeMajor = Number(chromeMatch[1]);
+                            if (chromeMajor >= 120) return '25.0';
+                            if (chromeMajor >= 108) return '24.0';
+                            if (chromeMajor >= 94) return '22.0';
+                            if (chromeMajor >= 87) return '21.0';
+                        }
+                    }
+                    return '6.0';
+                } catch {
+                    return '6.0';
+                }
+            })();
+            url.searchParams.set('X-Plex-Platform-Version', detectedVersion);
+        }
+        if (!url.searchParams.has('X-Plex-Model')) {
+            url.searchParams.set('X-Plex-Model', 'LGTV');
         }
         return url.toString();
     }

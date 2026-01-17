@@ -47,26 +47,7 @@
   - Cross-check impacted files from Codanna’s results against the actual diff; document how tests/rollbacks cover each high-risk area.
   - When context is unclear, prefer broader discovery (lower threshold or higher limit) over assuming coverage.
 
-## Agent Skills
+## Skills Locations (Codex vs other agents)
 
-Specialized skills are available in `.agent/skills/` and auto-discovered when relevant:
-
-| Skill | Triggers On |
-|-------|-------------|
-| `accessibility-patterns` | D-pad navigation, keyboard a11y, ARIA, focus management |
-| `api-client-patterns` | Fetch wrappers, retry logic, caching, request handling |
-| `code-review-checklist` | PR reviews, self-review, quality checks |
-| `error-handling-strategies` | Result/Either patterns, custom errors, recovery |
-| `git-workflow` | Branching, commits, pull requests |
-| `logging-observability` | Structured logs, debugging, correlation IDs |
-| `performance-optimization` | DOM virtualization, lazy loading, debounce |
-| `plex-api-reference` | Plex API, authentication, streaming endpoints |
-| `refactoring-patterns` | Code restructuring, extraction patterns |
-| `security-practices` | Token handling, XSS/CSRF, input validation |
-| `state-management` | Signals, observer pattern, reactive state |
-| `testing-strategies` | Writing tests, debugging test failures |
-| `typescript-patterns` | Type design, TypeScript idioms |
-| `web-research` | External docs, web search, research tasks |
-| `webos-debugging` | TV deployment, ares-CLI, webOS performance |
-
-Skills load only when triggered, keeping base context minimal (~100 tokens per skill at startup).
+- **Antigravity / other agents (repo-local)**: source skills live in `.agent/skills/`.
+- **Codex CLI (repo-local)**: Codex loads repo skills from `.codex/skills/`.

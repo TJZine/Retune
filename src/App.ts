@@ -770,7 +770,7 @@ export class App {
                         <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
                         <div style="display:flex;gap:10px;align-items:center;">
                             <button id="dev-playback-refresh" style="padding:8px;cursor:pointer;">Refresh</button>
-                            <span style="font-size:12px;color:#888;">Tip: long-press Yellow to open this menu on webOS</span>
+                            <span style="font-size:12px;color:#888;">Tip: Ctrl+Shift+D (desktop) or run window.retune.toggleDevMenu() in the console</span>
                         </div>
                         <pre id="dev-playback-info" style="margin:0;max-height:260px;overflow:auto;background:#111;border:1px solid #333;border-radius:6px;padding:10px;color:#ddd;font-size:12px;line-height:1.35;white-space:pre-wrap;"></pre>
                         <div style="font-size:12px;color:#888;">
@@ -933,8 +933,8 @@ export class App {
             } else {
                 const s = snapshot.stream;
                 lines.push(`Protocol: ${s.protocol.toUpperCase()}  MIME: ${s.mimeType}`);
-                lines.push(`Retune:    ${s.isDirectPlay ? 'DIRECT PLAY' : 'SERVER-MANAGED STREAM'}`);
-                lines.push(`Output:    ${s.container}  video=${s.videoCodec}  audio=${s.audioCodec}  ${s.width}x${s.height}  ${fmtKbps(s.bitrate)}`);
+                lines.push(`Retune:    ${s.isDirectPlay ? 'DIRECT PLAY' : 'HLS SESSION REQUESTED (Plex decides copy vs transcode)'}`);
+                lines.push(`Target:    ${s.container}  video=${s.videoCodec}  audio=${s.audioCodec}  ${s.width}x${s.height}  ${fmtKbps(s.bitrate)}`);
                 lines.push(`Subtitles: ${s.subtitleDelivery}`);
 
                 if (s.serverDecision) {
