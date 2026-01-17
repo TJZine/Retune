@@ -200,7 +200,6 @@ src/
 └── index.ts           # Entry point
 
 docs/                  # Documentation
-spec-pack/             # Module specifications
 ```
 
 ---

@@ -121,15 +121,15 @@ test-results/
 agent-memory/
 orchestration-docs/
 prompts/
-spec-pack/*
 docs/review/*
+docs/templates/
+docs/checklists/
+docs/_local/
+docs/AGENTIC_DEV_WORKFLOW.md
+docs/AI_DANGER_ZONES.md
+docs/SECURITY_LOGGING_RULES.md
 WEBOS_COMPETITOR_BEST_PRACTICES.md
 webos_epg_report.md
-
-
-# 2. Un-ignore (keep) the specific file
-!spec-pack/artifact-2-shared-types.ts
-
 
 
 # Storybook

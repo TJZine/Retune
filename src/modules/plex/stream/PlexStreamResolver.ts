@@ -64,6 +64,81 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         };
     }
 
+    private _getChromeMajor(): number | null {
+        try {
+            if (typeof navigator === 'undefined') return null;
+            const ua = navigator.userAgent || '';
+            const chromeMatch = ua.match(/Chrome\/(\d+)/);
+            if (!chromeMatch) return null;
+            const n = Number(chromeMatch[1]);
+            return Number.isFinite(n) ? n : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _isWebOs(): boolean {
+        try {
+            if (typeof navigator === 'undefined') return false;
+            return /Web0S|webOS/i.test(navigator.userAgent || '');
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Detect webOS platform version from webOSTV API or Chromium user agent mapping.
+     * Used for X-Plex-Platform-Version when constructing transcode URLs.
+     */
+    private _detectPlatformVersion(): string {
+        try {
+            // Try webOSTV API first (most accurate)
+            if (typeof window !== 'undefined') {
+                const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
+                if (webOSTV?.platform?.version) {
+                    return webOSTV.platform.version;
+                }
+            }
+
+            // Fallback: infer from Chromium version in User Agent
+            // Chromium versions mapped to webOS versions:
+            // - webOS 25 (C5, 2025): Chromium 120+
+            // - webOS 24 (C4, 2024): Chromium 108
+            // - webOS 23 (C3, 2023): Chromium 94
+            // - webOS 22: Chromium 87
+            // - webOS 6.x and older: Chromium <87
+            const chromeMajor = this._getChromeMajor();
+            if (chromeMajor !== null) {
+                if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
+                if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4)
+                if (chromeMajor >= 94) return '23.0';   // webOS 23
+                if (chromeMajor >= 87) return '22.0';   // webOS 22
+            }
+
+            return '6.0'; // Conservative fallback for older TVs
+        } catch {
+            return '6.0';
+        }
+    }
+
+    private _applyDefaultIdentityParams(params: URLSearchParams): void {
+        const defaults: Record<string, string> = {
+            'X-Plex-Client-Identifier': this._config.clientIdentifier,
+            'X-Plex-Platform': 'webOS',
+            'X-Plex-Product': 'Retune',
+            'X-Plex-Version': '1.0.0',
+            'X-Plex-Device': 'LG Smart TV',
+            'X-Plex-Device-Name': 'Retune',
+            'X-Plex-Platform-Version': this._detectPlatformVersion(),
+            'X-Plex-Model': 'LGTV',
+        };
+        for (const [key, value] of Object.entries(defaults)) {
+            if (!params.has(key)) {
+                params.set(key, value);
+            }
+        }
+    }
+
     // ========================================
     // Stream Resolution
     // ========================================
@@ -108,11 +183,14 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             part.streams,
             request.audioStreamId
         );
-        const subtitleStream = this._findStream(
-            part.streams,
-            3,
+        // Subtitles are not user-selectable in Retune yet; do not auto-select defaults.
+        // This prevents accidental burn-in which forces video transcoding.
+        const subtitleStream =
             request.subtitleStreamId
-        );
+                ? (part.streams.find(
+                    (s) => s.streamType === 3 && s.id === request.subtitleStreamId
+                ) ?? null)
+                : null;
         const shouldForceAudioStreamId = this._shouldForceTranscodeAudioStreamId(
             part.streams,
             request.audioStreamId
@@ -120,9 +198,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const defaultAudio = this._findStream(part.streams, 2);
         const audioFallbackInfo =
             defaultAudio &&
-            audioStream &&
-            this._isTrueHdCodec(defaultAudio.codec) &&
-            !this._isTrueHdCodec(audioStream.codec)
+                audioStream &&
+                this._isTrueHdCodec(defaultAudio.codec) &&
+                !this._isTrueHdCodec(audioStream.codec)
                 ? {
                     fromCodec: (defaultAudio.codec || 'unknown').toLowerCase(),
                     toCodec: (audioStream.codec || 'unknown').toLowerCase(),
@@ -178,7 +256,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             if (canDirect && request.directPlay !== false) {
                 // Direct play
-                playbackUrl = this._buildDirectPlayUrl(part.key);
+                playbackUrl = this._buildDirectPlayUrl(part.key, sessionId);
                 protocol = 'http';
                 container = media.container;
                 videoCodec = media.videoCodec;
@@ -501,7 +579,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
         const audioCodec = media.audioCodec.toLowerCase();
-        if (audioCodec === 'dts' || audioCodec === 'dca' || audioCodec.startsWith('dts')) {
+        const isDtsFamily =
+            audioCodec.startsWith('dts') ||
+            audioCodec.startsWith('dca'); // includes dca-ma (DTS-HD MA)
+        if (isDtsFamily) {
             const isDtsEnabled = ((): boolean => {
                 try {
                     if (!isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH))) {
@@ -652,6 +733,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('mediaBufferSize', '102400');
             // Retune does not yet provide subtitle track selection. Avoid forcing burn-in, which can trigger video transcode.
             params.set('subtitles', 'none');
+            // Redundant belt-and-suspenders for servers that ignore `subtitles=none`.
+            params.set('subtitleStreamID', '0');
+            params.set('subtitleFormat', 'none');
             params.set('Accept-Language', 'en');
         } else {
             // Compat: minimal, conservative set for older/stricter servers
@@ -677,10 +761,15 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
         };
 
+        const chromeMajor = this._getChromeMajor();
+        const isWebOs = this._isWebOs();
+
         // HEVC detection (common for 4K MKV libraries).
         const supportsHevc =
             canPlay('video/mp4; codecs="hvc1.1.6.L93.B0"') ||
-            canPlay('video/mp4; codecs="hev1.1.6.L93.B0"');
+            canPlay('video/mp4; codecs="hev1.1.6.L93.B0"') ||
+            // Fallback: webOS 23+ (Chromium 108+) should support HEVC decode.
+            (isWebOs && chromeMajor !== null && chromeMajor >= 108);
 
         const supportsVp9 =
             canPlay('video/webm; codecs="vp9"') ||
@@ -705,7 +794,33 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         params.set(
             'X-Plex-Client-Capabilities',
-            `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=mp3,aac{bitrate:800000},ac3{bitrate:800000},eac3{bitrate:800000},dts{bitrate:1536000},dca{bitrate:1536000}`
+            ((): string => {
+                const audioDecoders: string[] = [
+                    'mp3',
+                    'aac{bitrate:800000}',
+                    'ac3{bitrate:800000}',
+                    'eac3{bitrate:800000}',
+                ];
+
+                // If user explicitly enabled DTS passthrough and we're on a modern webOS stack,
+                // advertise DTS-HD MA as well (Plex often labels it as `dca-ma`).
+                const dtsEnabled = ((): boolean => {
+                    try {
+                        return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH));
+                    } catch {
+                        return false;
+                    }
+                })();
+                if (dtsEnabled) {
+                    audioDecoders.push('dts{bitrate:1536000}');
+                    audioDecoders.push('dca{bitrate:1536000}');
+                    if (isWebOs && chromeMajor !== null && chromeMajor >= 108) {
+                        audioDecoders.push('dca-ma{bitrate:1536000}');
+                    }
+                }
+
+                return `protocols=http-live-streaming,http-mp4-streaming,http-streaming-video;videoDecoders=${videoDecoders.join(',')};audioDecoders=${audioDecoders.join(',')}`;
+            })()
         );
 
         // Add client params (video element requests cannot include headers, so use query params)
@@ -804,66 +919,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // Ensure minimum required ID params are present even if getAuthHeaders is mocked/minimal
-        if (!params.has('X-Plex-Client-Identifier')) {
-            params.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
-        }
-        if (!params.has('X-Plex-Platform')) {
-            params.set('X-Plex-Platform', 'webOS');
-        }
-        if (!params.has('X-Plex-Product')) {
-            params.set('X-Plex-Product', 'Retune');
-        }
-        if (!params.has('X-Plex-Version')) {
-            params.set('X-Plex-Version', '1.0.0');
-        }
-        if (!params.has('X-Plex-Device')) {
-            params.set('X-Plex-Device', 'LG Smart TV');
-        }
-        if (!params.has('X-Plex-Device-Name')) {
-            params.set('X-Plex-Device-Name', 'Retune');
-        }
-        if (!params.has('X-Plex-Platform-Version')) {
-            // Detect actual webOS version instead of hardcoding 6.0
-            // This ensures PMS uses the correct device profile for the TV's capabilities
-            const detectedVersion = ((): string => {
-                try {
-                    // Try webOSTV API first (most accurate)
-                    if (typeof window !== 'undefined') {
-                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
-                        if (webOSTV?.platform?.version) {
-                            return webOSTV.platform.version;
-                        }
-                    }
-                    // Fallback: infer from Chromium version in User Agent
-                    // Chromium versions mapped to webOS versions:
-                    // - webOS 25 (C5, 2025): Chromium 120+
-                    // - webOS 24 (C4, 2024): Chromium 108-119
-                    // - webOS 23 (C3, 2023): Chromium 108
-                    // - webOS 22: Chromium 94-107
-                    // - webOS 21: Chromium 87-93
-                    // - webOS 6.x and older: Chromium <87
-                    if (typeof navigator !== 'undefined') {
-                        const ua = navigator.userAgent || '';
-                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
-                        if (chromeMatch) {
-                            const chromeMajor = Number(chromeMatch[1]);
-                            if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
-                            if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
-                            if (chromeMajor >= 94) return '22.0';   // webOS 22
-                            if (chromeMajor >= 87) return '21.0';   // webOS 21
-                        }
-                    }
-                    return '6.0'; // Conservative fallback for older TVs
-                } catch {
-                    return '6.0';
-                }
-            })();
-            params.set('X-Plex-Platform-Version', detectedVersion);
-        }
-        // Plex server profile matching frequently requires a non-empty model; provide a sane default.
-        if (!params.has('X-Plex-Model')) {
-            params.set('X-Plex-Model', 'LGTV');
-        }
+        this._applyDefaultIdentityParams(params);
 
         const url = new URL('/video/:/transcode/universal/start.m3u8', baseUri);
         url.search = params.toString();
@@ -1029,7 +1085,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @param partKey - Media part key
      * @returns Full playback URL
      */
-    private _buildDirectPlayUrl(partKey: string): string {
+    private _buildDirectPlayUrl(partKey: string, sessionId: string): string {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             throw this._createError(
@@ -1040,13 +1096,13 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         const baseUri = this._selectBaseUriForMixedContent(serverUri);
-        return this._buildUrlWithToken(baseUri, partKey);
+        return this._buildUrlWithToken(baseUri, partKey, sessionId);
     }
 
     /**
      * Build URL with auth token.
      */
-    private _buildUrlWithToken(baseUri: string, partKey: string): string {
+    private _buildUrlWithToken(baseUri: string, partKey: string, sessionId: string): string {
         const headers = this._config.getAuthHeaders();
         const token = headers['X-Plex-Token'];
         const baseUrl = new URL(baseUri);
@@ -1059,6 +1115,20 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         if (token) {
             url.searchParams.set('X-Plex-Token', token);
         }
+        url.searchParams.set('X-Plex-Session-Identifier', sessionId);
+
+        // Video element requests cannot include headers; attach identity via query params.
+        for (const [key, value] of Object.entries(headers)) {
+            if (!key.startsWith('X-Plex-')) {
+                continue;
+            }
+            if (typeof value !== 'string' || value.length === 0) {
+                continue;
+            }
+            url.searchParams.set(key, value);
+        }
+
+        this._applyDefaultIdentityParams(url.searchParams);
         return url.toString();
     }
 

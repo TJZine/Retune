@@ -524,6 +524,29 @@ describe('PlexStreamResolver', () => {
         });
     });
 
+    describe('_buildUrlWithToken', () => {
+        it('should include default identity params when auth headers are minimal', () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            const url = (resolver as unknown as {
+                _buildUrlWithToken: (baseUri: string, partKey: string, sessionId: string) => string;
+            })._buildUrlWithToken('http://192.168.1.100:32400', '/library/parts/12345/file.mp4', 'sess-1');
+
+            const parsed = new URL(url);
+            expect(parsed.searchParams.get('X-Plex-Token')).toBe('mock-token');
+            expect(parsed.searchParams.get('X-Plex-Session-Identifier')).toBe('sess-1');
+            expect(parsed.searchParams.get('X-Plex-Client-Identifier')).toBe('test-client-id');
+            expect(parsed.searchParams.get('X-Plex-Platform')).toBe('webOS');
+            expect(parsed.searchParams.get('X-Plex-Product')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Version')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Device')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Device-Name')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Model')).toBeTruthy();
+            expect(parsed.searchParams.get('X-Plex-Platform-Version')).toBeTruthy();
+        });
+    });
+
     describe('fetchUniversalTranscodeDecision', () => {
         it('should parse decision attributes from XML response', async () => {
             const config = createMockConfig();

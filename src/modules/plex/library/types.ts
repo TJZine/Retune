@@ -7,8 +7,8 @@
 import { AppErrorCode } from '../../../types/app-errors';
 
 // ============================================
-// Shared Types (Copied from artifact-2-shared-types.ts)
-// Cannot import directly as spec-pack is outside rootDir
+// Shared Types (repo-local)
+// These types are maintained in-repo for runtime use.
 // ============================================
 
 /**

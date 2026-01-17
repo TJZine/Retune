@@ -61,11 +61,19 @@ const mockEpgConfig = {
     autoScrollToNow: true,
 };
 
+const mockNowPlayingInfoConfig = {
+    containerId: 'now-playing-info-container',
+    autoHideMs: 10_000,
+    posterWidth: 111,
+    posterHeight: 222,
+};
+
 const mockConfig: OrchestratorConfig = {
     plexConfig: mockPlexConfig,
     navConfig: mockNavConfig,
     playerConfig: mockPlayerConfig,
     epgConfig: mockEpgConfig,
+    nowPlayingInfoConfig: mockNowPlayingInfoConfig,
 };
 
 // ============================================
@@ -132,6 +140,9 @@ const mockNavigation = {
     goTo: jest.fn(),
     replaceScreen: jest.fn(),
     getCurrentScreen: jest.fn().mockReturnValue('player'),
+    isModalOpen: jest.fn().mockReturnValue(false),
+    openModal: jest.fn(),
+    closeModal: jest.fn(),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
     destroy: jest.fn(),
@@ -139,6 +150,27 @@ const mockNavigation = {
 
 jest.mock('../modules/navigation', () => ({
     NavigationManager: jest.fn(() => mockNavigation),
+}));
+
+jest.mock('../modules/ui/now-playing-info', () => ({
+    NowPlayingInfoOverlay: jest.fn(() => ({
+        initialize: jest.fn(),
+        show: jest.fn(),
+        update: jest.fn(),
+        hide: jest.fn(),
+        isVisible: jest.fn(() => false),
+        destroy: jest.fn(),
+        setAutoHideMs: jest.fn(),
+        resetAutoHideTimer: jest.fn(),
+        setOnAutoHide: jest.fn(),
+    })),
+    NOW_PLAYING_INFO_MODAL_ID: 'now-playing-info',
+    NOW_PLAYING_INFO_DEFAULTS: {
+        autoHideMs: 10_000,
+        posterWidth: 320,
+        posterHeight: 480,
+    },
+    NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS: [5_000, 10_000, 15_000, 30_000, 60_000, 120_000],
 }));
 
 // Mock PlexAuth
@@ -173,6 +205,8 @@ jest.mock('../modules/plex/discovery', () => ({
 // Mock PlexLibrary
 const mockPlexLibrary = {
     getLibraries: jest.fn().mockResolvedValue([]),
+    getImageUrl: jest.fn().mockReturnValue('http://test/resized.jpg'),
+    getItem: jest.fn().mockResolvedValue(null),
     on: jest.fn(() => jest.fn()),
 };
 
@@ -238,6 +272,8 @@ const mockScheduler = {
     unloadChannel: jest.fn(),
     syncToCurrentTime: jest.fn(),
     getCurrentProgram: jest.fn().mockReturnValue(null),
+    getState: jest.fn().mockReturnValue({ isActive: false, channelId: null }),
+    getScheduleWindow: jest.fn().mockReturnValue({ startTime: 0, endTime: 0, programs: [] }),
     skipToNext: jest.fn(),
     skipToPrevious: jest.fn(),
     pauseSyncTimer: jest.fn(),
@@ -246,9 +282,17 @@ const mockScheduler = {
     off: jest.fn(),
 };
 
-jest.mock('../modules/scheduler/scheduler', () => ({
-    ChannelScheduler: jest.fn(() => mockScheduler),
-}));
+jest.mock('../modules/scheduler/scheduler', () => {
+    class MockShuffleGenerator {}
+    return {
+        ChannelScheduler: jest.fn(() => mockScheduler),
+        ShuffleGenerator: MockShuffleGenerator,
+        ScheduleCalculator: {
+            buildScheduleIndex: jest.fn(() => ({})),
+            generateScheduleWindow: jest.fn(() => []),
+        },
+    };
+});
 
 // Mock VideoPlayer
 const mockVideoPlayer = {
@@ -295,6 +339,13 @@ const mockEpg = {
     hide: jest.fn(),
     destroy: jest.fn(),
     isVisible: jest.fn().mockReturnValue(false),
+    handleNavigation: jest.fn().mockReturnValue(false),
+    handleSelect: jest.fn().mockReturnValue(false),
+    handleBack: jest.fn().mockReturnValue(true),
+    loadChannels: jest.fn(),
+    setGridAnchorTime: jest.fn(),
+    loadScheduleForChannel: jest.fn(),
+    getFocusedProgram: jest.fn().mockReturnValue(null),
     focusChannel: jest.fn(),
     focusNow: jest.fn(),
     on: jest.fn(() => jest.fn()),
@@ -313,6 +364,7 @@ describe('AppOrchestrator', () => {
     let orchestrator: AppOrchestrator;
     let schedulerHandlers: { programStart?: (program: unknown) => void };
     let playerHandlers: { ended?: () => void; error?: (error: unknown) => void };
+    let navHandlers: { keyPress?: (payload: unknown) => void };
     let pauseHandler: (() => void | Promise<void>) | null;
     let resumeHandler: (() => void | Promise<void>) | null;
 
@@ -320,6 +372,7 @@ describe('AppOrchestrator', () => {
         jest.clearAllMocks();
         schedulerHandlers = {};
         playerHandlers = {};
+        navHandlers = {};
         pauseHandler = null;
         resumeHandler = null;
 
@@ -357,6 +410,13 @@ describe('AppOrchestrator', () => {
                 }
             });
 
+        (mockNavigation.on as jest.Mock).mockImplementation(
+            (event: string, handler: (payload: unknown) => void) => {
+                if (event === 'keyPress') {
+                    navHandlers.keyPress = handler;
+                }
+                return jest.fn();
+            });
         (mockLifecycle.onPause as jest.Mock).mockImplementation(
             (handler: () => void | Promise<void>) => {
                 pauseHandler = handler;
@@ -383,6 +443,78 @@ describe('AppOrchestrator', () => {
             expect(require('../modules/scheduler/scheduler').ChannelScheduler).toHaveBeenCalled();
             expect(require('../modules/player').VideoPlayer).toHaveBeenCalled();
             expect(require('../modules/ui/epg').EPGComponent).toHaveBeenCalled();
+        });
+
+        it('should preserve caller-supplied nowPlayingInfoConfig.onAutoHide', async () => {
+            const prev = jest.fn();
+            const configWithHandler: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    onAutoHide: prev,
+                },
+            };
+
+            mockNavigation.isModalOpen.mockReturnValue(true);
+            await orchestrator.initialize(configWithHandler);
+
+            // Orchestrator wraps the handler on initialize; invoke it to validate chaining + close behavior.
+            configWithHandler.nowPlayingInfoConfig.onAutoHide?.();
+
+            expect(prev).toHaveBeenCalledTimes(1);
+            expect(mockNavigation.closeModal).toHaveBeenCalledWith('now-playing-info');
+        });
+
+        it('should honor config nowPlayingInfoConfig.autoHideMs when storage is unset', async () => {
+            const configWithAutoHide: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    autoHideMs: 15_000,
+                },
+            };
+
+            mockLocalStorage.getItem.mockReturnValue(null);
+            await orchestrator.initialize(configWithAutoHide);
+
+            const autoHideMs = (orchestrator as unknown as { _getNowPlayingInfoAutoHideMs: () => number })
+                ._getNowPlayingInfoAutoHideMs();
+
+            expect(autoHideMs).toBe(15_000);
+        });
+
+        it('should use configured nowPlayingInfo poster sizes when resizing', async () => {
+            const configWithPosterSizes: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    posterWidth: 111,
+                    posterHeight: 222,
+                },
+            };
+
+            await orchestrator.initialize(configWithPosterSizes);
+
+            const program = {
+                elapsedMs: 1234,
+                item: {
+                    ratingKey: 'rk1',
+                    type: 'movie',
+                    title: 'Test Movie',
+                    fullTitle: null,
+                    year: 2024,
+                    contentRating: 'PG',
+                    durationMs: 60_000,
+                    thumb: '/thumb',
+                },
+            };
+            const channel = { id: 'ch1', name: 'Test Channel', number: 1 };
+            const details = { type: 'movie', title: 'Test Movie', year: 2024, durationMs: 60_000, thumb: '/thumb' };
+
+            (orchestrator as unknown as { _buildNowPlayingInfoViewModel: (a: unknown, b: unknown, c: unknown) => unknown })
+                ._buildNowPlayingInfoViewModel(program as unknown, channel as unknown, details as unknown);
+
+            expect(mockPlexLibrary.getImageUrl).toHaveBeenCalledWith('/thumb', 111, 222);
         });
     });
 
@@ -978,6 +1110,27 @@ describe('AppOrchestrator', () => {
             orchestrator.toggleEPG();
 
             expect(mockEpg.hide).toHaveBeenCalled();
+        });
+
+        it('should allow EPG while Now Playing modal is open and back should not close EPG', async () => {
+            mockNavigation.isModalOpen.mockReturnValue(true);
+            mockEpg.isVisible.mockReturnValue(true);
+
+            await orchestrator.start();
+
+            orchestrator.openEPG();
+            expect(mockNavigation.closeModal).not.toHaveBeenCalled();
+
+            const keyPress = navHandlers.keyPress;
+            expect(keyPress).toBeDefined();
+            keyPress?.({
+                button: 'back',
+                isRepeat: false,
+                isLongPress: false,
+                timestamp: Date.now(),
+                originalEvent: { preventDefault: jest.fn() },
+            });
+            expect(mockEpg.handleBack).not.toHaveBeenCalled();
         });
     });
 

@@ -14,6 +14,7 @@ import type { LifecycleAppError, AppPhase } from './modules/lifecycle/types';
 import type { NavigationConfig } from './modules/navigation';
 import type { VideoPlayerConfig } from './modules/player';
 import type { EPGConfig } from './modules/ui/epg';
+import type { NowPlayingInfoConfig } from './modules/ui/now-playing-info';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
 import { ChannelSetupScreen } from './modules/ui/channel-setup';
@@ -71,6 +72,11 @@ const DEFAULT_EPG_CONFIG: EPGConfig = {
     rowHeight: 96,
     showCurrentTimeIndicator: true,
     autoScrollToNow: true,
+};
+
+const DEFAULT_NOW_PLAYING_INFO_CONFIG: NowPlayingInfoConfig = {
+    containerId: 'now-playing-info-container',
+    autoHideMs: 10_000,
 };
 
 // ============================================
@@ -243,6 +249,11 @@ export class App {
         epgContainer.id = 'epg-container';
         epgContainer.className = 'epg-container';
         root.appendChild(epgContainer);
+
+        // Now Playing Info overlay container
+        const nowPlayingContainer = document.createElement('div');
+        nowPlayingContainer.id = 'now-playing-info-container';
+        root.appendChild(nowPlayingContainer);
 
         // Splash container (startup screen)
         const splashContainer = document.createElement('div');
@@ -504,6 +515,7 @@ export class App {
             navConfig: DEFAULT_NAV_CONFIG,
             playerConfig: DEFAULT_PLAYER_CONFIG,
             epgConfig: DEFAULT_EPG_CONFIG,
+            nowPlayingInfoConfig: DEFAULT_NOW_PLAYING_INFO_CONFIG,
         };
     }
 
@@ -770,7 +782,7 @@ export class App {
                         <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
                         <div style="display:flex;gap:10px;align-items:center;">
                             <button id="dev-playback-refresh" style="padding:8px;cursor:pointer;">Refresh</button>
-                            <span style="font-size:12px;color:#888;">Tip: long-press Yellow to open this menu on webOS</span>
+                            <span style="font-size:12px;color:#888;">Tip: Ctrl+Shift+D (desktop) or run window.retune.toggleDevMenu() in the console</span>
                         </div>
                         <pre id="dev-playback-info" style="margin:0;max-height:260px;overflow:auto;background:#111;border:1px solid #333;border-radius:6px;padding:10px;color:#ddd;font-size:12px;line-height:1.35;white-space:pre-wrap;"></pre>
                         <div style="font-size:12px;color:#888;">
@@ -933,8 +945,8 @@ export class App {
             } else {
                 const s = snapshot.stream;
                 lines.push(`Protocol: ${s.protocol.toUpperCase()}  MIME: ${s.mimeType}`);
-                lines.push(`Retune:    ${s.isDirectPlay ? 'DIRECT PLAY' : 'SERVER-MANAGED STREAM'}`);
-                lines.push(`Output:    ${s.container}  video=${s.videoCodec}  audio=${s.audioCodec}  ${s.width}x${s.height}  ${fmtKbps(s.bitrate)}`);
+                lines.push(`Retune:    ${s.isDirectPlay ? 'DIRECT PLAY' : 'HLS SESSION REQUESTED (Plex decides copy vs transcode)'}`);
+                lines.push(`Target:    ${s.container}  video=${s.videoCodec}  audio=${s.audioCodec}  ${s.width}x${s.height}  ${fmtKbps(s.bitrate)}`);
                 lines.push(`Subtitles: ${s.subtitleDelivery}`);
 
                 if (s.serverDecision) {

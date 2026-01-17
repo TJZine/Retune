@@ -35,7 +35,7 @@ import {
 
 /**
  * Channel-specific error with AppErrorCode.
- * @see spec-pack/modules/channel-manager.md Error Handling
+ * Error handling guidance lives in repo-local docs and checklists (see `docs/`).
  */
 export class ChannelError extends Error {
     public readonly code: AppErrorCode;

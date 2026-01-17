@@ -19,6 +19,7 @@ export const RETUNE_STORAGE_KEYS = {
     // Display
     SCANLINE_EFFECT: 'retune_scanline_effect',
     THEME: 'retune_theme',
+    NOW_PLAYING_INFO_AUTO_HIDE_MS: 'retune_now_playing_info_auto_hide_ms',
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',

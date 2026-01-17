@@ -9,6 +9,9 @@ import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
 import type { PlexLibraryType } from '../../plex/library';
 import type { FocusableElement } from '../../navigation';
 import { safeLocalStorageGet } from '../../../utils/storage';
+import { DEFAULT_CHANNEL_SETUP_MAX, MAX_CHANNELS } from '../../scheduler/channel-manager/constants';
+
+const CHANNEL_LIMIT_PRESETS = [50, 100, 150, 200, 300, 500, 750, 999];
 
 interface SetupStrategyState {
     collections: boolean;
@@ -38,6 +41,8 @@ export class ChannelSetupScreen {
         genres: false,
         directors: false,
     };
+    private _maxChannels: number = DEFAULT_CHANNEL_SETUP_MAX;
+    private _channelLimitOptions: number[] = CHANNEL_LIMIT_PRESETS.filter((value) => value <= MAX_CHANNELS);
     private _step: SetupStep = 1;
     private _focusableIds: string[] = [];
     private _preferredFocusId: string | null = null;
@@ -53,6 +58,11 @@ export class ChannelSetupScreen {
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
         this._container = container;
         this._orchestrator = orchestrator;
+
+        if (!this._channelLimitOptions.includes(DEFAULT_CHANNEL_SETUP_MAX)) {
+            this._channelLimitOptions.push(DEFAULT_CHANNEL_SETUP_MAX);
+            this._channelLimitOptions.sort((a, b) => a - b);
+        }
 
         this._container.classList.add('screen');
         this._container.style.position = 'absolute';
@@ -121,6 +131,7 @@ export class ChannelSetupScreen {
         this._isLoading = false;
         this._isBuilding = false;
         this._buildSummary = null;
+        this._maxChannels = DEFAULT_CHANNEL_SETUP_MAX;
         this._errorEl.textContent = '';
     }
 
@@ -309,6 +320,38 @@ export class ChannelSetupScreen {
             list.appendChild(button);
         }
 
+        const maxButton = document.createElement('button');
+        maxButton.id = 'setup-max-channels';
+        maxButton.className = 'setup-toggle';
+
+        const maxLabel = document.createElement('span');
+        maxLabel.className = 'setup-toggle-label';
+        maxLabel.textContent = 'Max channels';
+
+        const maxMeta = document.createElement('span');
+        maxMeta.className = 'setup-toggle-meta';
+        maxMeta.textContent = `Default ${DEFAULT_CHANNEL_SETUP_MAX}. Limit up to ${MAX_CHANNELS}.`;
+
+        const maxState = document.createElement('span');
+        maxState.className = 'setup-toggle-state';
+        maxState.textContent = String(this._maxChannels);
+
+        maxButton.appendChild(maxLabel);
+        maxButton.appendChild(maxMeta);
+        maxButton.appendChild(maxState);
+
+        maxButton.addEventListener('click', () => {
+            this._preferredFocusId = maxButton.id;
+            const currentIndex = this._channelLimitOptions.indexOf(this._maxChannels);
+            const nextIndex = currentIndex >= 0
+                ? (currentIndex + 1) % this._channelLimitOptions.length
+                : 0;
+            this._maxChannels = this._channelLimitOptions[nextIndex] ?? DEFAULT_CHANNEL_SETUP_MAX;
+            this._renderStep();
+        });
+
+        list.appendChild(maxButton);
+
         this._contentEl.appendChild(list);
 
         const actions = document.createElement('div');
@@ -423,6 +466,7 @@ export class ChannelSetupScreen {
         const config: ChannelSetupConfig = {
             serverId,
             selectedLibraryIds: Array.from(this._selectedLibraryIds),
+            maxChannels: this._maxChannels,
             enabledStrategies: { ...this._strategies },
         };
 

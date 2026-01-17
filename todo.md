@@ -52,7 +52,7 @@
 ## Plex JWT Authentication (Future - Per ADR-006)
 
 > Currently using legacy PIN flow. JWT is the recommended Plex auth flow.
-> See: `spec-pack/modules/plex-auth.md#jwt-authentication-flow`
+> Track JWT auth work as a standalone doc under `docs/` when ready (flow + endpoints + rollback).
 
 - [ ] JWK generation and persistence (Ed25519 key pair)
 - [ ] Device JWT signing for PIN polling

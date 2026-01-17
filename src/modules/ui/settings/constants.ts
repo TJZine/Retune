@@ -21,6 +21,8 @@ export const SETTINGS_STORAGE_KEYS = {
     DEBUG_LOGGING: RETUNE_STORAGE_KEYS.DEBUG_LOGGING,
     /** FPS counter enabled */
     SHOW_FPS: RETUNE_STORAGE_KEYS.SHOW_FPS,
+    /** Now Playing Info overlay auto-hide timeout (ms) */
+    NOW_PLAYING_INFO_AUTO_HIDE_MS: RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS,
     /** Audio setup completed flag */
     AUDIO_SETUP_COMPLETE: RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE,
 } as const;
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
     display: {
         theme: 'dark',
         scanlineEffect: false,
+        nowPlayingInfoAutoHideMs: 10_000,
     },
     developer: {
         debugLogging: false,

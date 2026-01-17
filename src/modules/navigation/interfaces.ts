@@ -4,8 +4,7 @@
  * @version 1.0.0
  */
 
-// Navigation module interfaces - local definitions matching the shared type surface.
-// These mirror the contracts in spec-pack/artifact-2-shared-types.ts.
+// Navigation module interfaces - local definitions matching the app's shared type surface.
 
 /**
  * Navigation Manager Interface
@@ -135,6 +134,8 @@ export interface KeyEvent {
     timestamp: number;
     /** Original DOM event */
     originalEvent: KeyboardEvent;
+    /** Whether a handler consumed the event (prevents NavigationManager default handling) */
+    handled?: boolean;
 }
 
 /**

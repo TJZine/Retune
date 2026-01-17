@@ -37,6 +37,11 @@ export const KEY_MAP: Map<number, RemoteButton> = new Map([
     [404, 'green'],
     [405, 'yellow'],
     [406, 'blue'],
+    // Desktop keyboard fallbacks (use the same internal button identifiers)
+    [112, 'red'],    // F1
+    [113, 'green'],  // F2
+    [114, 'yellow'], // F3
+    [115, 'blue'],   // F4
 
     // Numbers 0-9 (48-57)
     [48, 'num0'],

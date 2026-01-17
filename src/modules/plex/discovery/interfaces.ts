@@ -14,7 +14,6 @@ import { IDisposable } from '../../../utils/interfaces';
 /**
  * Plex Server Discovery Interface.
  * Manages server discovery, connection testing, and selection.
- * @see spec-pack/artifact-2-shared-types.ts for SSOT
  */
 export interface IPlexServerDiscovery {
     // Discovery

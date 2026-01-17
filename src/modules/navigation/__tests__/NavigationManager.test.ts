@@ -288,6 +288,20 @@ describe('NavigationManager', () => {
             expect(handler).toHaveBeenCalled();
         });
 
+        it('should stop navigation handling when keyPress prevents default', () => {
+            nav.replaceScreen('player');
+            const openModalSpy = jest.spyOn(nav, 'openModal');
+
+            nav.on('keyPress', (event) => {
+                event.handled = true;
+            });
+
+            // Back button (keyCode 461) would normally open exit-confirm at player root.
+            dispatchKeyEvent(461);
+
+            expect(openModalSpy).not.toHaveBeenCalled();
+        });
+
         it('should move focus on arrow keys', () => {
             const el1 = createMockElement('btn1');
             const el2 = createMockElement('btn2');
@@ -694,4 +708,3 @@ describe('NavigationManager', () => {
         });
     });
 });
-

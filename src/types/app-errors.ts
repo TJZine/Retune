@@ -6,7 +6,7 @@
 
 /**
  * Unified error codes for consistent error handling across the app.
- * Mirrors spec-pack/artifact-2-shared-types.ts (kept in src for runtime use).
+ * Canonical error taxonomy (kept in src for runtime use).
  */
 export enum AppErrorCode {
     // Authentication Errors (1xx)

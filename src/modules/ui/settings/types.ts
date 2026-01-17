@@ -20,6 +20,8 @@ export interface DisplaySettings {
     theme: 'dark' | 'retro-green' | 'retro-amber';
     /** Enable subtle CRT scanline overlay effect */
     scanlineEffect: boolean;
+    /** Now Playing Info overlay auto-hide timeout (ms) */
+    nowPlayingInfoAutoHideMs: number;
 }
 
 /**
@@ -62,11 +64,43 @@ export interface SettingsToggleConfig {
 }
 
 /**
+ * Settings select option configuration.
+ */
+export interface SettingsSelectOption {
+    label: string;
+    value: number;
+}
+
+/**
+ * Settings select item configuration.
+ */
+export interface SettingsSelectConfig {
+    /** Unique identifier */
+    id: string;
+    /** Display label */
+    label: string;
+    /** Optional description text */
+    description?: string;
+    /** Current value */
+    value: number;
+    /** Available options */
+    options: SettingsSelectOption[];
+    /** Whether the select is disabled */
+    disabled?: boolean;
+    /** Reason for being disabled (shown to user) */
+    disabledReason?: string;
+    /** Callback when value changes */
+    onChange: (value: number) => void;
+}
+
+export type SettingsItemConfig = SettingsToggleConfig | SettingsSelectConfig;
+
+/**
  * Settings section configuration.
  */
 export interface SettingsSectionConfig {
     /** Section title */
     title: string;
     /** Toggle items in this section */
-    items: SettingsToggleConfig[];
+    items: SettingsItemConfig[];
 }

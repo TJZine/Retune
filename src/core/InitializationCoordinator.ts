@@ -22,6 +22,7 @@ import type { IChannelManager } from '../modules/scheduler/channel-manager';
 import type { IChannelScheduler } from '../modules/scheduler/scheduler';
 import type { IVideoPlayer } from '../modules/player';
 import type { IEPGComponent } from '../modules/ui/epg';
+import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
 import type { IDisposable } from '../utils/interfaces';
 import type { AppMode } from '../types';
 import type { OrchestratorConfig, ModuleStatus } from '../Orchestrator';
@@ -45,6 +46,7 @@ export interface InitializationDependencies {
     scheduler: IChannelScheduler | null;
     videoPlayer: IVideoPlayer | null;
     epg: IEPGComponent | null;
+    nowPlayingInfo: INowPlayingInfoOverlay | null;
 }
 
 /**
@@ -138,6 +140,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
 
     // EPG init promise (prevents duplicate initialization)
     private _epgInitPromise: Promise<void> | null = null;
+    private _nowPlayingInfoInitPromise: Promise<void> | null = null;
 
     constructor(
         private readonly _config: OrchestratorConfig,
@@ -577,6 +580,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
      */
     private async _initPhase5(): Promise<void> {
         if (this._callbacks.getModuleStatus('epg-ui') === 'ready') {
+            await this._initNowPlayingInfoUI();
             return;
         }
         if (this._epgInitPromise) {
@@ -616,6 +620,42 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             });
 
         await this._epgInitPromise;
+        await this._initNowPlayingInfoUI();
+    }
+
+    private async _initNowPlayingInfoUI(): Promise<void> {
+        if (this._callbacks.getModuleStatus('now-playing-info-ui') === 'ready') {
+            return;
+        }
+        if (this._nowPlayingInfoInitPromise) {
+            await this._nowPlayingInfoInitPromise;
+            return;
+        }
+        if (!this._deps.nowPlayingInfo || !this._config) {
+            return;
+        }
+
+        const startTime = Date.now();
+        this._callbacks.updateModuleStatus('now-playing-info-ui', 'initializing');
+        const init = async (): Promise<void> => {
+            this._deps.nowPlayingInfo!.initialize(this._config.nowPlayingInfoConfig);
+            this._callbacks.updateModuleStatus(
+                'now-playing-info-ui',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        };
+        this._nowPlayingInfoInitPromise = init()
+            .catch((e) => {
+                this._callbacks.updateModuleStatus('now-playing-info-ui', 'error');
+                throw e;
+            })
+            .finally(() => {
+                this._nowPlayingInfoInitPromise = null;
+            });
+
+        await this._nowPlayingInfoInitPromise;
     }
 
     // ============================================
