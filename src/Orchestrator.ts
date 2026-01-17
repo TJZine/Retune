@@ -2729,10 +2729,17 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _getNowPlayingInfoAutoHideMs(): number {
         const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS);
         const parsed = raw ? Number(raw) : NaN;
-        if (Number.isFinite(parsed) && parsed > 0) {
-            const normalized = Math.max(1000, Math.floor(parsed));
-            if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
-                return normalized;
+        const configured = this._config?.nowPlayingInfoConfig.autoHideMs;
+        const candidates = [
+            ...(Number.isFinite(parsed) ? [parsed] : []),
+            ...(typeof configured === 'number' && Number.isFinite(configured) ? [configured] : []),
+        ];
+        for (const candidate of candidates) {
+            if (candidate > 0) {
+                const normalized = Math.max(1000, Math.floor(candidate));
+                if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
+                    return normalized;
+                }
             }
         }
         return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;

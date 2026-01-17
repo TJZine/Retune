@@ -465,6 +465,24 @@ describe('AppOrchestrator', () => {
             expect(mockNavigation.closeModal).toHaveBeenCalledWith('now-playing-info');
         });
 
+        it('should honor config nowPlayingInfoConfig.autoHideMs when storage is unset', async () => {
+            const configWithAutoHide: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    autoHideMs: 15_000,
+                },
+            };
+
+            mockLocalStorage.getItem.mockReturnValue(null);
+            await orchestrator.initialize(configWithAutoHide);
+
+            const autoHideMs = (orchestrator as unknown as { _getNowPlayingInfoAutoHideMs: () => number })
+                ._getNowPlayingInfoAutoHideMs();
+
+            expect(autoHideMs).toBe(15_000);
+        });
+
         it('should use configured nowPlayingInfo poster sizes when resizing', async () => {
             const configWithPosterSizes: OrchestratorConfig = {
                 ...mockConfig,

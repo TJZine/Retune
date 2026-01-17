@@ -112,13 +112,31 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             if (chromeMajor !== null) {
                 if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
                 if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
-                if (chromeMajor >= 94) return '22.0';   // webOS 22
-                if (chromeMajor >= 87) return '21.0';   // webOS 21
+                if (chromeMajor >= 94) return '23.0';   // webOS 22
+                if (chromeMajor >= 87) return '22.0';   // webOS 21
             }
 
             return '6.0'; // Conservative fallback for older TVs
         } catch {
             return '6.0';
+        }
+    }
+
+    private _applyDefaultIdentityParams(params: URLSearchParams): void {
+        const defaults: Record<string, string> = {
+            'X-Plex-Client-Identifier': this._config.clientIdentifier,
+            'X-Plex-Platform': 'webOS',
+            'X-Plex-Product': 'Retune',
+            'X-Plex-Version': '1.0.0',
+            'X-Plex-Device': 'LG Smart TV',
+            'X-Plex-Device-Name': 'Retune',
+            'X-Plex-Platform-Version': this._detectPlatformVersion(),
+            'X-Plex-Model': 'LGTV',
+        };
+        for (const [key, value] of Object.entries(defaults)) {
+            if (!params.has(key)) {
+                params.set(key, value);
+            }
         }
     }
 
@@ -181,9 +199,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const defaultAudio = this._findStream(part.streams, 2);
         const audioFallbackInfo =
             defaultAudio &&
-            audioStream &&
-            this._isTrueHdCodec(defaultAudio.codec) &&
-            !this._isTrueHdCodec(audioStream.codec)
+                audioStream &&
+                this._isTrueHdCodec(defaultAudio.codec) &&
+                !this._isTrueHdCodec(audioStream.codec)
                 ? {
                     fromCodec: (defaultAudio.codec || 'unknown').toLowerCase(),
                     toCodec: (audioStream.codec || 'unknown').toLowerCase(),
@@ -900,33 +918,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // Ensure minimum required ID params are present even if getAuthHeaders is mocked/minimal
-        if (!params.has('X-Plex-Client-Identifier')) {
-            params.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
-        }
-        if (!params.has('X-Plex-Platform')) {
-            params.set('X-Plex-Platform', 'webOS');
-        }
-        if (!params.has('X-Plex-Product')) {
-            params.set('X-Plex-Product', 'Retune');
-        }
-        if (!params.has('X-Plex-Version')) {
-            params.set('X-Plex-Version', '1.0.0');
-        }
-        if (!params.has('X-Plex-Device')) {
-            params.set('X-Plex-Device', 'LG Smart TV');
-        }
-        if (!params.has('X-Plex-Device-Name')) {
-            params.set('X-Plex-Device-Name', 'Retune');
-        }
-        if (!params.has('X-Plex-Platform-Version')) {
-            // Detect actual webOS version instead of hardcoding 6.0
-            // This ensures PMS uses the correct device profile for the TV's capabilities
-            params.set('X-Plex-Platform-Version', this._detectPlatformVersion());
-        }
-        // Plex server profile matching frequently requires a non-empty model; provide a sane default.
-        if (!params.has('X-Plex-Model')) {
-            params.set('X-Plex-Model', 'LGTV');
-        }
+        this._applyDefaultIdentityParams(params);
 
         const url = new URL('/video/:/transcode/universal/start.m3u8', baseUri);
         url.search = params.toString();
@@ -1135,30 +1127,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             url.searchParams.set(key, value);
         }
 
-        if (!url.searchParams.has('X-Plex-Client-Identifier')) {
-            url.searchParams.set('X-Plex-Client-Identifier', this._config.clientIdentifier);
-        }
-        if (!url.searchParams.has('X-Plex-Platform')) {
-            url.searchParams.set('X-Plex-Platform', 'webOS');
-        }
-        if (!url.searchParams.has('X-Plex-Product')) {
-            url.searchParams.set('X-Plex-Product', 'Retune');
-        }
-        if (!url.searchParams.has('X-Plex-Version')) {
-            url.searchParams.set('X-Plex-Version', '1.0.0');
-        }
-        if (!url.searchParams.has('X-Plex-Device')) {
-            url.searchParams.set('X-Plex-Device', 'LG Smart TV');
-        }
-        if (!url.searchParams.has('X-Plex-Device-Name')) {
-            url.searchParams.set('X-Plex-Device-Name', 'Retune');
-        }
-        if (!url.searchParams.has('X-Plex-Platform-Version')) {
-            url.searchParams.set('X-Plex-Platform-Version', this._detectPlatformVersion());
-        }
-        if (!url.searchParams.has('X-Plex-Model')) {
-            url.searchParams.set('X-Plex-Model', 'LGTV');
-        }
+        this._applyDefaultIdentityParams(url.searchParams);
         return url.toString();
     }
 
