@@ -178,6 +178,7 @@ export class RemoteHandler extends EventEmitter<RemoteHandlerEventMap> {
             isLongPress: false,
             timestamp: now,
             originalEvent: event,
+            handled: false,
         };
 
         if (this._debugMode) {

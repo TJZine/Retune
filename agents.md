@@ -7,6 +7,8 @@
 - **Search = Codanna first**: prefer Codanna MCP discovery tools (`semantic_search_docs`, `semantic_search_with_context`, `find_symbol`) for evidence sweeps; fall back to `ripgrep` when Codanna is unavailable or insufficient. Respect repo ignores and log the fallback method used.
 - **Discovery/Context = Codanna MCP**: use Codanna for symbol-aware context (`find_symbol`, `get_calls`, `find_callers`, `analyze_impact`) during analysis. Advisors still propose diffs; Codex executes per CODEX.md.
 - **Metadata accuracy**: Flag hallucinated Sequential Thinking metadata—`files_touched`, `tests_to_run`, `dependencies`, `risk_level`, `confidence_score`, etc. should stay empty/default unless there is real evidence.
+- **Default workflow = META loop**: Prefer Planner → Plan Review → Implementer → Verification → Final Review. Reference `docs/AGENTIC_DEV_WORKFLOW.md`.
+- **Verification gate**: For UI/navigation/Orchestrator/Plex work, run `npm run verify` before concluding.
 
 ## Standard Flow
 
@@ -14,6 +16,7 @@
 2) **Docs check (context7 ➜ MCP)** → start with Context7 (title + link + date). When Context7 lacks the needed source, call the Fetch MCP server via `mcp__fetch__fetch`, constrain `max_length` (default ≤ 20000 chars), and log URL, timestamp, format (HTML/JSON/Markdown/TXT), `start_index`, and chunk count in your response plus `docs/DECISIONS.md`. Only fetch publicly reachable URLs; escalate before touching authenticated or private targets.
 3) **Plan (Codex + ST)** → Keep the plan in Codex via `update_plan`. Use Sequential‑Thinking MCP to capture Scoping→Review thoughts in short, structured entries. Produce 3–7 steps, success checks, and rollback notes. Do not use ST as a plan store.
    - Confirm the agent keeps logging Scoping → Research & Spike → Implementation → Testing → Review thoughts and leaves `next_thought_needed=true` until that Review entry is recorded; flag any run that flips it to `false` prematurely.
+4) **Gate (local)** → run `npm run verify` (or at least `npm run typecheck` + `npm test`) for any change that can regress runtime behavior.
 
 ## Codanna + Sequential‑Thinking workflow
 

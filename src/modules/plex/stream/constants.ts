@@ -40,7 +40,7 @@ export const SUPPORTED_VIDEO_CODECS: readonly string[] = [
 
 /**
  * Supported audio codecs for direct play on webOS.
- * Per spec-pack/modules/plex-stream-resolver.md:463
+ * See `WEBOS_COMPETITOR_BEST_PRACTICES.md` for webOS playback notes and caveats.
  * Note: DTS and MP3 are often problematic in Generic profiles.
  */
 export const SUPPORTED_AUDIO_CODECS: readonly string[] = [

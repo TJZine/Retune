@@ -737,12 +737,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             videoDecoders.push('av1');
         }
 
-        params.set(
-            'X-Plex-Client-Capabilities',
-            (() => {
-                const audioDecoders: string[] = [
-                    'mp3',
-                    'aac{bitrate:800000}',
+            params.set(
+                'X-Plex-Client-Capabilities',
+                ((): string => {
+                    const audioDecoders: string[] = [
+                        'mp3',
+                        'aac{bitrate:800000}',
                     'ac3{bitrate:800000}',
                     'eac3{bitrate:800000}',
                     'dts{bitrate:1536000}',

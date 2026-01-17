@@ -1,7 +1,7 @@
 # Development Workflow
 
-The full development workflow guide lives here:
+The development workflow guide lives here:
 
-- `spec-pack/dev-workflow.md`
+- `docs/AGENTIC_DEV_WORKFLOW.md`
 
 This file exists to make the guide discoverable from the repo root and README.

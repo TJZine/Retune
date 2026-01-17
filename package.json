@@ -21,6 +21,8 @@
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "typecheck": "tsc --noEmit",
+        "verify": "npm run typecheck && npm run lint && npm test && npm run build",
+        "verify:quick": "npm run typecheck && npm test",
         "package:webos": "npm run build && ares-package dist/"
     },
     "devDependencies": {

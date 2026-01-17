@@ -87,6 +87,15 @@ import {
     type EPGConfig,
 } from './modules/ui/epg';
 import {
+    NowPlayingInfoOverlay,
+    type INowPlayingInfoOverlay,
+    type NowPlayingInfoConfig,
+    type NowPlayingInfoViewModel,
+    NOW_PLAYING_INFO_MODAL_ID,
+    NOW_PLAYING_INFO_DEFAULTS,
+    NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS,
+} from './modules/ui/now-playing-info';
+import {
     InitializationCoordinator,
     type IInitializationCoordinator,
 } from './core';
@@ -203,6 +212,7 @@ export interface OrchestratorConfig {
     playerConfig: VideoPlayerConfig;
     navConfig: NavigationConfig;
     epgConfig: EPGConfig;
+    nowPlayingInfoConfig: NowPlayingInfoConfig;
 }
 
 /**
@@ -286,6 +296,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
     private _epgScheduleLoadToken = 0;
+    private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
+    private _nowPlayingInfoFetchToken = 0;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
@@ -329,6 +341,13 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     async initialize(config: OrchestratorConfig): Promise<void> {
         this._config = config;
+        if (this._config.nowPlayingInfoConfig) {
+            this._config.nowPlayingInfoConfig.onAutoHide = (): void => {
+                if (this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+                    this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+                }
+            };
+        }
 
         // Load mode
         const storedMode = safeLocalStorageGet(STORAGE_KEYS.MODE);
@@ -439,6 +458,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         // EPGComponent - no constructor args, initialize later
         this._epg = new EPGComponent();
 
+        // Now Playing Info overlay - no constructor args, initialize later
+        this._nowPlayingInfo = new NowPlayingInfoOverlay();
+
         // Create InitializationCoordinator with dependencies and callbacks
         this._initCoordinator = new InitializationCoordinator(
             config,
@@ -453,6 +475,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 scheduler: this._scheduler,
                 videoPlayer: this._videoPlayer,
                 epg: this._epg,
+                nowPlayingInfo: this._nowPlayingInfo,
             },
             {
                 updateModuleStatus: this._updateModuleStatus.bind(this),
@@ -547,6 +570,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._epg) {
             this._epg.destroy();
         }
+        if (this._nowPlayingInfo) {
+            this._nowPlayingInfo.destroy();
+        }
         if (this._videoPlayer) {
             this._videoPlayer.destroy();
         }
@@ -628,7 +654,14 @@ export class AppOrchestrator implements IAppOrchestrator {
                         width: decision.width,
                         height: decision.height,
                         sessionId: decision.sessionId,
-                        selectedAudio: (() => {
+                        selectedAudio: ((): {
+                            id: string;
+                            codec: string | null | undefined;
+                            channels?: number;
+                            language?: string;
+                            title?: string;
+                            default?: boolean;
+                        } | null => {
                             const a = decision.selectedAudioStream;
                             if (!a) return null;
                             const out: {
@@ -645,7 +678,14 @@ export class AppOrchestrator implements IAppOrchestrator {
                             if (typeof a.default === 'boolean') out.default = a.default;
                             return out;
                         })(),
-                        selectedSubtitle: (() => {
+                        selectedSubtitle: ((): {
+                            id: string;
+                            codec: string | null | undefined;
+                            language?: string;
+                            title?: string;
+                            format?: string;
+                            default?: boolean;
+                        } | null => {
                             const s = decision.selectedSubtitleStream;
                             if (!s) return null;
                             const out: {
@@ -1703,6 +1743,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             'channel-scheduler',
             'video-player',
             'epg-ui',
+            'now-playing-info-ui',
         ];
 
         for (const id of modules) {
@@ -2287,6 +2328,26 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._navigation.off('screenChange', screenHandler);
             }
         });
+
+        // Modal open/close handler (Now Playing Info overlay)
+        const modalOpenHandler = (payload: { modalId: string }): void => {
+            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
+                this._showNowPlayingInfoOverlay();
+            }
+        };
+        const modalCloseHandler = (payload: { modalId: string }): void => {
+            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
+                this._hideNowPlayingInfoOverlay();
+            }
+        };
+        this._navigation.on('modalOpen', modalOpenHandler);
+        this._navigation.on('modalClose', modalCloseHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._navigation) {
+                this._navigation.off('modalOpen', modalOpenHandler);
+                this._navigation.off('modalClose', modalCloseHandler);
+            }
+        });
     }
 
     /**
@@ -2306,6 +2367,13 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (from === 'guide' && to !== 'guide') {
             if (this._epg) {
                 this._epg.hide();
+            }
+        }
+
+        // Close Now Playing Info overlay when leaving player
+        if (from === 'player' && to !== 'player') {
+            if (this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+                this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
             }
         }
 
@@ -2408,6 +2476,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         this._currentProgramForPlayback = program;
         this._notifyNowPlaying(program);
+        this._updateNowPlayingInfoForProgram(program);
         this._refreshEpgScheduleForLiveChannel();
 
         try {
@@ -2463,6 +2532,204 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (pendingId && pendingId === channelId) {
             this._pendingNowPlayingChannelId = null;
         }
+    }
+
+    private _toggleNowPlayingInfoOverlay(): void {
+        if (!this._navigation || !this._nowPlayingInfo) {
+            return;
+        }
+        const currentScreen = this._navigation.getCurrentScreen();
+        if (currentScreen !== 'player') {
+            return;
+        }
+        if (!this._currentProgramForPlayback) {
+            return;
+        }
+
+        if (this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+            this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+            return;
+        }
+        if (this._navigation.isModalOpen()) {
+            return;
+        }
+
+        this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
+    }
+
+    private _showNowPlayingInfoOverlay(): void {
+        if (!this._nowPlayingInfo || !this._channelManager) {
+            return;
+        }
+        const program = this._currentProgramForPlayback;
+        if (!program) {
+            this._navigation?.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+            return;
+        }
+        const channel = this._channelManager.getCurrentChannel();
+        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
+        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
+        this._nowPlayingInfo.show(viewModel);
+        void this._fetchNowPlayingInfoDetails(program, channel);
+    }
+
+    private _hideNowPlayingInfoOverlay(): void {
+        if (!this._nowPlayingInfo) {
+            return;
+        }
+        this._nowPlayingInfo.hide();
+    }
+
+    private _updateNowPlayingInfoForProgram(program: ScheduledProgram): void {
+        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+            return;
+        }
+        const channel = this._channelManager?.getCurrentChannel() ?? null;
+        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
+        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
+        this._nowPlayingInfo.update(viewModel);
+        void this._fetchNowPlayingInfoDetails(program, channel);
+    }
+
+    private async _fetchNowPlayingInfoDetails(
+        program: ScheduledProgram,
+        channel: ChannelConfig | null
+    ): Promise<void> {
+        if (this._mode === 'demo' || !this._plexLibrary || !this._nowPlayingInfo) {
+            return;
+        }
+        const fetchToken = ++this._nowPlayingInfoFetchToken;
+        try {
+            const item = await this._plexLibrary.getItem(program.item.ratingKey);
+            if (fetchToken !== this._nowPlayingInfoFetchToken) {
+                return;
+            }
+            if (!item || !this._nowPlayingInfo.isVisible()) {
+                return;
+            }
+            const viewModel = this._buildNowPlayingInfoViewModel(program, channel, item);
+            this._nowPlayingInfo.update(viewModel);
+        } catch (error) {
+            console.warn('[Orchestrator] Failed to load Now Playing details:', error);
+        }
+    }
+
+    private _buildNowPlayingInfoViewModel(
+        program: ScheduledProgram,
+        channel: ChannelConfig | null,
+        details: PlexMediaItem | null
+    ): NowPlayingInfoViewModel {
+        const item = program.item;
+        const channelName = channel?.name;
+        const channelNumber = channel?.number;
+
+        let title = item.title;
+        let subtitle = '';
+
+        if (item.type === 'episode') {
+            const showTitle =
+                details?.grandparentTitle ??
+                this._extractShowTitle(item.fullTitle) ??
+                item.title;
+            title = showTitle || item.title;
+            const episodeTitle = details?.title ?? item.title;
+            const seasonNum = details?.seasonNumber ?? item.seasonNumber;
+            const epNum = details?.episodeNumber ?? item.episodeNumber;
+            const episodeCode = this._formatEpisodeCode(seasonNum, epNum);
+            subtitle = episodeCode ? `${episodeCode} • ${episodeTitle}` : episodeTitle;
+        } else {
+            const year = details?.year ?? item.year;
+            title = year > 0 ? `${item.title} (${year})` : item.title;
+            const contentRating = details?.contentRating ?? item.contentRating ?? '';
+            const runtimeMs = details?.durationMs ?? item.durationMs;
+            const runtime = runtimeMs > 0 ? this._formatDuration(runtimeMs) : '';
+            if (contentRating && runtime) {
+                subtitle = `${contentRating} • ${runtime}`;
+            } else if (contentRating) {
+                subtitle = contentRating;
+            } else if (runtime) {
+                subtitle = runtime;
+            }
+        }
+
+        const summary = details?.summary ?? '';
+        const posterPath = details?.thumb ?? item.thumb ?? null;
+        let posterUrl: string | null = null;
+        if (posterPath) {
+            if (this._plexLibrary) {
+                const resized = this._plexLibrary.getImageUrl(
+                    posterPath,
+                    NOW_PLAYING_INFO_DEFAULTS.posterWidth,
+                    NOW_PLAYING_INFO_DEFAULTS.posterHeight
+                );
+                posterUrl = resized || null;
+            }
+            if (!posterUrl) {
+                posterUrl = this._buildPlexResourceUrl(posterPath);
+            }
+        }
+
+        const baseViewModel: NowPlayingInfoViewModel = {
+            title,
+            subtitle,
+            elapsedMs: program.elapsedMs,
+            durationMs: program.item.durationMs,
+            posterUrl,
+            ...(channelName ? { channelName } : {}),
+            ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
+        };
+
+        if (summary) {
+            return {
+                ...baseViewModel,
+                description: summary,
+            };
+        }
+
+        return baseViewModel;
+    }
+
+    private _formatEpisodeCode(seasonNumber?: number, episodeNumber?: number): string {
+        const season =
+            typeof seasonNumber === 'number' ? `S${String(seasonNumber).padStart(2, '0')}` : '';
+        const episode =
+            typeof episodeNumber === 'number' ? `E${String(episodeNumber).padStart(2, '0')}` : '';
+        return season && episode ? `${season}${episode}` : '';
+    }
+
+    private _extractShowTitle(fullTitle: string | null | undefined): string | null {
+        if (!fullTitle) return null;
+        const parts = fullTitle.split(' - ');
+        if (parts.length >= 2) {
+            const first = parts[0] ?? '';
+            return first.trim() || null;
+        }
+        return null;
+    }
+
+    private _formatDuration(durationMs: number): string {
+        const totalMinutes = Math.floor(durationMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours === 0) {
+            return `${minutes}m`;
+        }
+        if (minutes === 0) {
+            return `${hours}h`;
+        }
+        return `${hours}h ${minutes}m`;
+    }
+
+    private _getNowPlayingInfoAutoHideMs(): number {
+        const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS);
+        const parsed = raw ? Number(raw) : NaN;
+        if (Number.isFinite(parsed) && parsed > 0) {
+            const normalized = Math.max(1000, Math.floor(parsed));
+            if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
+                return normalized;
+            }
+        }
+        return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
     }
 
     private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
@@ -2666,6 +2933,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Handle key press from navigation.
      */
     private _handleKeyPress(event: KeyEvent): void {
+        const isNowPlayingModalOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
+        if (isNowPlayingModalOpen) {
+            this._nowPlayingInfo?.resetAutoHideTimer();
+        }
+        if (isNowPlayingModalOpen && event.button === 'back') {
+            return;
+        }
+
         if (this._epg?.isVisible()) {
             switch (event.button) {
                 case 'up':
@@ -2673,18 +2948,21 @@ export class AppOrchestrator implements IAppOrchestrator {
                 case 'left':
                 case 'right':
                     if (this._epg.handleNavigation(event.button)) {
+                        event.handled = true;
                         event.originalEvent.preventDefault();
                         return;
                     }
                     break;
                 case 'ok':
                     if (this._epg.handleSelect()) {
+                        event.handled = true;
                         event.originalEvent.preventDefault();
                         return;
                     }
                     break;
                 case 'back':
                     if (this._epg.handleBack()) {
+                        event.handled = true;
                         event.originalEvent.preventDefault();
                         return;
                     }
@@ -2695,6 +2973,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         switch (event.button) {
+            case 'red':
+                if (event.isRepeat) {
+                    break;
+                }
+                this._toggleNowPlayingInfoOverlay();
+                break;
             case 'channelUp':
                 this._lastChannelChangeSource = 'remote';
                 // Treat channel-up as decrement (reverse wrap) to match user expectation.

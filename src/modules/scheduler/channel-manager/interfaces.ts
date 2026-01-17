@@ -18,7 +18,6 @@ import type {
 /**
  * Channel Manager Interface.
  * Manages virtual TV channel CRUD operations.
- * @see spec-pack/artifact-2-shared-types.ts L1990-2025 for SSOT
  */
 export interface IChannelManager {
     // Channel CRUD

@@ -14,6 +14,7 @@ import type { LifecycleAppError, AppPhase } from './modules/lifecycle/types';
 import type { NavigationConfig } from './modules/navigation';
 import type { VideoPlayerConfig } from './modules/player';
 import type { EPGConfig } from './modules/ui/epg';
+import type { NowPlayingInfoConfig } from './modules/ui/now-playing-info';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
 import { ChannelSetupScreen } from './modules/ui/channel-setup';
@@ -71,6 +72,11 @@ const DEFAULT_EPG_CONFIG: EPGConfig = {
     rowHeight: 96,
     showCurrentTimeIndicator: true,
     autoScrollToNow: true,
+};
+
+const DEFAULT_NOW_PLAYING_INFO_CONFIG: NowPlayingInfoConfig = {
+    containerId: 'now-playing-info-container',
+    autoHideMs: 10_000,
 };
 
 // ============================================
@@ -243,6 +249,11 @@ export class App {
         epgContainer.id = 'epg-container';
         epgContainer.className = 'epg-container';
         root.appendChild(epgContainer);
+
+        // Now Playing Info overlay container
+        const nowPlayingContainer = document.createElement('div');
+        nowPlayingContainer.id = 'now-playing-info-container';
+        root.appendChild(nowPlayingContainer);
 
         // Splash container (startup screen)
         const splashContainer = document.createElement('div');
@@ -504,6 +515,7 @@ export class App {
             navConfig: DEFAULT_NAV_CONFIG,
             playerConfig: DEFAULT_PLAYER_CONFIG,
             epgConfig: DEFAULT_EPG_CONFIG,
+            nowPlayingInfoConfig: DEFAULT_NOW_PLAYING_INFO_CONFIG,
         };
     }
 

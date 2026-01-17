@@ -21,7 +21,6 @@ import type {
 /**
  * Plex Library Interface.
  * Provides access to Plex media libraries and content.
- * @see spec-pack/artifact-2-shared-types.ts for SSOT
  */
 export interface IPlexLibrary {
     // Library Sections
@@ -184,4 +183,3 @@ export interface PlexLibraryConfig {
         error: (message: string, ...args: unknown[]) => void;
     };
 }
-

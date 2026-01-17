@@ -629,6 +629,11 @@ export class NavigationManager
         // Emit keyPress event
         this.emit('keyPress', keyEvent);
 
+        // If handlers consumed the event, stop further navigation handling.
+        if (keyEvent.handled) {
+            return;
+        }
+
         if (this._state.config.debugMode) {
             console.warn(`[NavigationManager] Key received: ${keyEvent.button} (repeat=${keyEvent.isRepeat})`);
         }

@@ -6,6 +6,7 @@
 
 export { SettingsScreen } from './SettingsScreen';
 export { createSettingsToggle } from './SettingsToggle';
+export { createSettingsSelect } from './SettingsSelect';
 export { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS, THEME_CLASSES } from './constants';
 export type {
     SettingsConfig,
@@ -13,5 +14,8 @@ export type {
     DisplaySettings,
     DeveloperSettings,
     SettingsToggleConfig,
+    SettingsSelectConfig,
+    SettingsSelectOption,
+    SettingsItemConfig,
     SettingsSectionConfig,
 } from './types';
