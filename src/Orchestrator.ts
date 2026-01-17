@@ -731,6 +731,13 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         if (decision.isTranscoding && decision.transcodeRequest) {
+            const sessionId = decision.transcodeRequest.sessionId;
+            if (
+                decision.serverDecision &&
+                this._nowPlayingStreamDecisionFetchedForSessionId === sessionId
+            ) {
+                return this.getPlaybackInfoSnapshot();
+            }
             try {
                 const req = decision.transcodeRequest;
                 const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
@@ -744,6 +751,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     program.item.ratingKey,
                     opts
                 );
+                this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
             } catch (error) {
                 console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
             }
