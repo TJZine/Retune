@@ -243,7 +243,6 @@ const mockChannelManager = {
     loadChannels: jest.fn().mockResolvedValue(undefined),
     setStorageKeys: jest.fn(),
     replaceAllChannels: jest.fn().mockResolvedValue(undefined),
-    seedDemoChannels: jest.fn().mockResolvedValue(undefined),
     getAllChannels: jest.fn().mockReturnValue([mockChannel]),
     getCurrentChannel: jest.fn().mockReturnValue(mockChannel),
     getChannel: jest.fn().mockReturnValue(mockChannel),
@@ -868,72 +867,6 @@ describe('AppOrchestrator', () => {
             expect(mockVideoPlayer.loadStream).toHaveBeenCalledTimes(2);
             expect(mockVideoPlayer.play).toHaveBeenCalledTimes(2);
             expect(mockScheduler.skipToNext).toHaveBeenCalledTimes(0);
-        });
-    });
-
-    describe('demo mode', () => {
-        beforeEach(async () => {
-            mockLocalStorage.getItem.mockImplementation((key: string) => {
-                if (key === 'retune_mode') return 'demo';
-                return null;
-            });
-            await orchestrator.initialize(mockConfig);
-        });
-
-        it('seeds demo channels when no channels are loaded', async () => {
-            mockChannelManager.getAllChannels.mockReturnValueOnce([]);
-
-            await orchestrator.start();
-
-            expect(mockChannelManager.seedDemoChannels).toHaveBeenCalled();
-        });
-
-        it('skips Plex auth and discovery during startup', async () => {
-            await orchestrator.start();
-
-            expect(mockPlexAuth.getStoredCredentials).not.toHaveBeenCalled();
-            expect(mockPlexAuth.validateToken).not.toHaveBeenCalled();
-            expect(mockPlexDiscovery.initialize).not.toHaveBeenCalled();
-
-            expect(mockVideoPlayer.initialize).toHaveBeenCalledWith(
-                expect.objectContaining({ demoMode: true })
-            );
-
-            const ChannelManagerCtor = require('../modules/scheduler/channel-manager').ChannelManager as jest.Mock;
-            expect(ChannelManagerCtor).toHaveBeenCalled();
-            const calledWith = ChannelManagerCtor.mock.calls.map((c) => c[0] as { storageKey?: string });
-            expect(calledWith.some((cfg) => cfg?.storageKey === 'retune_channels_demo_v1')).toBe(true);
-        });
-
-        it('handles programStart without calling Plex stream resolution', async () => {
-            await orchestrator.start();
-
-            expect(schedulerHandlers.programStart).toBeDefined();
-            schedulerHandlers.programStart?.({
-                item: {
-                    ratingKey: 'demo-1-0',
-                    type: 'movie',
-                    title: 'Demo Item',
-                    fullTitle: 'Demo Item',
-                    durationMs: 600000,
-                    thumb: null,
-                    year: 0,
-                    scheduledIndex: 0,
-                },
-                scheduledStartTime: 0,
-                scheduledEndTime: 600000,
-                elapsedMs: 0,
-                remainingMs: 600000,
-                scheduleIndex: 0,
-                loopNumber: 0,
-                streamDescriptor: null,
-                isCurrent: true,
-            });
-            await new Promise((resolve) => setImmediate(resolve));
-
-            expect(mockPlexStreamResolver.resolveStream).not.toHaveBeenCalled();
-            expect(mockVideoPlayer.loadStream).toHaveBeenCalledTimes(1);
-            expect(mockVideoPlayer.play).toHaveBeenCalledTimes(1);
         });
     });
 

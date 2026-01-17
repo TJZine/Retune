@@ -745,28 +745,14 @@ export class App {
     private _renderDevMenu(): void {
         if (!this._devMenuContainer) return;
 
-        const isDemo = safeLocalStorageGet(STORAGE_KEYS.MODE) === 'demo';
-
         // Dev-only: keep all interpolations here strictly to controlled constants/flags.
         // Do NOT interpolate Plex/user-provided strings into innerHTML to avoid future XSS foot-guns.
         this._devMenuContainer.innerHTML = `
             <h2 style="margin-top:0;border-bottom:1px solid #444;padding-bottom:10px;">Dev Menu</h2>
-            <div style="margin-bottom:15px;color:#aaa;">Current Mode: <strong style="color:${isDemo ? '#eebb00' : '#00cc66'}">${isDemo ? 'DEMO' : 'REAL'}</strong></div>
             <div style="margin-bottom:15px;color:#aaa;font-size:13px;">
-                Storage keys: <code>${STORAGE_KEYS.MODE}</code>, <code>${STORAGE_KEYS.CHANNELS_REAL}</code>, <code>${STORAGE_KEYS.CHANNELS_DEMO}</code>
+                Storage keys: <code>${STORAGE_KEYS.CHANNELS_REAL}</code>, <code>${STORAGE_KEYS.CURRENT_CHANNEL}</code>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
-                <button id="dev-toggle-mode" style="padding:10px;cursor:pointer;">Switch to ${isDemo ? 'REAL' : 'DEMO'} Mode</button>
-                ${isDemo
-                ? '<button id="dev-seed-channels" style="padding:10px;cursor:pointer;">Re-seed Demo Channels</button>'
-                : ''
-            }
-                ${isDemo
-                ? '<button id="dev-clear-demo" style="padding:10px;cursor:pointer;background:#433;color:#fff;border:none;">Clear Demo Channels (Demo Only)</button>'
-                : ''
-            }
-                ${!isDemo
-                ? `
                 <details style="border:1px solid #333;border-radius:8px;padding:10px;">
                     <summary style="cursor:pointer;color:#ddd;">Transcode Debug Overrides</summary>
                     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
@@ -812,9 +798,6 @@ export class App {
                         </div>
                     </div>
                 </details>
-                `
-                : ''
-            }
 	                <details style="border:1px solid #333;border-radius:8px;padding:10px;">
 	                    <summary style="cursor:pointer;color:#ddd;">Playback Info (PMS Decision)</summary>
 	                        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
@@ -836,24 +819,8 @@ export class App {
         `;
 
         // Bind events
-        this._devMenuContainer.querySelector('#dev-toggle-mode')?.addEventListener('click', () => {
-            this._orchestrator?.toggleDemoMode();
-        });
-
-        this._devMenuContainer.querySelector('#dev-seed-channels')?.addEventListener('click', async () => {
-            safeLocalStorageRemove(STORAGE_KEYS.CHANNELS_DEMO);
-            window.location.reload();
-        });
-
-        this._devMenuContainer.querySelector('#dev-clear-demo')?.addEventListener('click', () => {
-            const ok = window.confirm('Clear Demo channels only? (This does not touch real channels.)');
-            if (!ok) return;
-            safeLocalStorageRemove(STORAGE_KEYS.CHANNELS_DEMO);
-            window.location.reload();
-        });
-
         this._devMenuContainer.querySelector('#dev-reset-app')?.addEventListener('click', () => {
-            const ok = window.confirm('Reset Retune storage (mode, channels, overrides)?');
+            const ok = window.confirm('Reset Retune storage (channels, overrides)?');
             if (!ok) return;
             safeClearRetuneStorage();
             window.location.reload();
@@ -952,17 +919,18 @@ export class App {
             this._showToast('Saved transcode overrides');
         });
 
-	        this._devMenuContainer.querySelector('#dev-transcode-clear')?.addEventListener('click', () => {
-	            const ok = window.confirm('Clear transcode overrides?');
-	            if (!ok) return;
-	            const keys = [
-	                'retune_transcode_preset',
-	                'retune_transcode_compat',
-	                'retune_now_playing_stream_debug',
-	                'retune_now_playing_stream_debug_auto_show',
-	                'retune_transcode_platform',
-	                'retune_transcode_platform_version',
-	                'retune_transcode_device',
+		        this._devMenuContainer.querySelector('#dev-transcode-clear')?.addEventListener('click', () => {
+		            const ok = window.confirm('Clear transcode overrides?');
+		            if (!ok) return;
+		            const keys = [
+		                'retune_transcode_preset',
+		                'retune_transcode_compat',
+		                'retune_direct_play_audio_fallback',
+		                'retune_now_playing_stream_debug',
+		                'retune_now_playing_stream_debug_auto_show',
+		                'retune_transcode_platform',
+		                'retune_transcode_platform_version',
+		                'retune_transcode_device',
 	                'retune_transcode_device_name',
 	                'retune_transcode_model',
                 'retune_transcode_product',
@@ -1025,10 +993,9 @@ export class App {
 
 	            const rawJson = JSON.stringify(snapshot, null, 2);
 
-	            const lines: string[] = [];
-	            lines.push('PLAYBACK INFO');
-	            lines.push('='.repeat(60));
-            lines.push(`Mode:    ${snapshot.mode.toUpperCase()}`);
+            const lines: string[] = [];
+            lines.push('PLAYBACK INFO');
+            lines.push('='.repeat(60));
             lines.push(`Channel: ${snapshot.channel ? `${snapshot.channel.number} ${snapshot.channel.name}` : '(none)'}`);
             lines.push(`Item:    ${snapshot.program ? snapshot.program.title : '(none)'}`);
             if (snapshot.program) {

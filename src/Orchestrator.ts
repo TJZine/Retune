@@ -20,7 +20,7 @@ import {
     type AppPhase,
     type LifecycleEventMap,
 } from './modules/lifecycle';
-import { AppMode, STORAGE_KEYS } from './types';
+import { STORAGE_KEYS } from './types';
 import {
     NavigationManager,
     type INavigationManager,
@@ -147,7 +147,6 @@ export interface ChannelSetupRecord extends ChannelSetupConfig {
 }
 
 export interface PlaybackInfoSnapshot {
-    mode: AppMode;
     channel: { id: string; number: number; name: string } | null;
     program:
         | {
@@ -263,7 +262,6 @@ export interface IAppOrchestrator {
         handler: (payload: LifecycleEventMap[K]) => void
     ): IDisposable;
     getNavigation(): INavigationManager | null;
-    toggleDemoMode(): void;
     setNowPlayingHandler(handler: ((message: string) => void) | null): void;
 }
 
@@ -291,9 +289,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _plexDiscovery: IPlexServerDiscovery | null = null;
     private _plexLibrary: IPlexLibrary | null = null;
     private _plexStreamResolver: IPlexStreamResolver | null = null;
-    private _channelManager: IChannelManager | null = null;
-    private _scheduler: IChannelScheduler | null = null;
-    private _videoPlayer: IVideoPlayer | null = null;
+	    private _channelManager: IChannelManager | null = null;
+	    private _scheduler: IChannelScheduler | null = null;
+	    private _videoPlayer: IVideoPlayer | null = null;
 	    private _epg: IEPGComponent | null = null;
 	    private _epgScheduleLoadToken = 0;
 	    private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
@@ -304,14 +302,13 @@ export class AppOrchestrator implements IAppOrchestrator {
 	    private _nowPlayingHandler: ((message: string) => void) | null = null;
 	    private _pendingNowPlayingChannelId: string | null = null;
 	    private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
-    private _activeScheduleDayKey: number | null = null;
-    private _pendingDayRolloverDayKey: number | null = null;
-    private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
+	    private _activeScheduleDayKey: number | null = null;
+	    private _pendingDayRolloverDayKey: number | null = null;
+	    private _pendingDayRolloverTimer: ReturnType<typeof setTimeout> | null = null;
 
     private _config: OrchestratorConfig | null = null;
     private _moduleStatus: Map<string, ModuleStatus> = new Map();
     private _errorHandlers: Map<string, (error: AppError) => boolean> = new Map();
-    private _mode: AppMode = 'real';
     private _eventUnsubscribers: Array<() => void> = [];
     private _eventsWired: boolean = false;
     private _ready: boolean = false;
@@ -354,20 +351,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                     this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
                 }
             };
-        }
-
-        // Load mode
-        const storedMode = safeLocalStorageGet(STORAGE_KEYS.MODE);
-        if (storedMode === 'demo') {
-            this._mode = 'demo';
-            console.warn('[Orchestrator] Running in DEMO MODE');
-        } else if (storedMode === 'real') {
-            this._mode = 'real';
-        } else {
-            if (storedMode !== null) {
-                console.warn('[Orchestrator] Ignoring invalid persisted mode value:', storedMode);
-            }
-            this._mode = 'real';
         }
 
         this._cleanupStaleChannelBuildKeys();
@@ -451,8 +434,8 @@ export class AppOrchestrator implements IAppOrchestrator {
         // ChannelManager needs config
         const channelManagerConfig: ChannelManagerConfig = {
             plexLibrary: this._plexLibrary,
-            storageKey: this._mode === 'demo' ? STORAGE_KEYS.CHANNELS_DEMO : STORAGE_KEYS.CHANNELS_REAL,
-            currentChannelKey: this._mode === 'demo' ? `${STORAGE_KEYS.CURRENT_CHANNEL}:demo` : STORAGE_KEYS.CURRENT_CHANNEL,
+            storageKey: STORAGE_KEYS.CHANNELS_REAL,
+            currentChannelKey: STORAGE_KEYS.CURRENT_CHANNEL,
         };
         this._channelManager = new ChannelManager(channelManagerConfig);
 
@@ -500,8 +483,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     if (!pathOrUrl) return null;
                     return this._buildPlexResourceUrl(pathOrUrl);
                 },
-            },
-            this._mode
+            }
         );
 
         // Update status for all modules
@@ -633,7 +615,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         const descriptor = this._currentStreamDescriptor;
 
         return {
-            mode: this._mode,
             channel: channel ? { id: channel.id, number: channel.number, name: channel.name } : null,
             program: program
                 ? {
@@ -721,9 +702,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     async refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot> {
-        if (this._mode === 'demo') {
-            return this.getPlaybackInfoSnapshot();
-        }
         const program = this._currentProgramForPlayback;
         const decision = this._currentStreamDecision;
         if (!program || !decision || !this._plexStreamResolver) {
@@ -784,9 +762,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Request a Plex PIN for authentication.
      */
     async requestAuthPin(): Promise<PlexPinRequest> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex auth is disabled');
-        }
         if (!this._plexAuth) {
             throw new Error('PlexAuth not initialized');
         }
@@ -797,9 +772,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Poll for PIN claim status.
      */
     async pollForPin(pinId: number): Promise<PlexPinRequest> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex auth is disabled');
-        }
         if (!this._plexAuth) {
             throw new Error('PlexAuth not initialized');
         }
@@ -810,9 +782,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Cancel an active PIN request.
      */
     async cancelPin(pinId: number): Promise<void> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex auth is disabled');
-        }
         if (!this._plexAuth) {
             throw new Error('PlexAuth not initialized');
         }
@@ -823,9 +792,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Discover Plex servers (optionally forcing refresh).
      */
     async discoverServers(forceRefresh: boolean = false): Promise<PlexServer[]> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex discovery is disabled');
-        }
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
@@ -839,9 +805,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Select a Plex server to connect to.
      */
     async selectServer(serverId: string): Promise<boolean> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex discovery is disabled');
-        }
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
@@ -861,9 +824,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Clear saved server selection.
      */
     clearSelectedServer(): void {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: Plex discovery is disabled');
-        }
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
@@ -871,9 +831,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     async getLibrariesForSetup(): Promise<PlexLibraryType[]> {
-        if (this._mode === 'demo') {
-            return [];
-        }
         if (!this._plexLibrary) {
             throw new Error('PlexLibrary not initialized');
         }
@@ -884,9 +841,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     async createChannelsFromSetup(
         config: ChannelSetupConfig
     ): Promise<ChannelBuildSummary> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: channel setup is disabled');
-        }
         if (!this._channelManager || !this._plexLibrary) {
             throw new Error('Channel manager not initialized');
         }
@@ -1310,11 +1264,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._navigation) {
             return;
         }
-        if (this._mode === 'demo') {
-            // Demo Mode must not navigate into Plex flows.
-            this._navigation.goTo('player');
-            return;
-        }
         this._navigation.goTo('server-select');
     }
 
@@ -1327,10 +1276,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         const current = this._navigation.getCurrentScreen();
-        if (this._mode === 'demo' && current !== 'server-select') {
-            // In Demo Mode, allow closing server-select if already open, but never open it.
-            return;
-        }
         if (current === 'server-select') {
             // Attempt to go back; if stack is empty, force player
             if (!this._navigation.goBack()) {
@@ -1825,14 +1770,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             return;
         }
 
-        if (this._mode === 'demo') {
-            this._channelManager.setStorageKeys(
-                STORAGE_KEYS.CHANNELS_DEMO,
-                `${STORAGE_KEYS.CURRENT_CHANNEL}:demo`
-            );
-            return;
-        }
-
         const serverId = this._getSelectedServerId();
         if (!serverId) {
             return;
@@ -1902,18 +1839,12 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     private _shouldRunAudioSetup(): boolean {
-        if (this._mode === 'demo') {
-            return false;
-        }
         // Check if audio setup has been completed
         const completed = safeLocalStorageGet(RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE);
         return completed !== '1';
     }
 
     private _shouldRunChannelSetup(): boolean {
-        if (this._mode === 'demo') {
-            return false;
-        }
         if (!this._channelManager) {
             return false;
         }
@@ -2496,10 +2427,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._refreshEpgScheduleForLiveChannel();
 
 	        try {
-	            const stream =
-	                this._mode === 'demo'
-	                    ? this._buildDemoStreamForProgram(program)
-	                    : await this._resolveStreamForProgram(program);
+	            const stream = await this._resolveStreamForProgram(program);
 	            this._currentStreamDescriptor = stream;
 
 	            // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
@@ -2510,20 +2438,8 @@ export class AppOrchestrator implements IAppOrchestrator {
 	            await this._videoPlayer.loadStream(stream);
 	            await this._videoPlayer.play();
 	            this._resetPlaybackFailureGuard();
-	        } catch (error) {
+        } catch (error) {
             console.error('Failed to load stream:', error);
-            // Demo Mode must not auto-skip on failures.
-            if (this._mode === 'demo') {
-                this.handleGlobalError(
-                    {
-                        code: AppErrorCode.PLAYBACK_FAILED,
-                        message: `Demo Mode playback simulation failed: ${error instanceof Error ? error.message : String(error)}`,
-                        recoverable: true,
-                    },
-                    'demo-playback'
-                );
-                return;
-            }
             this._handlePlaybackFailure('programStart', error);
         }
     }
@@ -2662,7 +2578,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         program: ScheduledProgram,
         channel: ChannelConfig | null
     ): Promise<void> {
-        if (this._mode === 'demo' || !this._plexLibrary || !this._nowPlayingInfo) {
+        if (!this._plexLibrary || !this._nowPlayingInfo) {
             return;
         }
         const fetchToken = ++this._nowPlayingInfoFetchToken;
@@ -2837,9 +2753,8 @@ export class AppOrchestrator implements IAppOrchestrator {
 	    }
 
 	    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
-	        if (this._mode === 'demo') return;
-	        if (!this._navigation || !this._nowPlayingInfo) return;
-	        if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
+        if (!this._navigation || !this._nowPlayingInfo) return;
+        if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
 
 	        const currentScreen = this._navigation.getCurrentScreen();
 	        if (currentScreen !== 'player') return;
@@ -2905,9 +2820,8 @@ export class AppOrchestrator implements IAppOrchestrator {
 	    }
 
 	    private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
-	        if (this._mode === 'demo') return;
-	        if (!this._isNowPlayingStreamDebugEnabled()) return;
-	        if (!this._plexStreamResolver) return;
+        if (!this._isNowPlayingStreamDebugEnabled()) return;
+        if (!this._plexStreamResolver) return;
 
 	        const program = this._currentProgramForPlayback;
 	        const decision = this._currentStreamDecision;
@@ -2963,9 +2877,6 @@ export class AppOrchestrator implements IAppOrchestrator {
 	    }
 
     private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
-        if (this._mode === 'demo') {
-            return false;
-        }
         if (this._streamRecoveryInProgress) {
             return false;
         }
@@ -3047,9 +2958,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     private async _resolveStreamForProgram(
         program: ScheduledProgram
     ): Promise<StreamDescriptor> {
-        if (this._mode === 'demo') {
-            throw new Error('Demo Mode: stream resolution is disabled');
-        }
         if (!this._plexStreamResolver) {
             throw new Error('Stream resolver not initialized');
         }
@@ -3088,28 +2996,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             mimeType: this._getMimeType(decision),
             startPositionMs: clampedOffset,
             mediaMetadata: metadata,
-            subtitleTracks: [],
-            audioTracks: [],
-            durationMs: program.item.durationMs,
-            isLive: false,
-        };
-    }
-
-    private _buildDemoStreamForProgram(program: ScheduledProgram): StreamDescriptor {
-        // Demo Mode: no network / no real media. VideoPlayer simulates playback when demoMode=true.
-        const clampedOffset = Math.max(
-            0,
-            Math.min(program.elapsedMs, program.item.durationMs)
-        );
-        return {
-            url: 'about:blank',
-            protocol: 'direct',
-            mimeType: 'video/mp4',
-            startPositionMs: clampedOffset,
-            mediaMetadata: {
-                title: program.item.title,
-                durationMs: program.item.durationMs,
-            },
             subtitleTracks: [],
             audioTracks: [],
             durationMs: program.item.durationMs,
@@ -3221,10 +3107,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                 break;
             case 'info':
             case 'blue':
-                if (this._mode === 'demo') {
-                    console.warn('[Orchestrator] Demo Mode: Plex screens disabled');
-                    break;
-                }
                 if (this._navigation) {
                     if (this._plexAuth && !this._plexAuth.isAuthenticated()) {
                         this._navigation.goTo('auth');
@@ -3273,19 +3155,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         const prevChannel = this._channelManager.getPreviousChannel();
         if (prevChannel) {
             this.switchToChannel(prevChannel.id).catch(console.error);
-        }
-    }
-
-    /**
-     * Toggle Demo Mode and reload.
-     */
-    toggleDemoMode(): void {
-        const newMode: AppMode = this._mode === 'real' ? 'demo' : 'real';
-        safeLocalStorageSet(STORAGE_KEYS.MODE, newMode);
-        if (typeof window !== 'undefined') {
-            // Best-effort save before reload (do not block UI).
-            void this._lifecycle?.saveState();
-            window.location.reload();
         }
     }
 

@@ -24,7 +24,6 @@ import type { IVideoPlayer } from '../modules/player';
 import type { IEPGComponent } from '../modules/ui/epg';
 import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
 import type { IDisposable } from '../utils/interfaces';
-import type { AppMode } from '../types';
 import type { OrchestratorConfig, ModuleStatus } from '../Orchestrator';
 
 // ============================================
@@ -145,8 +144,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
     constructor(
         private readonly _config: OrchestratorConfig,
         private readonly _deps: InitializationDependencies,
-        private readonly _callbacks: InitializationCallbacks,
-        private readonly _mode: AppMode
+        private readonly _callbacks: InitializationCallbacks
     ) { }
 
     // ============================================
@@ -390,15 +388,6 @@ export class InitializationCoordinator implements IInitializationCoordinator {
         const startTime = Date.now();
         this._callbacks.updateModuleStatus('plex-auth', 'initializing');
 
-        if (this._mode === 'demo') {
-            console.warn('[InitializationCoordinator] Phase 2: Skipping Auth (Demo Mode)');
-            this._callbacks.updateModuleStatus('plex-auth', 'ready', undefined, 0);
-            if (this._deps.lifecycle) {
-                this._deps.lifecycle.setPhase('loading_data');
-            }
-            return true;
-        }
-
         if (!this._deps.plexAuth || !this._deps.navigation) {
             this._callbacks.updateModuleStatus('plex-auth', 'error');
             return false;
@@ -459,14 +448,6 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             return false;
         }
 
-        if (this._mode === 'demo') {
-            console.warn('[InitializationCoordinator] Phase 3: Skipping Discovery (Demo Mode)');
-            this._callbacks.updateModuleStatus('plex-server-discovery', 'ready', undefined, 0);
-            this._callbacks.updateModuleStatus('plex-library', 'ready', undefined, 0);
-            this._callbacks.updateModuleStatus('plex-stream-resolver', 'ready', undefined, 0);
-            return true;
-        }
-
         // Discover servers and restore selection (SSOT: discovery storage)
         this._callbacks.updateModuleStatus('plex-server-discovery', 'initializing');
         try {
@@ -524,17 +505,6 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             await this._callbacks.configureChannelManagerStorage();
             await this._deps.channelManager.loadChannels();
 
-            // Demo Mode safety: demo storage must not allow Plex-backed sources.
-            if (this._mode === 'demo') {
-                const channels = this._deps.channelManager.getAllChannels();
-                const hasChannels = channels.length > 0;
-                const allManual = hasChannels && channels.every((c) => c.contentSource?.type === 'manual');
-                if (!hasChannels || !allManual) {
-                    console.warn('[InitializationCoordinator] Demo Mode: pruning non-manual channels via re-seed');
-                    await this._deps.channelManager.seedDemoChannels();
-                }
-            }
-
             this._callbacks.updateModuleStatus(
                 'channel-manager',
                 'ready',
@@ -560,7 +530,6 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             this._callbacks.updateModuleStatus('video-player', 'initializing');
             await this._deps.videoPlayer.initialize({
                 ...this._config.playerConfig,
-                demoMode: this._mode === 'demo',
             });
 
             // Request Media Session integration (once per app lifetime)
