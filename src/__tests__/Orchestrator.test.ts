@@ -364,7 +364,11 @@ describe('AppOrchestrator', () => {
     let orchestrator: AppOrchestrator;
     let schedulerHandlers: { programStart?: (program: unknown) => void };
     let playerHandlers: { ended?: () => void; error?: (error: unknown) => void };
-    let navHandlers: { keyPress?: (payload: unknown) => void };
+    let navHandlers: {
+        keyPress?: (payload: unknown) => void;
+        modalOpen?: (payload: unknown) => void;
+        modalClose?: (payload: unknown) => void;
+    };
     let pauseHandler: (() => void | Promise<void>) | null;
     let resumeHandler: (() => void | Promise<void>) | null;
 
@@ -414,6 +418,12 @@ describe('AppOrchestrator', () => {
             (event: string, handler: (payload: unknown) => void) => {
                 if (event === 'keyPress') {
                     navHandlers.keyPress = handler;
+                }
+                if (event === 'modalOpen') {
+                    navHandlers.modalOpen = handler;
+                }
+                if (event === 'modalClose') {
+                    navHandlers.modalClose = handler;
                 }
                 return jest.fn();
             });
@@ -1131,6 +1141,73 @@ describe('AppOrchestrator', () => {
                 originalEvent: { preventDefault: jest.fn() },
             });
             expect(mockEpg.handleBack).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Now Playing Info overlay', () => {
+        beforeEach(async () => {
+            await orchestrator.initialize(mockConfig);
+            await orchestrator.start();
+        });
+
+        it('should live-update progress while open', async () => {
+            jest.useFakeTimers();
+
+            const baseProgram = {
+                item: {
+                    ratingKey: 'rk1',
+                    title: 'Test Movie',
+                    durationMs: 120_000,
+                    type: 'movie',
+                },
+                scheduledStartTime: Date.now(),
+                scheduledEndTime: Date.now() + 120_000,
+                elapsedMs: 0,
+                remainingMs: 120_000,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: true,
+            };
+
+            // Program start sets _currentProgramForPlayback so the modal can render.
+            await (schedulerHandlers.programStart as (p: unknown) => Promise<void>)(baseProgram);
+
+            // While open, orchestrator should pull fresh elapsed values from scheduler.getCurrentProgram().
+            // Use a monotonic mock since other orchestrator flows may also query getCurrentProgram().
+            let elapsedMs = 0;
+            mockScheduler.getCurrentProgram.mockImplementation(() => {
+                elapsedMs += 1000;
+                return { ...baseProgram, elapsedMs, remainingMs: Math.max(0, 120_000 - elapsedMs) };
+            });
+
+            mockNavigation.isModalOpen.mockImplementation((modalId?: string) => modalId === 'now-playing-info');
+
+            const modalOpen = navHandlers.modalOpen as (payload: unknown) => void;
+            expect(modalOpen).toBeDefined();
+            modalOpen({ modalId: 'now-playing-info' });
+
+            jest.advanceTimersByTime(1100);
+            jest.advanceTimersByTime(1100);
+
+            const nowPlayingModule = require('../modules/ui/now-playing-info');
+            const instance = (nowPlayingModule.NowPlayingInfoOverlay as jest.Mock).mock.results[0]?.value;
+            expect((instance.update as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+
+            const firstUpdateVm = (instance.update as jest.Mock).mock.calls[0]?.[0];
+            const secondUpdateVm = (instance.update as jest.Mock).mock.calls[1]?.[0];
+            expect(typeof firstUpdateVm.elapsedMs).toBe('number');
+            expect(typeof secondUpdateVm.elapsedMs).toBe('number');
+            expect(secondUpdateVm.elapsedMs).toBeGreaterThan(firstUpdateVm.elapsedMs);
+
+            // Closing should stop the timer (no further updates).
+            const callCount = (instance.update as jest.Mock).mock.calls.length;
+            const modalClose = navHandlers.modalClose as (payload: unknown) => void;
+            modalClose({ modalId: 'now-playing-info' });
+            jest.advanceTimersByTime(3000);
+            expect((instance.update as jest.Mock).mock.calls.length).toBe(callCount);
+
+            jest.useRealTimers();
         });
     });
 

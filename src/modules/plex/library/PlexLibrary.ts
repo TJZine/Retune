@@ -557,37 +557,52 @@ export class PlexLibrary implements IPlexLibrary {
      * @param options - Optional fetch options
      * @returns Parsed JSON response or null for 404/empty/parse errors
      */
-    private async _fetchWithRetry<T>(
-        url: string,
-        options: RequestInit = {}
-    ): Promise<T | null> {
-        const logger = this._config.logger ?? { warn: console.warn, error: console.error };
+	    private async _fetchWithRetry<T>(
+	        url: string,
+	        options: RequestInit = {}
+	    ): Promise<T | null> {
+	        const logger = this._config.logger ?? { warn: console.warn, error: console.error };
         let timeoutRetries = 0;
         let serverErrorRetried = false;
         let rateLimitRetries = 0;
 
-        while (true) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(
-                    () => controller.abort(),
-                    PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
-                );
+	        while (true) {
+	            try {
+	                const controller = new AbortController();
+	                const timeoutId = setTimeout(
+	                    () => controller.abort(),
+	                    PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
+	                );
 
-                let response: Response;
-                try {
-                    response = await fetch(url, {
-                        ...options,
-                        headers: {
-                            Accept: 'application/json',
-                            ...this._config.getAuthHeaders(),
-                            ...options.headers,
-                        },
-                        signal: controller.signal,
-                    });
-                } finally {
-                    clearTimeout(timeoutId);
-                }
+	                let response: Response;
+	                try {
+	                    // Plex has started warning that `X-Plex-Container-Size` must be provided as a header.
+	                    // Retune historically provides paging via query params; mirror those values as headers
+	                    // to avoid future 400s while keeping existing URL construction unchanged.
+	                    const pagingHeaders: Record<string, string> = {};
+	                    try {
+	                        const u = new URL(url);
+	                        const start = u.searchParams.get('X-Plex-Container-Start');
+	                        const size = u.searchParams.get('X-Plex-Container-Size');
+	                        if (start) pagingHeaders['X-Plex-Container-Start'] = start;
+	                        if (size) pagingHeaders['X-Plex-Container-Size'] = size;
+	                    } catch {
+	                        // Ignore invalid URLs; fetch will surface a more actionable error.
+	                    }
+
+	                    response = await fetch(url, {
+	                        ...options,
+	                        headers: {
+	                            Accept: 'application/json',
+	                            ...this._config.getAuthHeaders(),
+	                            ...pagingHeaders,
+	                            ...options.headers,
+	                        },
+	                        signal: controller.signal,
+	                    });
+	                } finally {
+	                    clearTimeout(timeoutId);
+	                }
 
                 // Handle 401 Unauthorized - emit event, no retry
                 if (response.status === 401) {

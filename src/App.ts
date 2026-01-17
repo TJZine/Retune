@@ -672,18 +672,18 @@ export class App {
         }
     }
 
-    /**
-     * Show a non-blocking toast message.
-     */
-    private _showToast(message: string): void {
-        if (!this._toastContainer) {
-            return;
-        }
+	    /**
+	     * Show a non-blocking toast message.
+	     */
+	    private _showToast(message: string): void {
+	        if (!this._toastContainer) {
+	            return;
+	        }
 
-        const now = Date.now();
-        if (now - this._lastToastAt < 1500) {
-            return;
-        }
+	        const now = Date.now();
+	        if (now - this._lastToastAt < 1500) {
+	            return;
+	        }
         this._lastToastAt = now;
 
         this._toastContainer.textContent = message;
@@ -702,8 +702,34 @@ export class App {
                     container.style.display = 'none';
                 }
             }, 200) as unknown as number;
-        }, 5000) as unknown as number;
-    }
+	        }, 5000) as unknown as number;
+	    }
+
+	    private async _copyToClipboard(text: string): Promise<boolean> {
+	        try {
+	            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+	                await navigator.clipboard.writeText(text);
+	                return true;
+	            }
+	        } catch {
+	            // fall through to legacy path
+	        }
+	        try {
+	            const ta = document.createElement('textarea');
+	            ta.value = text;
+	            ta.style.position = 'fixed';
+	            ta.style.left = '-9999px';
+	            ta.style.top = '0';
+	            document.body.appendChild(ta);
+	            ta.focus();
+	            ta.select();
+	            const ok = document.execCommand('copy');
+	            ta.remove();
+	            return ok;
+	        } catch {
+	            return false;
+	        }
+	    }
 
     private _toggleDevMenu(): void {
         if (!this._devMenuContainer) return;
@@ -753,13 +779,25 @@ export class App {
                                 <option value="android">android</option>
                             </select>
                         </label>
-                        <label style="font-size:13px;color:#aaa;">
-                            <input id="dev-transcode-compat" type="checkbox" /> Compat mode (retune_transcode_compat=1)
-                        </label>
-                        <label style="font-size:13px;color:#aaa;">Platform <input id="dev-transcode-platform" style="margin-left:8px;padding:6px;width:220px;" /></label>
-                        <label style="font-size:13px;color:#aaa;">Platform Version <input id="dev-transcode-platform-version" style="margin-left:8px;padding:6px;width:220px;" /></label>
-                        <label style="font-size:13px;color:#aaa;">Device <input id="dev-transcode-device" style="margin-left:8px;padding:6px;width:220px;" /></label>
-                        <label style="font-size:13px;color:#aaa;">Device Name <input id="dev-transcode-device-name" style="margin-left:8px;padding:6px;width:220px;" /></label>
+	                        <label style="font-size:13px;color:#aaa;">
+	                            <input id="dev-transcode-compat" type="checkbox" /> Compat mode (retune_transcode_compat=1)
+	                        </label>
+	                        <label style="font-size:13px;color:#aaa;">
+	                            <input id="dev-directplay-audio-fallback" type="checkbox" /> Try Direct Play using fallback audio track (retune_direct_play_audio_fallback=1)
+	                        </label>
+	                        <div style="margin-top:6px;font-size:12px;color:#888;">
+	                            Now Playing Stream Debug (overlay)
+	                        </div>
+	                        <label style="font-size:13px;color:#aaa;">
+	                            <input id="dev-nowplaying-stream-debug" type="checkbox" /> Show stream decision in Show Info overlay (retune_now_playing_stream_debug=1)
+	                        </label>
+	                        <label style="font-size:13px;color:#aaa;">
+	                            <input id="dev-nowplaying-stream-debug-auto" type="checkbox" /> Auto-open Show Info on tune when debug is enabled (retune_now_playing_stream_debug_auto_show=1)
+	                        </label>
+	                        <label style="font-size:13px;color:#aaa;">Platform <input id="dev-transcode-platform" style="margin-left:8px;padding:6px;width:220px;" /></label>
+	                        <label style="font-size:13px;color:#aaa;">Platform Version <input id="dev-transcode-platform-version" style="margin-left:8px;padding:6px;width:220px;" /></label>
+	                        <label style="font-size:13px;color:#aaa;">Device <input id="dev-transcode-device" style="margin-left:8px;padding:6px;width:220px;" /></label>
+	                        <label style="font-size:13px;color:#aaa;">Device Name <input id="dev-transcode-device-name" style="margin-left:8px;padding:6px;width:220px;" /></label>
                         <label style="font-size:13px;color:#aaa;">Model <input id="dev-transcode-model" style="margin-left:8px;padding:6px;width:220px;" /></label>
                         <label style="font-size:13px;color:#aaa;">Product <input id="dev-transcode-product" style="margin-left:8px;padding:6px;width:220px;" /></label>
                         <label style="font-size:13px;color:#aaa;">Version <input id="dev-transcode-version" style="margin-left:8px;padding:6px;width:220px;" /></label>
@@ -777,16 +815,18 @@ export class App {
                 `
                 : ''
             }
-                <details style="border:1px solid #333;border-radius:8px;padding:10px;">
-                    <summary style="cursor:pointer;color:#ddd;">Playback Info (PMS Decision)</summary>
-                        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
-                        <div style="display:flex;gap:10px;align-items:center;">
-                            <button id="dev-playback-refresh" style="padding:8px;cursor:pointer;">Refresh</button>
-                            <span style="font-size:12px;color:#888;">Tip: Ctrl+Shift+D (desktop) or run window.retune.toggleDevMenu() in the console</span>
-                        </div>
-                        <pre id="dev-playback-info" style="margin:0;max-height:260px;overflow:auto;background:#111;border:1px solid #333;border-radius:6px;padding:10px;color:#ddd;font-size:12px;line-height:1.35;white-space:pre-wrap;"></pre>
-                        <div style="font-size:12px;color:#888;">
-                            Shows Retune's local decision and (when transcoding) the server's universal transcode decision.
+	                <details style="border:1px solid #333;border-radius:8px;padding:10px;">
+	                    <summary style="cursor:pointer;color:#ddd;">Playback Info (PMS Decision)</summary>
+	                        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+	                        <div style="display:flex;gap:10px;align-items:center;">
+	                            <button id="dev-playback-refresh" style="padding:8px;cursor:pointer;">Refresh</button>
+	                            <button id="dev-playback-copy-summary" style="padding:8px;cursor:pointer;">Copy Summary</button>
+	                            <button id="dev-playback-copy-raw" style="padding:8px;cursor:pointer;">Copy Raw</button>
+	                            <span style="font-size:12px;color:#888;">Tip: Ctrl+Shift+D (desktop) or run window.retune.toggleDevMenu() in the console</span>
+	                        </div>
+	                        <pre id="dev-playback-info" style="margin:0;max-height:260px;overflow:auto;background:#111;border:1px solid #333;border-radius:6px;padding:10px;color:#ddd;font-size:12px;line-height:1.35;white-space:pre-wrap;"></pre>
+	                        <div style="font-size:12px;color:#888;">
+	                            Shows Retune's local decision and (when transcoding) the server's universal transcode decision.
                         </div>
                     </div>
                 </details>
@@ -844,10 +884,22 @@ export class App {
         if (presetSelect) {
             presetSelect.value = read('retune_transcode_preset');
         }
-        const compatEl = this._devMenuContainer.querySelector('#dev-transcode-compat') as HTMLInputElement | null;
-        if (compatEl) {
-            compatEl.checked = read('retune_transcode_compat') === '1';
-        }
+	        const compatEl = this._devMenuContainer.querySelector('#dev-transcode-compat') as HTMLInputElement | null;
+	        if (compatEl) {
+	            compatEl.checked = read('retune_transcode_compat') === '1';
+	        }
+	        const directPlayAudioFallbackEl = this._devMenuContainer.querySelector('#dev-directplay-audio-fallback') as HTMLInputElement | null;
+	        if (directPlayAudioFallbackEl) {
+	            directPlayAudioFallbackEl.checked = read('retune_direct_play_audio_fallback') === '1';
+	        }
+	        const nowPlayingStreamDebugEl = this._devMenuContainer.querySelector('#dev-nowplaying-stream-debug') as HTMLInputElement | null;
+	        if (nowPlayingStreamDebugEl) {
+	            nowPlayingStreamDebugEl.checked = read('retune_now_playing_stream_debug') === '1';
+	        }
+	        const nowPlayingStreamDebugAutoEl = this._devMenuContainer.querySelector('#dev-nowplaying-stream-debug-auto') as HTMLInputElement | null;
+	        if (nowPlayingStreamDebugAutoEl) {
+	            nowPlayingStreamDebugAutoEl.checked = read('retune_now_playing_stream_debug_auto_show') === '1';
+	        }
 
         const setInputValue = (id: string, key: string): void => {
             const el = this._devMenuContainer!.querySelector(id) as HTMLInputElement | null;
@@ -863,13 +915,31 @@ export class App {
         setInputValue('#dev-transcode-profile-name', 'retune_transcode_profile_name');
         setInputValue('#dev-transcode-profile-version', 'retune_transcode_profile_version');
 
-        this._devMenuContainer.querySelector('#dev-transcode-save')?.addEventListener('click', () => {
-            if (presetSelect) writeOrRemove('retune_transcode_preset', presetSelect.value);
-            if (compatEl) safeLocalStorageSet('retune_transcode_compat', compatEl.checked ? '1' : '0');
-            const getInput = (id: string): string => {
-                const el = this._devMenuContainer!.querySelector(id) as HTMLInputElement | null;
-                return el ? el.value : '';
-            };
+	        this._devMenuContainer.querySelector('#dev-transcode-save')?.addEventListener('click', () => {
+	            if (presetSelect) writeOrRemove('retune_transcode_preset', presetSelect.value);
+	            if (compatEl) safeLocalStorageSet('retune_transcode_compat', compatEl.checked ? '1' : '0');
+	            if (directPlayAudioFallbackEl) {
+	                safeLocalStorageSet(
+	                    'retune_direct_play_audio_fallback',
+	                    directPlayAudioFallbackEl.checked ? '1' : '0'
+	                );
+	            }
+	            if (nowPlayingStreamDebugEl) {
+	                safeLocalStorageSet(
+	                    'retune_now_playing_stream_debug',
+	                    nowPlayingStreamDebugEl.checked ? '1' : '0'
+	                );
+	            }
+	            if (nowPlayingStreamDebugAutoEl) {
+	                safeLocalStorageSet(
+	                    'retune_now_playing_stream_debug_auto_show',
+	                    nowPlayingStreamDebugAutoEl.checked ? '1' : '0'
+	                );
+	            }
+	            const getInput = (id: string): string => {
+	                const el = this._devMenuContainer!.querySelector(id) as HTMLInputElement | null;
+	                return el ? el.value : '';
+	            };
             writeOrRemove('retune_transcode_platform', getInput('#dev-transcode-platform'));
             writeOrRemove('retune_transcode_platform_version', getInput('#dev-transcode-platform-version'));
             writeOrRemove('retune_transcode_device', getInput('#dev-transcode-device'));
@@ -882,17 +952,19 @@ export class App {
             this._showToast('Saved transcode overrides');
         });
 
-        this._devMenuContainer.querySelector('#dev-transcode-clear')?.addEventListener('click', () => {
-            const ok = window.confirm('Clear transcode overrides?');
-            if (!ok) return;
-            const keys = [
-                'retune_transcode_preset',
-                'retune_transcode_compat',
-                'retune_transcode_platform',
-                'retune_transcode_platform_version',
-                'retune_transcode_device',
-                'retune_transcode_device_name',
-                'retune_transcode_model',
+	        this._devMenuContainer.querySelector('#dev-transcode-clear')?.addEventListener('click', () => {
+	            const ok = window.confirm('Clear transcode overrides?');
+	            if (!ok) return;
+	            const keys = [
+	                'retune_transcode_preset',
+	                'retune_transcode_compat',
+	                'retune_now_playing_stream_debug',
+	                'retune_now_playing_stream_debug_auto_show',
+	                'retune_transcode_platform',
+	                'retune_transcode_platform_version',
+	                'retune_transcode_device',
+	                'retune_transcode_device_name',
+	                'retune_transcode_model',
                 'retune_transcode_product',
                 'retune_transcode_version',
                 'retune_transcode_profile_name',
@@ -902,17 +974,41 @@ export class App {
             this._showToast('Cleared transcode overrides');
             // Re-render to reflect cleared state
             this._renderDevMenu();
-        });
+	        });
+
+	        this._devMenuContainer.querySelector('#dev-playback-copy-summary')?.addEventListener('click', async () => {
+	            const pre = this._devMenuContainer?.querySelector('#dev-playback-info') as HTMLPreElement | null;
+	            const text = pre?.dataset?.summary ?? '';
+	            if (!text) {
+	                this._showToast('Nothing to copy (refresh first)');
+	                return;
+	            }
+	            const ok = await this._copyToClipboard(text);
+	            this._showToast(ok ? 'Copied summary' : 'Copy not supported');
+	        });
+
+	        this._devMenuContainer.querySelector('#dev-playback-copy-raw')?.addEventListener('click', async () => {
+	            const pre = this._devMenuContainer?.querySelector('#dev-playback-info') as HTMLPreElement | null;
+	            const text = pre?.dataset?.raw ?? '';
+	            if (!text) {
+	                this._showToast('Nothing to copy (refresh first)');
+	                return;
+	            }
+	            const ok = await this._copyToClipboard(text);
+	            this._showToast(ok ? 'Copied raw JSON' : 'Copy not supported');
+	        });
     }
 
-    private async _refreshDevPlaybackInfo(): Promise<void> {
-        if (!this._devMenuContainer || !this._orchestrator) return;
-        const pre = this._devMenuContainer.querySelector('#dev-playback-info') as HTMLPreElement | null;
-        if (!pre) return;
+	    private async _refreshDevPlaybackInfo(): Promise<void> {
+	        if (!this._devMenuContainer || !this._orchestrator) return;
+	        const pre = this._devMenuContainer.querySelector('#dev-playback-info') as HTMLPreElement | null;
+	        if (!pre) return;
 
-        pre.textContent = 'Loading...';
-        try {
-            const snapshot = await this._orchestrator.refreshPlaybackInfoSnapshot();
+	        pre.textContent = 'Loading...';
+	        pre.dataset.summary = '';
+	        pre.dataset.raw = '';
+	        try {
+	            const snapshot = await this._orchestrator.refreshPlaybackInfoSnapshot();
             const fmtMs = (ms: number): string => {
                 const totalSec = Math.max(0, Math.floor(ms / 1000));
                 const h = Math.floor(totalSec / 3600);
@@ -927,9 +1023,11 @@ export class App {
                 return `${kbps} kbps`;
             };
 
-            const lines: string[] = [];
-            lines.push('PLAYBACK INFO');
-            lines.push('='.repeat(60));
+	            const rawJson = JSON.stringify(snapshot, null, 2);
+
+	            const lines: string[] = [];
+	            lines.push('PLAYBACK INFO');
+	            lines.push('='.repeat(60));
             lines.push(`Mode:    ${snapshot.mode.toUpperCase()}`);
             lines.push(`Channel: ${snapshot.channel ? `${snapshot.channel.number} ${snapshot.channel.name}` : '(none)'}`);
             lines.push(`Item:    ${snapshot.program ? snapshot.program.title : '(none)'}`);
@@ -999,15 +1097,22 @@ export class App {
                 }
             }
 
-            lines.push('');
-            lines.push('RAW');
-            lines.push('-'.repeat(60));
-            lines.push(JSON.stringify(snapshot, null, 2));
+	            lines.push('');
+	            lines.push('RAW');
+	            lines.push('-'.repeat(60));
+	            lines.push(rawJson);
 
-            pre.textContent = lines.join('\n');
-        } catch (error) {
-            pre.textContent = `Failed to load playback info: ${error instanceof Error ? error.message : String(error)}`;
-        }
-    }
+	            pre.textContent = lines.join('\n');
+	            const rawHeaderIdx = lines.findIndex((l) => l === 'RAW');
+	            const summary =
+	                rawHeaderIdx > 0 ? lines.slice(0, Math.max(0, rawHeaderIdx - 1)).join('\n') : pre.textContent;
+	            pre.dataset.summary = summary ?? '';
+	            pre.dataset.raw = rawJson;
+	        } catch (error) {
+	            pre.textContent = `Failed to load playback info: ${error instanceof Error ? error.message : String(error)}`;
+	            pre.dataset.summary = '';
+	            pre.dataset.raw = '';
+	        }
+	    }
 
 }

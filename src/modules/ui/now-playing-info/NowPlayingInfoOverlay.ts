@@ -42,6 +42,7 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
           <div class="${NOW_PLAYING_INFO_CLASSES.SUBTITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.DESCRIPTION}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.CONTEXT}"></div>
+          <pre class="${NOW_PLAYING_INFO_CLASSES.DEBUG}"></pre>
           <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS}">
             <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS_BAR}">
               <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS_FILL}"></div>
@@ -169,6 +170,14 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
             })();
             context.textContent = channelPrefix;
             context.style.display = channelPrefix ? 'block' : 'none';
+        }
+
+        const debugEl = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.DEBUG}`
+        ) as HTMLPreElement | null;
+        if (debugEl) {
+            debugEl.textContent = viewModel.debugText || '';
+            debugEl.style.display = viewModel.debugText ? 'block' : 'none';
         }
 
         const progress = this.containerElement.querySelector(
