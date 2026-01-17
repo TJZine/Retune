@@ -111,6 +111,37 @@ describe('ContentResolver', () => {
             expect(result).toHaveLength(1);
         });
 
+        it('should expand show containers returned by a collection source', async () => {
+            const show = createMockItem({
+                ratingKey: 'show-1',
+                type: 'show',
+                title: 'My Show',
+                durationMs: 123456, // Some servers populate this even for show containers
+                genres: ['Animation'],
+                contentRating: 'PG',
+            });
+            const episodes = [createMockEpisode(1, 1), createMockEpisode(1, 2)];
+
+            mockLibrary.getCollectionItems.mockResolvedValue([show]);
+            mockLibrary.getShowEpisodes.mockResolvedValue(episodes);
+
+            const source: CollectionContentSource = {
+                type: 'collection',
+                collectionKey: 'col-shows',
+                collectionName: 'Show Collection',
+            };
+
+            const result = await resolver.resolveSource(source);
+
+            expect(mockLibrary.getCollectionItems).toHaveBeenCalledWith('col-shows');
+            expect(mockLibrary.getShowEpisodes).toHaveBeenCalledWith('show-1');
+            expect(result).toHaveLength(2);
+            expect(result[0]!.type).toBe('episode');
+            expect(result[0]!.genres).toEqual(['Animation']);
+            expect(result[0]!.scheduledIndex).toBe(0);
+            expect(result[1]!.scheduledIndex).toBe(1);
+        });
+
         it('should resolve show source with all episodes', async () => {
             const episodes = [
                 createMockEpisode(1, 1),

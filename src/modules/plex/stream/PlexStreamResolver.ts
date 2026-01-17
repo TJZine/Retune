@@ -117,6 +117,18 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             part.streams,
             request.audioStreamId
         );
+        const defaultAudio = this._findStream(part.streams, 2);
+        const audioFallbackInfo =
+            defaultAudio &&
+            audioStream &&
+            this._isTrueHdCodec(defaultAudio.codec) &&
+            !this._isTrueHdCodec(audioStream.codec)
+                ? {
+                    fromCodec: (defaultAudio.codec || 'unknown').toLowerCase(),
+                    toCodec: (audioStream.codec || 'unknown').toLowerCase(),
+                    reason: 'TrueHD cannot be decoded on webOS',
+                }
+                : null;
 
         // 3. Start a playback session early so the same sessionId can be used for:
         // - Timeline updates (`X-Plex-Session-Identifier`)
@@ -125,7 +137,36 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         try {
             // 4. Check direct play compatibility ON THE SELECTED MEDIA VERSION
-            const canDirect = this._canDirectPlayMedia(media);
+            const directDecision = this._getDirectPlayDecision(media);
+            const canDirect = directDecision.canDirect;
+            const debugEnabled = ((): boolean => {
+                try {
+                    return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (debugEnabled) {
+                const reasons: string[] = [];
+                if (request.directPlay === false) {
+                    reasons.push('direct_play_disabled_by_request');
+                }
+                if (!directDecision.canDirect) {
+                    reasons.push(...directDecision.reasons);
+                }
+                if (reasons.length > 0) {
+                    console.warn('[PlexStreamResolver] Direct play decision:', {
+                        itemKey: request.itemKey,
+                        container: media.container,
+                        videoCodec: media.videoCodec,
+                        audioCodec: media.audioCodec,
+                        width: media.width,
+                        height: media.height,
+                        reasons,
+                    });
+                }
+            }
 
             let playbackUrl: string;
             let protocol: 'hls' | 'http';
@@ -133,6 +174,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             let container: string;
             let videoCodec: string;
             let audioCodec: string;
+            let transcodeRequestInfo: StreamDecision['transcodeRequest'] | null = null;
 
             if (canDirect && request.directPlay !== false) {
                 // Direct play
@@ -156,6 +198,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 container = 'mpegts';
                 videoCodec = 'h264';
                 audioCodec = 'aac';
+                const req: { sessionId: string; maxBitrate: number; audioStreamId?: string } = { sessionId, maxBitrate };
+                if (typeof options.audioStreamId === 'string') {
+                    req.audioStreamId = options.audioStreamId;
+                }
+                transcodeRequestInfo = req;
             }
 
             // 5. Determine subtitle delivery
@@ -171,7 +218,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 session.durationMs = item.durationMs;
             }
 
-            return {
+            const decision: StreamDecision = {
                 playbackUrl,
                 protocol,
                 isDirectPlay: !isTranscoding,
@@ -188,7 +235,33 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 bitrate: isTranscoding
                     ? (typeof request.maxBitrate === 'number' ? request.maxBitrate : 8000)
                     : media.bitrate,
+                source: {
+                    container: media.container,
+                    videoCodec: media.videoCodec,
+                    audioCodec: media.audioCodec,
+                    width: media.width,
+                    height: media.height,
+                    bitrate: media.bitrate,
+                },
+                directPlay: {
+                    allowed: canDirect && request.directPlay !== false,
+                    reasons:
+                        canDirect && request.directPlay !== false
+                            ? []
+                            : [
+                                ...(request.directPlay === false ? ['direct_play_disabled_by_request'] : []),
+                                ...directDecision.reasons,
+                            ],
+                },
             };
+            if (audioFallbackInfo) {
+                decision.audioFallback = audioFallbackInfo;
+            }
+            if (transcodeRequestInfo) {
+                decision.transcodeRequest = transcodeRequestInfo;
+            }
+
+            return decision;
         } catch (error) {
             // Avoid leaking sessions when stream resolution fails mid-flight
             const session = this._state.activeSessions.get(sessionId);
@@ -390,15 +463,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @returns true if direct play is supported
      */
     private _canDirectPlayMedia(media: PlexMediaFile): boolean {
+        return this._getDirectPlayDecision(media).canDirect;
+    }
+
+    private _getDirectPlayDecision(media: PlexMediaFile): { canDirect: boolean; reasons: string[] } {
+        const reasons: string[] = [];
+
         // Check container (pre-normalized to lowercase in ResponseParser)
         if (!SUPPORTED_CONTAINERS.includes(media.container)) {
-            return false;
+            reasons.push(`unsupported_container:${media.container}`);
         }
 
         // webOS nuance: MKV container support is inconsistent on older webOS (Chromium 79 era).
-        // For pre-webOS 23 devices, prefer Direct Stream (remux to HLS) rather than attempting MKV Direct Play.
-        // This avoids "SRC_NOT_SUPPORTED" failures for MKV-heavy libraries while still allowing MKV Direct Play
-        // on newer firmware/browser stacks that support it.
+        // For legacy stacks, prefer Direct Stream (remux) rather than attempting MKV Direct Play.
         if (media.container === 'mkv') {
             const isLegacyWebOs = ((): boolean => {
                 try {
@@ -407,54 +484,29 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     if (!/Web0S|webOS/i.test(ua)) return false;
                     const chromeMatch = ua.match(/Chrome\/(\d+)/);
                     const chromeMajor = chromeMatch ? Number(chromeMatch[1]) : NaN;
-                    // webOS 6.x is typically Chromium 79; webOS 23+ moves into newer Chromium.
                     return Number.isFinite(chromeMajor) && chromeMajor < 87;
                 } catch {
                     return false;
                 }
             })();
-
-            // Debug logging for MKV direct play decisions
-            try {
-                if (isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING))) {
-                    const ua = navigator?.userAgent || '';
-                    const chromeMatch = ua.match(/Chrome\/(\d+)/);
-                    console.warn('[PlexStreamResolver] MKV direct play check:', {
-                        container: media.container,
-                        isLegacyWebOs,
-                        chromiumVersion: chromeMatch ? chromeMatch[1] : 'unknown',
-                        willDirectPlay: !isLegacyWebOs,
-                    });
-                }
-            } catch {
-                // Ignore logging failures
-            }
-
             if (isLegacyWebOs) {
-                return false;
+                reasons.push('mkv_legacy_webos');
             }
         }
 
         // Check video codec (pre-normalized to lowercase in ResponseParser)
         if (!SUPPORTED_VIDEO_CODECS.includes(media.videoCodec)) {
-            return false;
+            reasons.push(`unsupported_video_codec:${media.videoCodec}`);
         }
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
         const audioCodec = media.audioCodec.toLowerCase();
-
-        // DTS passthrough requires BOTH:
-        // 1. webOS 23+ (C3/C4/C5) - hardware support
-        // 2. User opt-in setting - confirms they have an eARC receiver
-        // Without a receiver, DTS passthrough = silent audio
         if (audioCodec === 'dts' || audioCodec === 'dca' || audioCodec.startsWith('dts')) {
             const isDtsEnabled = ((): boolean => {
                 try {
-                    // Check user setting first (must explicitly enable)
                     if (!isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH))) {
                         return false;
                     }
-                    // Check device capability (webOS 23+ = Chromium 108+)
                     if (typeof navigator !== 'undefined') {
                         const ua = navigator.userAgent || '';
                         const chromeMatch = ua.match(/Chrome\/(\d+)/);
@@ -468,20 +520,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     return false;
                 }
             })();
-
             if (!isDtsEnabled) {
-                return false; // DTS not enabled or device too old
+                reasons.push('dts_passthrough_disabled');
             }
         } else if (!SUPPORTED_AUDIO_CODECS.includes(audioCodec)) {
-            return false;
+            reasons.push(`unsupported_audio_codec:${audioCodec}`);
         }
 
         // Check resolution
         if (media.width > MAX_RESOLUTION.width || media.height > MAX_RESOLUTION.height) {
-            return false;
+            reasons.push(`unsupported_resolution:${media.width}x${media.height}`);
         }
 
-        return true;
+        return { canDirect: reasons.length === 0, reasons };
     }
 
     // ========================================
@@ -853,6 +904,102 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             // Ignore debug logging failures
         }
         return url.toString();
+    }
+
+    async fetchUniversalTranscodeDecision(
+        itemKey: string,
+        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string }
+    ): Promise<NonNullable<StreamDecision['serverDecision']>> {
+        const hlsOptions: HlsOptions = { sessionId: options.sessionId };
+        if (typeof options.maxBitrate === 'number') {
+            hlsOptions.maxBitrate = options.maxBitrate;
+        }
+        if (typeof options.audioStreamId === 'string') {
+            hlsOptions.audioStreamId = options.audioStreamId;
+        }
+
+        const startUrl = this.getTranscodeUrl(itemKey, hlsOptions);
+
+        const decisionUrl = ((): string => {
+            const url = new URL(startUrl);
+            url.pathname = '/video/:/transcode/universal/decision';
+            return url.toString();
+        })();
+
+        const response = await this._fetchWithTimeout(
+            decisionUrl,
+            { method: 'GET', headers: this._config.getAuthHeaders() },
+            4000
+        );
+        const raw = await response.text();
+
+        const parsed = this._parseUniversalDecisionResponse(raw);
+        return { fetchedAt: Date.now(), ...parsed };
+    }
+
+    private _parseUniversalDecisionResponse(
+        raw: string
+    ): Omit<NonNullable<StreamDecision['serverDecision']>, 'fetchedAt'> {
+        // Best-effort parsing. Plex typically responds with XML for this endpoint.
+        // We extract commonly used attributes: decisionCode/decisionText and video/audio/subtitle decisions.
+        try {
+            if (typeof DOMParser !== 'undefined') {
+                const doc = new DOMParser().parseFromString(raw, 'text/xml');
+                const container = doc.querySelector('MediaContainer');
+                const transcode = doc.querySelector('TranscodeSession');
+
+                const decisionCode =
+                    container?.getAttribute('decisionCode') ??
+                    transcode?.getAttribute('decisionCode') ??
+                    undefined;
+                const decisionText =
+                    container?.getAttribute('decisionText') ??
+                    container?.getAttribute('generalDecisionText') ??
+                    transcode?.getAttribute('decisionText') ??
+                    undefined;
+
+                const videoDecision =
+                    transcode?.getAttribute('videoDecision') ??
+                    container?.getAttribute('videoDecision') ??
+                    undefined;
+                const audioDecision =
+                    transcode?.getAttribute('audioDecision') ??
+                    container?.getAttribute('audioDecision') ??
+                    undefined;
+                const subtitleDecision =
+                    transcode?.getAttribute('subtitleDecision') ??
+                    container?.getAttribute('subtitleDecision') ??
+                    undefined;
+
+                const result: Record<string, string> = {};
+                if (decisionCode) result.decisionCode = decisionCode;
+                if (decisionText) result.decisionText = decisionText;
+                if (videoDecision) result.videoDecision = videoDecision;
+                if (audioDecision) result.audioDecision = audioDecision;
+                if (subtitleDecision) result.subtitleDecision = subtitleDecision;
+                return result as Omit<NonNullable<StreamDecision['serverDecision']>, 'fetchedAt'>;
+            }
+        } catch {
+            // fall through to regex parsing
+        }
+
+        const attr = (name: string): string | undefined => {
+            const match = raw.match(new RegExp(`${name}=\"([^\"]+)\"`));
+            return match?.[1];
+        };
+        const decisionCode = attr('decisionCode') ?? attr('generalDecisionCode');
+        const decisionText = attr('decisionText') ?? attr('generalDecisionText');
+        const videoDecision = attr('videoDecision');
+        const audioDecision = attr('audioDecision');
+        const subtitleDecision = attr('subtitleDecision');
+
+        const result: Record<string, string> = {};
+        if (decisionCode) result.decisionCode = decisionCode;
+        if (decisionText) result.decisionText = decisionText;
+        if (videoDecision) result.videoDecision = videoDecision;
+        if (audioDecision) result.audioDecision = audioDecision;
+        if (subtitleDecision) result.subtitleDecision = subtitleDecision;
+        return result as Omit<NonNullable<StreamDecision['serverDecision']>, 'fetchedAt'>;
     }
 
     // ========================================

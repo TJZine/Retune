@@ -82,15 +82,62 @@ export class ContentResolver {
                 items = [];
         }
 
-        // Defensive filter: Shows are containers, not playable items.
-        // They should have been expanded to episodes, but filter out any that slipped through.
-        const playable = items.filter((item) => item.type !== 'show');
-        if (playable.length < items.length) {
-            const skipped = items.length - playable.length;
+        // Defensive expansion: Shows are containers, not playable items.
+        // Expand any that slipped through (common in Collections containing shows).
+        const expanded = await this._expandShowContainers(items);
+
+        // Final defensive filter: if any shows remain, drop them and warn.
+        const playable = expanded.filter((item) => item.type !== 'show');
+        if (playable.length < expanded.length) {
+            const skipped = expanded.length - playable.length;
             this._logger.warn(`Filtered out ${skipped} unexpanded show(s) from resolved content`);
         }
 
-        return playable;
+        // Normalize scheduledIndex to the final playable list.
+        return playable.map((item, index) => ({ ...item, scheduledIndex: index }));
+    }
+
+    private async _expandShowContainers(items: ResolvedContentItem[]): Promise<ResolvedContentItem[]> {
+        const expanded: ResolvedContentItem[] = [];
+
+        for (const item of items) {
+            if (item.type !== 'show') {
+                expanded.push(item);
+                continue;
+            }
+
+            try {
+                const episodes = await this._library.getShowEpisodes(item.ratingKey);
+                if (episodes.length === 0) {
+                    this._logger.warn('Show item returned no episodes during expansion', item.ratingKey);
+                    continue;
+                }
+
+                for (let i = 0; i < episodes.length; i++) {
+                    const episode = episodes[i];
+                    if (!episode) continue;
+
+                    const merged: PlexMediaItemMinimal = { ...episode };
+
+                    // Propagate show-level metadata to episodes for filtering (best-effort).
+                    if (!merged.genres && item.genres) merged.genres = item.genres;
+                    if (!merged.directors && item.directors) merged.directors = item.directors;
+                    if (!merged.contentRating && item.contentRating) merged.contentRating = item.contentRating;
+                    if ((!merged.rating || merged.rating === 0) && typeof item.rating === 'number') {
+                        merged.rating = item.rating;
+                    }
+                    if ((merged.year === 0 || !merged.year) && item.year) {
+                        merged.year = item.year;
+                    }
+
+                    expanded.push(this._toResolvedItem(merged, 0));
+                }
+            } catch (error) {
+                this._logger.warn('Failed to expand show item', item.ratingKey, error);
+            }
+        }
+
+        return expanded;
     }
 
     /**

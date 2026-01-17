@@ -765,6 +765,19 @@ export class App {
                 `
                 : ''
             }
+                <details style="border:1px solid #333;border-radius:8px;padding:10px;">
+                    <summary style="cursor:pointer;color:#ddd;">Playback Info (PMS Decision)</summary>
+                        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <button id="dev-playback-refresh" style="padding:8px;cursor:pointer;">Refresh</button>
+                            <span style="font-size:12px;color:#888;">Tip: long-press Yellow to open this menu on webOS</span>
+                        </div>
+                        <pre id="dev-playback-info" style="margin:0;max-height:260px;overflow:auto;background:#111;border:1px solid #333;border-radius:6px;padding:10px;color:#ddd;font-size:12px;line-height:1.35;white-space:pre-wrap;"></pre>
+                        <div style="font-size:12px;color:#888;">
+                            Shows Retune's local decision and (when transcoding) the server's universal transcode decision.
+                        </div>
+                    </div>
+                </details>
                 <button id="dev-reset-app" style="padding:10px;cursor:pointer;background:#500;color:#fff;border:none;">Reset Retune Storage</button>
                 <button id="dev-close" style="padding:10px;cursor:pointer;margin-top:10px;">Close</button>
             </div>
@@ -797,6 +810,11 @@ export class App {
         this._devMenuContainer.querySelector('#dev-close')?.addEventListener('click', () => {
             this._devMenuContainer!.style.display = 'none';
         });
+
+        this._devMenuContainer.querySelector('#dev-playback-refresh')?.addEventListener('click', () => {
+            void this._refreshDevPlaybackInfo();
+        });
+        void this._refreshDevPlaybackInfo();
 
         // Transcode override controls (real mode only)
         const read = (k: string): string => safeLocalStorageGet(k) ?? '';
@@ -873,6 +891,111 @@ export class App {
             // Re-render to reflect cleared state
             this._renderDevMenu();
         });
+    }
+
+    private async _refreshDevPlaybackInfo(): Promise<void> {
+        if (!this._devMenuContainer || !this._orchestrator) return;
+        const pre = this._devMenuContainer.querySelector('#dev-playback-info') as HTMLPreElement | null;
+        if (!pre) return;
+
+        pre.textContent = 'Loading...';
+        try {
+            const snapshot = await this._orchestrator.refreshPlaybackInfoSnapshot();
+            const fmtMs = (ms: number): string => {
+                const totalSec = Math.max(0, Math.floor(ms / 1000));
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
+                if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                return `${m}:${String(s).padStart(2, '0')}`;
+            };
+            const fmtKbps = (kbps: number): string => {
+                if (!Number.isFinite(kbps)) return 'unknown';
+                if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
+                return `${kbps} kbps`;
+            };
+
+            const lines: string[] = [];
+            lines.push('PLAYBACK INFO');
+            lines.push('='.repeat(60));
+            lines.push(`Mode:    ${snapshot.mode.toUpperCase()}`);
+            lines.push(`Channel: ${snapshot.channel ? `${snapshot.channel.number} ${snapshot.channel.name}` : '(none)'}`);
+            lines.push(`Item:    ${snapshot.program ? snapshot.program.title : '(none)'}`);
+            if (snapshot.program) {
+                lines.push(`Time:    elapsed ${fmtMs(snapshot.program.elapsedMs)} / remaining ${fmtMs(snapshot.program.remainingMs)}`);
+            }
+
+            lines.push('');
+            lines.push('DELIVERY (what the TV receives)');
+            lines.push('-'.repeat(60));
+            if (!snapshot.stream) {
+                lines.push('(no stream decision yet)');
+            } else {
+                const s = snapshot.stream;
+                lines.push(`Protocol: ${s.protocol.toUpperCase()}  MIME: ${s.mimeType}`);
+                lines.push(`Retune:    ${s.isDirectPlay ? 'DIRECT PLAY' : 'SERVER-MANAGED STREAM'}`);
+                lines.push(`Output:    ${s.container}  video=${s.videoCodec}  audio=${s.audioCodec}  ${s.width}x${s.height}  ${fmtKbps(s.bitrate)}`);
+                lines.push(`Subtitles: ${s.subtitleDelivery}`);
+
+                if (s.serverDecision) {
+                    const sd = s.serverDecision;
+                    const parts = [
+                        sd.videoDecision ? `video=${sd.videoDecision}` : null,
+                        sd.audioDecision ? `audio=${sd.audioDecision}` : null,
+                        sd.subtitleDecision ? `subtitles=${sd.subtitleDecision}` : null,
+                    ].filter(Boolean);
+                    if (parts.length > 0) {
+                        lines.push(`PMS:       ${parts.join(' ')}`);
+                    }
+                    if (sd.decisionText) {
+                        lines.push(`PMS text:  ${sd.decisionText}`);
+                    }
+                } else if (!s.isDirectPlay) {
+                    lines.push('PMS:       (decision not fetched; press Refresh again)');
+                }
+
+                if (s.directPlay && s.directPlay.reasons.length > 0) {
+                    lines.push('');
+                    lines.push(`Direct Play blocked by: ${s.directPlay.reasons.join(', ')}`);
+                }
+
+                lines.push('');
+                lines.push('SOURCE (selected Plex media version)');
+                lines.push('-'.repeat(60));
+                if (s.source) {
+                    lines.push(`Source: ${s.source.container}  video=${s.source.videoCodec}  audio=${s.source.audioCodec}  ${s.source.width}x${s.source.height}  ${fmtKbps(s.source.bitrate)}`);
+                } else {
+                    lines.push('(unknown)');
+                }
+
+                lines.push('');
+                lines.push('TRACKS');
+                lines.push('-'.repeat(60));
+                lines.push(`Audio:    ${s.selectedAudio ? `${s.selectedAudio.codec ?? 'unknown'}${typeof s.selectedAudio.channels === 'number' ? ` ${s.selectedAudio.channels}ch` : ''}${s.selectedAudio.language ? ` (${s.selectedAudio.language})` : ''}` : '(none)'}`);
+                lines.push(`Subtitle: ${s.selectedSubtitle ? `${s.selectedSubtitle.codec ?? 'unknown'}${s.selectedSubtitle.language ? ` (${s.selectedSubtitle.language})` : ''}` : '(none)'}`);
+                if (s.audioFallback) {
+                    lines.push(`Fallback: ${s.audioFallback.fromCodec} -> ${s.audioFallback.toCodec} (${s.audioFallback.reason})`);
+                }
+
+                if (s.transcodeRequest) {
+                    lines.push('');
+                    lines.push('REQUEST (Retune -> PMS)');
+                    lines.push('-'.repeat(60));
+                    lines.push(`Session: ${s.transcodeRequest.sessionId}`);
+                    lines.push(`Max BR:  ${fmtKbps(s.transcodeRequest.maxBitrate)}`);
+                    lines.push(`AudioID: ${s.transcodeRequest.audioStreamId ?? '(none)'}`);
+                }
+            }
+
+            lines.push('');
+            lines.push('RAW');
+            lines.push('-'.repeat(60));
+            lines.push(JSON.stringify(snapshot, null, 2));
+
+            pre.textContent = lines.join('\n');
+        } catch (error) {
+            pre.textContent = `Failed to load playback info: ${error instanceof Error ? error.message : String(error)}`;
+        }
     }
 
 }
