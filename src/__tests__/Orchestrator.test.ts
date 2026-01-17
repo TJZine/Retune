@@ -64,6 +64,8 @@ const mockEpgConfig = {
 const mockNowPlayingInfoConfig = {
     containerId: 'now-playing-info-container',
     autoHideMs: 10_000,
+    posterWidth: 111,
+    posterHeight: 222,
 };
 
 const mockConfig: OrchestratorConfig = {
@@ -203,6 +205,8 @@ jest.mock('../modules/plex/discovery', () => ({
 // Mock PlexLibrary
 const mockPlexLibrary = {
     getLibraries: jest.fn().mockResolvedValue([]),
+    getImageUrl: jest.fn().mockReturnValue('http://test/resized.jpg'),
+    getItem: jest.fn().mockResolvedValue(null),
     on: jest.fn(() => jest.fn()),
 };
 
@@ -439,6 +443,60 @@ describe('AppOrchestrator', () => {
             expect(require('../modules/scheduler/scheduler').ChannelScheduler).toHaveBeenCalled();
             expect(require('../modules/player').VideoPlayer).toHaveBeenCalled();
             expect(require('../modules/ui/epg').EPGComponent).toHaveBeenCalled();
+        });
+
+        it('should preserve caller-supplied nowPlayingInfoConfig.onAutoHide', async () => {
+            const prev = jest.fn();
+            const configWithHandler: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    onAutoHide: prev,
+                },
+            };
+
+            mockNavigation.isModalOpen.mockReturnValue(true);
+            await orchestrator.initialize(configWithHandler);
+
+            // Orchestrator wraps the handler on initialize; invoke it to validate chaining + close behavior.
+            configWithHandler.nowPlayingInfoConfig.onAutoHide?.();
+
+            expect(prev).toHaveBeenCalledTimes(1);
+            expect(mockNavigation.closeModal).toHaveBeenCalledWith('now-playing-info');
+        });
+
+        it('should use configured nowPlayingInfo poster sizes when resizing', async () => {
+            const configWithPosterSizes: OrchestratorConfig = {
+                ...mockConfig,
+                nowPlayingInfoConfig: {
+                    ...mockConfig.nowPlayingInfoConfig,
+                    posterWidth: 111,
+                    posterHeight: 222,
+                },
+            };
+
+            await orchestrator.initialize(configWithPosterSizes);
+
+            const program = {
+                elapsedMs: 1234,
+                item: {
+                    ratingKey: 'rk1',
+                    type: 'movie',
+                    title: 'Test Movie',
+                    fullTitle: null,
+                    year: 2024,
+                    contentRating: 'PG',
+                    durationMs: 60_000,
+                    thumb: '/thumb',
+                },
+            };
+            const channel = { id: 'ch1', name: 'Test Channel', number: 1 };
+            const details = { type: 'movie', title: 'Test Movie', year: 2024, durationMs: 60_000, thumb: '/thumb' };
+
+            (orchestrator as unknown as { _buildNowPlayingInfoViewModel: (a: unknown, b: unknown, c: unknown) => unknown })
+                ._buildNowPlayingInfoViewModel(program as unknown, channel as unknown, details as unknown);
+
+            expect(mockPlexLibrary.getImageUrl).toHaveBeenCalledWith('/thumb', 111, 222);
         });
     });
 

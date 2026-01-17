@@ -36,7 +36,6 @@ export function createSettingsSelect(config: SettingsSelectConfig): {
     button.addEventListener('click', () => {
         if (config.disabled) return;
         const nextValue = getNextValue(config.options, config.value);
-        config.value = nextValue;
         update(nextValue);
         config.onChange(nextValue);
     });

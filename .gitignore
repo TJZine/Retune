@@ -124,6 +124,7 @@ prompts/
 docs/review/*
 docs/templates/
 docs/checklists/
+docs/_local/
 docs/AGENTIC_DEV_WORKFLOW.md
 docs/AI_DANGER_ZONES.md
 docs/SECURITY_LOGGING_RULES.md

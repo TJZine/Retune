@@ -342,7 +342,11 @@ export class AppOrchestrator implements IAppOrchestrator {
     async initialize(config: OrchestratorConfig): Promise<void> {
         this._config = config;
         if (this._config.nowPlayingInfoConfig) {
+            const previousOnAutoHide = this._config.nowPlayingInfoConfig.onAutoHide ?? null;
             this._config.nowPlayingInfoConfig.onAutoHide = (): void => {
+                if (previousOnAutoHide) {
+                    previousOnAutoHide();
+                }
                 if (this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
                     this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
                 }
@@ -2657,10 +2661,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         let posterUrl: string | null = null;
         if (posterPath) {
             if (this._plexLibrary) {
+                const posterWidth = this._config?.nowPlayingInfoConfig.posterWidth ?? NOW_PLAYING_INFO_DEFAULTS.posterWidth;
+                const posterHeight = this._config?.nowPlayingInfoConfig.posterHeight ?? NOW_PLAYING_INFO_DEFAULTS.posterHeight;
                 const resized = this._plexLibrary.getImageUrl(
                     posterPath,
-                    NOW_PLAYING_INFO_DEFAULTS.posterWidth,
-                    NOW_PLAYING_INFO_DEFAULTS.posterHeight
+                    posterWidth,
+                    posterHeight
                 );
                 posterUrl = resized || null;
             }

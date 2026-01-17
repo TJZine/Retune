@@ -64,6 +64,64 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         };
     }
 
+    private _getChromeMajor(): number | null {
+        try {
+            if (typeof navigator === 'undefined') return null;
+            const ua = navigator.userAgent || '';
+            const chromeMatch = ua.match(/Chrome\/(\d+)/);
+            if (!chromeMatch) return null;
+            const n = Number(chromeMatch[1]);
+            return Number.isFinite(n) ? n : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _isWebOs(): boolean {
+        try {
+            if (typeof navigator === 'undefined') return false;
+            return /Web0S|webOS/i.test(navigator.userAgent || '');
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Detect webOS platform version from webOSTV API or Chromium user agent mapping.
+     * Used for X-Plex-Platform-Version when constructing transcode URLs.
+     */
+    private _detectPlatformVersion(): string {
+        try {
+            // Try webOSTV API first (most accurate)
+            if (typeof window !== 'undefined') {
+                const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
+                if (webOSTV?.platform?.version) {
+                    return webOSTV.platform.version;
+                }
+            }
+
+            // Fallback: infer from Chromium version in User Agent
+            // Chromium versions mapped to webOS versions:
+            // - webOS 25 (C5, 2025): Chromium 120+
+            // - webOS 24 (C4, 2024): Chromium 108-119
+            // - webOS 23 (C3, 2023): Chromium 108
+            // - webOS 22: Chromium 94-107
+            // - webOS 21: Chromium 87-93
+            // - webOS 6.x and older: Chromium <87
+            const chromeMajor = this._getChromeMajor();
+            if (chromeMajor !== null) {
+                if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
+                if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
+                if (chromeMajor >= 94) return '22.0';   // webOS 22
+                if (chromeMajor >= 87) return '21.0';   // webOS 21
+            }
+
+            return '6.0'; // Conservative fallback for older TVs
+        } catch {
+            return '6.0';
+        }
+    }
+
     // ========================================
     // Stream Resolution
     // ========================================
@@ -505,9 +563,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
         const audioCodec = media.audioCodec.toLowerCase();
         const isDtsFamily =
-            audioCodec === 'dts' ||
             audioCodec.startsWith('dts') ||
-            audioCodec === 'dca' ||
             audioCodec.startsWith('dca'); // includes dca-ma (DTS-HD MA)
         if (isDtsFamily) {
             const isDtsEnabled = ((): boolean => {
@@ -688,26 +744,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
         };
 
-        const chromeMajor = ((): number | null => {
-            try {
-                if (typeof navigator === 'undefined') return null;
-                const ua = navigator.userAgent || '';
-                const chromeMatch = ua.match(/Chrome\/(\d+)/);
-                if (!chromeMatch) return null;
-                const n = Number(chromeMatch[1]);
-                return Number.isFinite(n) ? n : null;
-            } catch {
-                return null;
-            }
-        })();
-        const isWebOs = ((): boolean => {
-            try {
-                if (typeof navigator === 'undefined') return false;
-                return /Web0S|webOS/i.test(navigator.userAgent || '');
-            } catch {
-                return false;
-            }
-        })();
+        const chromeMajor = this._getChromeMajor();
+        const isWebOs = this._isWebOs();
 
         // HEVC detection (common for 4K MKV libraries).
         const supportsHevc =
@@ -737,12 +775,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             videoDecoders.push('av1');
         }
 
-            params.set(
-                'X-Plex-Client-Capabilities',
-                ((): string => {
-                    const audioDecoders: string[] = [
-                        'mp3',
-                        'aac{bitrate:800000}',
+        params.set(
+            'X-Plex-Client-Capabilities',
+            ((): string => {
+                const audioDecoders: string[] = [
+                    'mp3',
+                    'aac{bitrate:800000}',
                     'ac3{bitrate:800000}',
                     'eac3{bitrate:800000}',
                     'dts{bitrate:1536000}',
@@ -883,40 +921,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         if (!params.has('X-Plex-Platform-Version')) {
             // Detect actual webOS version instead of hardcoding 6.0
             // This ensures PMS uses the correct device profile for the TV's capabilities
-            const detectedVersion = ((): string => {
-                try {
-                    // Try webOSTV API first (most accurate)
-                    if (typeof window !== 'undefined') {
-                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
-                        if (webOSTV?.platform?.version) {
-                            return webOSTV.platform.version;
-                        }
-                    }
-                    // Fallback: infer from Chromium version in User Agent
-                    // Chromium versions mapped to webOS versions:
-                    // - webOS 25 (C5, 2025): Chromium 120+
-                    // - webOS 24 (C4, 2024): Chromium 108-119
-                    // - webOS 23 (C3, 2023): Chromium 108
-                    // - webOS 22: Chromium 94-107
-                    // - webOS 21: Chromium 87-93
-                    // - webOS 6.x and older: Chromium <87
-                    if (typeof navigator !== 'undefined') {
-                        const ua = navigator.userAgent || '';
-                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
-                        if (chromeMatch) {
-                            const chromeMajor = Number(chromeMatch[1]);
-                            if (chromeMajor >= 120) return '25.0';  // webOS 25+ (C5 and newer)
-                            if (chromeMajor >= 108) return '24.0';  // webOS 24 (C4) / 23 (C3)
-                            if (chromeMajor >= 94) return '22.0';   // webOS 22
-                            if (chromeMajor >= 87) return '21.0';   // webOS 21
-                        }
-                    }
-                    return '6.0'; // Conservative fallback for older TVs
-                } catch {
-                    return '6.0';
-                }
-            })();
-            params.set('X-Plex-Platform-Version', detectedVersion);
+            params.set('X-Plex-Platform-Version', this._detectPlatformVersion());
         }
         // Plex server profile matching frequently requires a non-empty model; provide a sane default.
         if (!params.has('X-Plex-Model')) {
@@ -1149,31 +1154,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             url.searchParams.set('X-Plex-Device-Name', 'Retune');
         }
         if (!url.searchParams.has('X-Plex-Platform-Version')) {
-            const detectedVersion = ((): string => {
-                try {
-                    if (typeof window !== 'undefined') {
-                        const webOSTV = (window as { webOSTV?: { platform?: { version?: string } } }).webOSTV;
-                        if (webOSTV?.platform?.version) {
-                            return webOSTV.platform.version;
-                        }
-                    }
-                    if (typeof navigator !== 'undefined') {
-                        const ua = navigator.userAgent || '';
-                        const chromeMatch = ua.match(/Chrome\/(\d+)/);
-                        if (chromeMatch) {
-                            const chromeMajor = Number(chromeMatch[1]);
-                            if (chromeMajor >= 120) return '25.0';
-                            if (chromeMajor >= 108) return '24.0';
-                            if (chromeMajor >= 94) return '22.0';
-                            if (chromeMajor >= 87) return '21.0';
-                        }
-                    }
-                    return '6.0';
-                } catch {
-                    return '6.0';
-                }
-            })();
-            url.searchParams.set('X-Plex-Platform-Version', detectedVersion);
+            url.searchParams.set('X-Plex-Platform-Version', this._detectPlatformVersion());
         }
         if (!url.searchParams.has('X-Plex-Model')) {
             url.searchParams.set('X-Plex-Model', 'LGTV');

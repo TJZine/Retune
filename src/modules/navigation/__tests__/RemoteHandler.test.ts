@@ -54,6 +54,13 @@ describe('RemoteHandler', () => {
             expect(remoteHandler.mapKeyCode(406)).toBe('blue');
         });
 
+        it('should map desktop F-keys to color buttons', () => {
+            expect(remoteHandler.mapKeyCode(112)).toBe('red'); // F1
+            expect(remoteHandler.mapKeyCode(113)).toBe('green'); // F2
+            expect(remoteHandler.mapKeyCode(114)).toBe('yellow'); // F3
+            expect(remoteHandler.mapKeyCode(115)).toBe('blue'); // F4
+        });
+
         it('should map number keys correctly', () => {
             expect(remoteHandler.mapKeyCode(48)).toBe('num0');
             expect(remoteHandler.mapKeyCode(49)).toBe('num1');
