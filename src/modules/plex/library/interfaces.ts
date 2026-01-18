@@ -29,7 +29,7 @@ export interface IPlexLibrary {
      * Get all libraries.
      * @returns Promise resolving to list of libraries
      */
-    getLibraries(signal?: AbortSignal | null): Promise<PlexLibrary[]>;
+    getLibraries(options?: { signal?: AbortSignal | null }): Promise<PlexLibrary[]>;
 
     /**
      * Get a specific library by ID.
@@ -111,7 +111,7 @@ export interface IPlexLibrary {
      * @param libraryId - Library section ID
      * @returns Promise resolving to list of collections
      */
-    getCollections(libraryId: string, signal?: AbortSignal | null): Promise<PlexCollection[]>;
+    getCollections(libraryId: string, options?: { signal?: AbortSignal | null }): Promise<PlexCollection[]>;
 
     /**
      * Get items in a collection.
@@ -124,7 +124,7 @@ export interface IPlexLibrary {
      * Get user playlists.
      * @returns Promise resolving to list of playlists
      */
-    getPlaylists(signal?: AbortSignal | null): Promise<PlexPlaylist[]>;
+    getPlaylists(options?: { signal?: AbortSignal | null }): Promise<PlexPlaylist[]>;
 
     /**
      * Get items in a playlist.

@@ -39,6 +39,14 @@
     }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .setup-progress-bar-fill.indeterminate {
+        animation: none;
+        left: 0;
+        width: 100%;
+    }
+}
+
 .setup-progress-task {
     font-size: 1.1rem;
     font-weight: 500;

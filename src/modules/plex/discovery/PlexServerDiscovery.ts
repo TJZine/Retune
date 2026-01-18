@@ -840,7 +840,14 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     ): void {
         try {
             const raw = localStorage.getItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
-            const healthMap = raw ? JSON.parse(raw) : {};
+            let healthMap: Record<string, { type?: string; latencyMs?: number }> = {};
+            if (raw) {
+                try {
+                    healthMap = JSON.parse(raw);
+                } catch {
+                    healthMap = {};
+                }
+            }
             const previous = healthMap[serverId];
 
             const record = {

@@ -292,7 +292,7 @@ export class ServerSelectScreen {
 
             const meta = document.createElement('div');
             meta.className = 'server-meta';
-            meta.textContent = this._buildServerMeta(server);
+            meta.textContent = this._buildServerMeta(server, healthMap);
             main.appendChild(meta);
 
             row.appendChild(main);
@@ -371,16 +371,11 @@ export class ServerSelectScreen {
         }
     }
 
-    private _buildServerMeta(server: PlexServer): string {
+    private _buildServerMeta(
+        server: PlexServer,
+        healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined>
+    ): string {
         const ownership = server.owned ? 'Owned' : `Shared by ${server.sourceTitle}`;
-
-        const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
-        let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined> = {};
-        try {
-            healthMap = rawHealth ? JSON.parse(rawHealth) : {};
-        } catch (e) {
-            console.warn('[ServerSelect] Failed to parse health data:', e);
-        }
         const health = healthMap[server.id];
 
         const typeLabel = health?.type === 'local'

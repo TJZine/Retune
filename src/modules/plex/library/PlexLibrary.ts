@@ -92,9 +92,9 @@ export class PlexLibrary implements IPlexLibrary {
      * Get all libraries.
      * @returns Promise resolving to list of libraries
      */
-    async getLibraries(signal?: AbortSignal | null): Promise<PlexLibraryType[]> {
+    async getLibraries(options?: { signal?: AbortSignal | null }): Promise<PlexLibraryType[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTIONS);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawLibrarySection>>(url, { signal: signal ?? null });
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawLibrarySection>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -397,7 +397,7 @@ export class PlexLibrary implements IPlexLibrary {
      * @param libraryId - Library section ID
      * @returns Promise resolving to list of collections
      */
-    async getCollections(libraryId: string, signal?: AbortSignal | null): Promise<PlexCollection[]> {
+    async getCollections(libraryId: string, options?: { signal?: AbortSignal | null }): Promise<PlexCollection[]> {
         // Use type=18 (COLLECTION) filter on the library 'all' endpoint
         const params = {
             type: PLEX_MEDIA_TYPES.COLLECTION,
@@ -405,7 +405,7 @@ export class PlexLibrary implements IPlexLibrary {
             includeMeta: 1,  // Standard metadata
         };
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url, { signal: signal ?? null });
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -440,9 +440,9 @@ export class PlexLibrary implements IPlexLibrary {
      * Get user playlists.
      * @returns Promise resolving to list of playlists
      */
-    async getPlaylists(signal?: AbortSignal | null): Promise<PlexPlaylist[]> {
+    async getPlaylists(options?: { signal?: AbortSignal | null }): Promise<PlexPlaylist[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.PLAYLISTS);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawPlaylist>>(url, { signal: signal ?? null });
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawPlaylist>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];

@@ -181,7 +181,6 @@ export class ChannelSetupScreen {
             return;
         }
         this._contentEl.innerHTML = '';
-        this._contentEl.innerHTML = '';
 
         if (this._step === 1) {
             this._renderLibraryStep();

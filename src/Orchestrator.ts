@@ -853,7 +853,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._plexLibrary) {
             throw new Error('PlexLibrary not initialized');
         }
-        const libraries = await this._plexLibrary.getLibraries(signal ?? null);
+        const libraries = await this._plexLibrary.getLibraries({ signal: signal ?? null });
         return libraries.filter((lib) => lib.type === 'movie' || lib.type === 'show');
     }
 
@@ -902,6 +902,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             MAX_CHANNELS
         );
         const minItems = Math.max(1, config.minItemsPerChannel ?? 10);
+        // Maximum items to scan for category extraction during setup.
+        // Trade-off: higher values improve coverage but increase setup time.
+        const CHANNEL_SETUP_SCAN_LIMIT = 500;
 
         const shuffleSeedFor = (value: string): number => this._hashSeed(value);
 
@@ -922,7 +925,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (config.enabledStrategies.playlists) {
             reportProgress('fetch_playlists', 'Fetching playlists...', 'Scanning server', 0, null);
             try {
-                const playlists = await this._plexLibrary.getPlaylists(signal ?? null);
+                const playlists = await this._plexLibrary.getPlaylists({ signal: signal ?? null });
                 for (const pl of playlists) {
                     if (checkCanceled()) {
                         return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'fetch_playlists' };
@@ -956,10 +959,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
 
             // 1. Collections
+            let addedCollections = false;
             if (config.enabledStrategies.collections) {
                 reportProgress('fetch_collections', 'Fetching collections...', library.title, libIndex, selectedLibraries.length);
                 try {
-                    const collections = await this._plexLibrary.getCollections(library.id, signal ?? null);
+                    const collections = await this._plexLibrary.getCollections(library.id, { signal: signal ?? null });
                     for (const collection of collections) {
                         if (collection.childCount >= minItems) {
                             pending.push({
@@ -972,6 +976,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 playbackMode: 'shuffle',
                                 shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
                             });
+                            addedCollections = true;
                         } else {
                             skippedCount++;
                         }
@@ -980,11 +985,17 @@ export class AppOrchestrator implements IAppOrchestrator {
                     console.warn(`Failed to fetch collections for library ${library.title}:`, e);
                     errorsTotal++;
                 }
-            } else if (config.enabledStrategies.libraryFallback) {
+            }
+
+            if (!addedCollections && config.enabledStrategies.libraryFallback) {
                 let libraryCount = library.contentCount;
                 if (libraryCount === 0) {
                     try {
-                        libraryCount = await this._plexLibrary.getLibraryItemCount(library.id, { signal: signal ?? null });
+                        const countOptions: LibraryQueryOptions = { signal: signal ?? null };
+                        if (library.type === 'show') {
+                            countOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
+                        }
+                        libraryCount = await this._plexLibrary.getLibraryItemCount(library.id, countOptions);
                     } catch (e) {
                         console.warn(`Failed to fetch item count for ${library.title}:`, e);
                         errorsTotal++;
@@ -1006,7 +1017,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 } else {
                     skippedCount++;
                 }
-            } else {
+            } else if (!config.enabledStrategies.collections && !config.enabledStrategies.libraryFallback) {
                 skippedCount++;
             }
 
@@ -1026,18 +1037,42 @@ export class AppOrchestrator implements IAppOrchestrator {
                 try {
                     const scanOptions: LibraryQueryOptions = {
                         signal: signal ?? null,
-                        limit: 500,
+                        limit: CHANNEL_SETUP_SCAN_LIMIT,
                     };
 
-                    let rawItems: PlexMediaItem[];
+                    let tagItems: PlexMediaItem[];
+                    let scanItems: PlexMediaItem[];
+
                     if (library.type === 'show') {
-                        scanOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
+                        if (config.enabledStrategies.genres || config.enabledStrategies.directors) {
+                            const tagOptions: LibraryQueryOptions = {
+                                signal: signal ?? null,
+                                limit: CHANNEL_SETUP_SCAN_LIMIT,
+                                filter: { type: PLEX_MEDIA_TYPES.SHOW },
+                            };
+                            tagItems = await this._plexLibrary.getLibraryItems(library.id, tagOptions);
+                        } else {
+                            tagItems = [];
+                        }
+
+                        if (config.enabledStrategies.decades || config.enabledStrategies.runtimeRanges) {
+                            const episodeOptions: LibraryQueryOptions = {
+                                signal: signal ?? null,
+                                limit: CHANNEL_SETUP_SCAN_LIMIT,
+                                filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+                            };
+                            scanItems = await this._plexLibrary.getLibraryItems(library.id, episodeOptions);
+                        } else {
+                            scanItems = [];
+                        }
+                    } else {
+                        tagItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
+                        scanItems = tagItems;
                     }
-                    rawItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
 
                     const countTags = (field: 'genres' | 'directors'): { label: string; count: number }[] => {
                         const counts = new Map<string, { label: string; count: number }>();
-                        for (const item of rawItems) {
+                        for (const item of tagItems) {
                             const values = item[field];
                             if (!values) continue;
                             for (const value of values) {
@@ -1098,7 +1133,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     // -- Decades
                     if (config.enabledStrategies.decades) {
                         const decadeCounts = new Map<number, number>();
-                        for (const item of rawItems) {
+                        for (const item of scanItems) {
                             if (item.year) {
                                 const decade = Math.floor(item.year / 10) * 10;
                                 decadeCounts.set(decade, (decadeCounts.get(decade) || 0) + 1);
@@ -1135,7 +1170,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                             '> 120m': { count: 0, min: 120 * 60 * 1000, max: null as number | null },
                         };
 
-                        for (const item of rawItems) {
+                        for (const item of scanItems) {
                             const dur = item.durationMs;
                             if (!dur) continue;
                             if (dur < 30 * 60000) buckets['< 30m'].count++;
