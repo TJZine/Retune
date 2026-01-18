@@ -247,7 +247,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      * Test a specific connection to a server.
      * @param _server - Server to test (unused but kept for interface compatibility)
      * @param connection - Connection endpoint to test
-     * @returns Promise resolving to latency in ms, or null if failed
+     * @returns Promise resolving to latency in ms, 'auth_required' if auth is needed, or null if failed
      */
     public async testConnection(
         _server: PlexServer,
@@ -297,7 +297,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      */
     public async findFastestConnection(
         server: PlexServer
-    ): Promise<{ connection: PlexConnection | null; authRequired: boolean }> {
+    ): Promise<{ connection: PlexConnection | null; authRequired: boolean; selectedAuthRequired: boolean }> {
         const config = this._mixedContentConfig;
         let authRequired = false;
 
@@ -318,7 +318,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
                 }
             }
 
@@ -327,7 +327,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
                 }
             }
 
@@ -336,7 +336,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
                 }
             }
         }
@@ -358,7 +358,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(upgradedConn, latency), authRequired };
+                    return { connection: this._createConnectionWithLatency(upgradedConn, latency), authRequired, selectedAuthRequired: false };
                 }
             }
         }
@@ -375,12 +375,12 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                     if (config.logWarnings) {
                         console.warn('[Discovery] Using HTTP connection - HTTPS unavailable');
                     }
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
                 }
             }
         }
 
-        return { connection: null, authRequired };
+        return { connection: null, authRequired, selectedAuthRequired: false };
     }
 
     /**
@@ -877,6 +877,8 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         try {
             const parsed = new URL(url);
             const sensitiveKeys = ['X-Plex-Token', 'token', 'access_token'];
+            parsed.username = '';
+            parsed.password = '';
 
             // Redact query parameters
             for (const key of sensitiveKeys) {

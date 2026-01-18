@@ -555,8 +555,6 @@ export class ChannelSetupScreen {
 
             if (token !== this._visibilityToken) return;
 
-            if (token !== this._visibilityToken) return;
-
             if (result.canceled) {
                 this._statusEl.textContent = 'Canceled.';
                 this._detailEl.textContent = 'No changes were applied.';

@@ -220,24 +220,7 @@ export class ServerSelectScreen {
             this._setupButton.disabled = false;
             this._clearButton.disabled = false;
             this._isLoading = false;
-
-            // CRITICAL: Restore focus if it was lost due to disabling buttons
-            const nav = this._orchestrator.getNavigation();
-            if (nav) {
-                // Slight delay to ensure browser acknowledges the button is enabled again
-                // before attempting to focus it.
-                if (this._restoreFocusTimeoutId !== null) {
-                    clearTimeout(this._restoreFocusTimeoutId);
-                    this._restoreFocusTimeoutId = null;
-                }
-                this._restoreFocusTimeoutId = setTimeout(() => {
-                    this._restoreFocusTimeoutId = null;
-                    if (!this._container.classList.contains('visible')) {
-                        return;
-                    }
-                    nav.setFocus('btn-server-refresh');
-                }, 50);
-            }
+            this._restoreFocus();
         }
     }
 
@@ -256,6 +239,11 @@ export class ServerSelectScreen {
             healthMap = rawHealth ? JSON.parse(rawHealth) : {};
         } catch (e) {
             console.warn('[ServerSelect] Failed to parse health data:', e);
+            try {
+                localStorage.removeItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
+            } catch {
+                // ignore storage errors
+            }
         }
 
         // Clean up existing focusables to prevent phantom navigation targets
@@ -313,13 +301,17 @@ export class ServerSelectScreen {
             // Add health pill
             const health = healthMap[server.id];
             const pill = document.createElement('div');
-            const statusClass = health?.status === 'auth_required' ? 'auth-required' : (health?.status || 'unknown');
+            const normalizedStatus =
+                health?.status === 'ok' || health?.status === 'unreachable' || health?.status === 'auth_required'
+                    ? health.status
+                    : 'unknown';
+            const statusClass = normalizedStatus === 'auth_required' ? 'auth-required' : normalizedStatus;
             pill.className = `server-status-pill ${statusClass}`;
 
             let statusText = 'Unknown';
-            if (health?.status === 'ok') statusText = 'OK';
-            else if (health?.status === 'unreachable') statusText = 'Unreachable';
-            else if (health?.status === 'auth_required') statusText = 'Auth Required';
+            if (normalizedStatus === 'ok') statusText = 'OK';
+            else if (normalizedStatus === 'unreachable') statusText = 'Unreachable';
+            else if (normalizedStatus === 'auth_required') statusText = 'Auth Required';
 
             pill.textContent = statusText;
             main.appendChild(pill);
