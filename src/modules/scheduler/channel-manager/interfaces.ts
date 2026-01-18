@@ -28,7 +28,7 @@ export interface IChannelManager {
      * @returns Promise resolving to complete channel config
      * @throws Error if content source is missing
      */
-    createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig>;
+    createChannel(config: Partial<ChannelConfig>, options?: { signal?: AbortSignal | null }): Promise<ChannelConfig>;
 
     /**
      * Update an existing channel.
@@ -76,7 +76,7 @@ export interface IChannelManager {
      * @returns Promise resolving to resolved content
      * @throws Error if channel not found
      */
-    resolveChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+    resolveChannelContent(channelId: string, options?: { signal?: AbortSignal | null }): Promise<ResolvedChannelContent>;
 
     /**
      * Force refresh content for a channel (bypasses cache).
@@ -84,7 +84,7 @@ export interface IChannelManager {
      * @returns Promise resolving to resolved content
      * @throws Error if channel not found
      */
-    refreshChannelContent(channelId: string): Promise<ResolvedChannelContent>;
+    refreshChannelContent(channelId: string, options?: { signal?: AbortSignal | null }): Promise<ResolvedChannelContent>;
 
     // Ordering / Current Channel
 
@@ -217,12 +217,13 @@ export interface IPlexLibraryMinimal {
         options?: {
             includeCollections?: boolean;
             filter?: Record<string, string | number>;
+            signal?: AbortSignal | null;
         }
     ): Promise<PlexMediaItemMinimal[]>;
-    getCollectionItems(collectionKey: string): Promise<PlexMediaItemMinimal[]>;
-    getShowEpisodes(showKey: string): Promise<PlexMediaItemMinimal[]>;
-    getPlaylistItems(playlistKey: string): Promise<PlexMediaItemMinimal[]>;
-    getItem(ratingKey: string): Promise<PlexMediaItemMinimal | null>;
+    getCollectionItems(collectionKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItemMinimal[]>;
+    getShowEpisodes(showKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItemMinimal[]>;
+    getPlaylistItems(playlistKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItemMinimal[]>;
+    getItem(ratingKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItemMinimal | null>;
 }
 
 /**
@@ -245,4 +246,6 @@ export interface PlexMediaItemMinimal {
     directors?: string[];
     addedAt: Date;
     viewCount?: number;
+    grandparentRatingKey?: string;
+    parentRatingKey?: string;
 }

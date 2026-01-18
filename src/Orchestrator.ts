@@ -43,9 +43,10 @@ import {
     PlexLibrary,
     type IPlexLibrary,
     type PlexLibraryType,
-    type PlexCollection,
     type PlexMediaItem,
     type PlexLibraryConfig,
+    type LibraryQueryOptions,
+    PLEX_MEDIA_TYPES,
 } from './modules/plex/library';
 import {
     PlexStreamResolver,
@@ -60,6 +61,8 @@ import {
     type ChannelManagerConfig,
     type ChannelConfig,
     type ResolvedChannelContent,
+    type ResolvedContentItem,
+    type ContentFilter,
 } from './modules/scheduler/channel-manager';
 import {
     DEFAULT_CHANNEL_SETUP_MAX,
@@ -131,7 +134,10 @@ export interface ChannelSetupConfig {
         playlists: boolean;
         genres: boolean;
         directors: boolean;
+        decades: boolean;
+        runtimeRanges: boolean;
     };
+    minItemsPerChannel: number;
 }
 
 export interface ChannelBuildSummary {
@@ -139,6 +145,16 @@ export interface ChannelBuildSummary {
     skipped: number;
     reachedMaxChannels: boolean;
     errorCount: number;
+    canceled: boolean;
+    lastTask?: string;
+}
+
+export interface ChannelBuildProgress {
+    task: 'fetch_playlists' | 'fetch_collections' | 'scan_library_items' | 'build_pending' | 'create_channels' | 'apply_channels' | 'refresh_epg' | 'done';
+    label: string;              // “Fetching collections…”
+    detail: string;             // “Library: Movies” / “Channel 12 of 80”
+    current: number;            // units completed in this task
+    total: number | null;       // null = indeterminate
 }
 
 export interface ChannelSetupRecord extends ChannelSetupConfig {
@@ -149,58 +165,58 @@ export interface ChannelSetupRecord extends ChannelSetupConfig {
 export interface PlaybackInfoSnapshot {
     channel: { id: string; number: number; name: string } | null;
     program:
-        | {
-            itemKey: string;
-            title: string;
-            fullTitle: string;
-            type: string;
-            scheduledStartTime: number;
-            scheduledEndTime: number;
-            elapsedMs: number;
-            remainingMs: number;
-        }
-        | null;
+    | {
+        itemKey: string;
+        title: string;
+        fullTitle: string;
+        type: string;
+        scheduledStartTime: number;
+        scheduledEndTime: number;
+        elapsedMs: number;
+        remainingMs: number;
+    }
+    | null;
     stream:
+    | {
+        protocol: StreamDescriptor['protocol'];
+        mimeType: string;
+        isDirectPlay: boolean;
+        isTranscoding: boolean;
+        container: string;
+        videoCodec: string;
+        audioCodec: string;
+        subtitleDelivery: StreamDecision['subtitleDelivery'];
+        bitrate: number;
+        width: number;
+        height: number;
+        sessionId: string;
+        selectedAudio:
         | {
-            protocol: StreamDescriptor['protocol'];
-            mimeType: string;
-            isDirectPlay: boolean;
-            isTranscoding: boolean;
-            container: string;
-            videoCodec: string;
-            audioCodec: string;
-            subtitleDelivery: StreamDecision['subtitleDelivery'];
-            bitrate: number;
-            width: number;
-            height: number;
-            sessionId: string;
-            selectedAudio:
-                | {
-                    id: string;
-                    codec: string | null | undefined;
-                    channels?: number;
-                    language?: string;
-                    title?: string;
-                    default?: boolean;
-                }
-                | null;
-            selectedSubtitle:
-                | {
-                    id: string;
-                    codec: string | null | undefined;
-                    language?: string;
-                    title?: string;
-                    format?: string;
-                    default?: boolean;
-                }
-                | null;
-            directPlay?: StreamDecision['directPlay'];
-            audioFallback?: StreamDecision['audioFallback'];
-            source?: StreamDecision['source'];
-            transcodeRequest?: StreamDecision['transcodeRequest'];
-            serverDecision?: StreamDecision['serverDecision'];
+            id: string;
+            codec: string | null | undefined;
+            channels?: number;
+            language?: string;
+            title?: string;
+            default?: boolean;
         }
         | null;
+        selectedSubtitle:
+        | {
+            id: string;
+            codec: string | null | undefined;
+            language?: string;
+            title?: string;
+            format?: string;
+            default?: boolean;
+        }
+        | null;
+        directPlay?: StreamDecision['directPlay'];
+        audioFallback?: StreamDecision['audioFallback'];
+        source?: StreamDecision['source'];
+        transcodeRequest?: StreamDecision['transcodeRequest'];
+        serverDecision?: StreamDecision['serverDecision'];
+    }
+    | null;
 }
 
 /**
@@ -237,7 +253,7 @@ export interface IAppOrchestrator {
     onScreenChange(handler: (from: string, to: string) => void): IDisposable;
     getPlaybackInfoSnapshot(): PlaybackInfoSnapshot;
     refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot>;
-    switchToChannel(channelId: string): Promise<void>;
+    switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void>;
     switchToChannelByNumber(number: number): Promise<void>;
     openEPG(): void;
     closeEPG(): void;
@@ -250,7 +266,7 @@ export interface IAppOrchestrator {
     clearSelectedServer(): void;
     getSelectedServerId(): string | null;
     getLibrariesForSetup(): Promise<PlexLibraryType[]>;
-    createChannelsFromSetup(config: ChannelSetupConfig): Promise<ChannelBuildSummary>;
+    createChannelsFromSetup(config: ChannelSetupConfig, options?: { signal?: AbortSignal; onProgress?: (p: ChannelBuildProgress) => void }): Promise<ChannelBuildSummary>;
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
     requestChannelSetupRerun(): void;
     handleGlobalError(error: AppError, context: string): void;
@@ -512,7 +528,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Internal state (_errorHandlers, _moduleStatus) is not reset because
      * instance reuse is not a supported pattern.
      */
-	    async shutdown(): Promise<void> {
+    async shutdown(): Promise<void> {
         if (this._initCoordinator) {
             this._initCoordinator.clearAuthResume();
             this._initCoordinator.clearServerResume();
@@ -555,14 +571,14 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._scheduler.unloadChannel();
         }
 
-	        // Destroy modules
-	        if (this._epg) {
-	            this._epg.destroy();
-	        }
-	        this._stopNowPlayingInfoLiveUpdates();
-	        if (this._nowPlayingInfo) {
-	            this._nowPlayingInfo.destroy();
-	        }
+        // Destroy modules
+        if (this._epg) {
+            this._epg.destroy();
+        }
+        this._stopNowPlayingInfoLiveUpdates();
+        if (this._nowPlayingInfo) {
+            this._nowPlayingInfo.destroy();
+        }
         if (this._videoPlayer) {
             this._videoPlayer.destroy();
         }
@@ -817,7 +833,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             // If we're already running (or resuming from the server-select screen),
             // re-run the channel/player/EPG phases to swap to the selected server.
             if (this._initCoordinator) {
-                await this._initCoordinator.runStartup(4);
+                await this._initCoordinator.runStartup(3);
             }
             return this._ready;
         }
@@ -843,218 +859,431 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     async createChannelsFromSetup(
-        config: ChannelSetupConfig
+        config: ChannelSetupConfig,
+        options?: { signal?: AbortSignal; onProgress?: (p: ChannelBuildProgress) => void }
     ): Promise<ChannelBuildSummary> {
         if (!this._channelManager || !this._plexLibrary) {
             throw new Error('Channel manager not initialized');
         }
+
+        const signal = options?.signal;
+        const reportProgress = (
+            task: ChannelBuildProgress['task'],
+            label: string,
+            detail: string,
+            current: number,
+            total: number | null
+        ): void => {
+            options?.onProgress?.({ task, label, detail, current, total });
+        };
+
+        const checkCanceled = (): boolean => {
+            return signal?.aborted ?? false;
+        };
+
+        if (checkCanceled()) {
+            return { created: 0, skipped: 0, reachedMaxChannels: false, errorCount: 0, canceled: true, lastTask: 'init' };
+        }
+
+        reportProgress('fetch_playlists', 'Preparing...', 'Loading libraries', 0, null);
 
         const libraries = await this.getLibrariesForSetup();
         const selectedLibraries = libraries
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
 
-        const previousChannels = this._channelManager.getAllChannels();
-        const previousCurrent = this._channelManager.getCurrentChannel()?.id ?? null;
-
-        let created = 0;
-        let skippedLibraries = 0;
-        let reachedMaxChannels = false;
-        let errorCount = 0;
-        const errors: string[] = [];
+        let createdItems = 0;
+        let skippedCount = 0;
+        let reachedMax = false;
+        let errorsTotal = 0;
+        const errorsList: string[] = [];
 
         const requestedMax = Number.isFinite(config.maxChannels) ? config.maxChannels : DEFAULT_CHANNEL_SETUP_MAX;
         const effectiveMaxChannels = Math.min(
             Math.max(Math.floor(requestedMax), 1),
             MAX_CHANNELS
         );
+        const minItems = Math.max(1, config.minItemsPerChannel ?? 10);
 
         const shuffleSeedFor = (value: string): number => this._hashSeed(value);
-        const MAX_SCAN_ITEMS = 500;
 
         type PendingChannel = {
             name: string;
             contentSource: ChannelConfig['contentSource'];
             playbackMode: ChannelConfig['playbackMode'];
             shuffleSeed: number;
-            contentFilters?: ChannelConfig['contentFilters'];
+            contentFilters?: ContentFilter[];
+            initialContent?: ResolvedContentItem[];
         };
 
         const pending: PendingChannel[] = [];
+        const reportLibraryProgress = (index: number, label: string, libTitle: string): void => {
+            reportProgress('scan_library_items', label, libTitle, index, selectedLibraries.length);
+        };
 
+        // 0. Server-wide Playlists (Playlists in Plex are global, not per-library)
         if (config.enabledStrategies.playlists) {
-            const playlists = await this._plexLibrary.getPlaylists();
-            const sortedPlaylists = [...playlists].sort((a, b) => a.title.localeCompare(b.title));
-            for (const playlist of sortedPlaylists) {
-                pending.push({
-                    name: `Playlist: ${playlist.title}`,
-                    contentSource: {
-                        type: 'playlist',
-                        playlistKey: playlist.ratingKey,
-                        playlistName: playlist.title,
-                    },
-                    playbackMode: 'shuffle',
-                    shuffleSeed: shuffleSeedFor(`playlist:${playlist.ratingKey}`),
-                });
+            reportProgress('fetch_playlists', 'Checking playlists...', 'Scanning server', 0, null);
+            try {
+                const playlists = await this._plexLibrary.getPlaylists(signal ?? null);
+                for (const pl of playlists) {
+                    if (checkCanceled()) {
+                        return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'fetch_playlists' };
+                    }
+
+                    if (pl.leafCount >= minItems) {
+                        try {
+                            const plItemsPre = await this._plexLibrary.getPlaylistItems(pl.ratingKey, { signal: signal ?? null });
+                            const plItems = this._mapToResolvedItems(plItemsPre);
+                            pending.push({
+                                name: pl.title,
+                                contentSource: {
+                                    type: 'playlist',
+                                    playlistKey: pl.ratingKey,
+                                    playlistName: pl.title,
+                                },
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`playlist:${pl.ratingKey}`),
+                                initialContent: plItems,
+                            });
+                        } catch (e) {
+                            console.warn(`Failed to fetch items for playlist ${pl.title}:`, e);
+                            errorsTotal++;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch playlists:', e);
+                errorsTotal++;
             }
         }
 
         for (const library of selectedLibraries) {
-            let collections: PlexCollection[] = [];
-            if (config.enabledStrategies.collections) {
-                collections = await this._plexLibrary.getCollections(library.id);
-                collections.sort((a, b) => a.title.localeCompare(b.title));
+            const libIndex = selectedLibraries.indexOf(library);
+            if (checkCanceled()) {
+                return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'scan_library_items' };
             }
 
-            if (collections.length > 0) {
-                for (const collection of collections) {
-                    pending.push({
-                        name: collection.title,
-                        contentSource: {
-                            type: 'collection',
-                            collectionKey: collection.ratingKey,
-                            collectionName: collection.title,
-                        },
-                        playbackMode: 'shuffle',
-                        shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
-                    });
+            // 1. Collections
+            if (config.enabledStrategies.collections) {
+                reportLibraryProgress(libIndex, 'Checking collections...', library.title);
+                try {
+                    const collections = await this._plexLibrary.getCollections(library.id, signal ?? null);
+                    for (const collection of collections) {
+                        if (collection.childCount >= minItems) {
+                            try {
+                                const collectionItemsPre = await this._plexLibrary.getCollectionItems(collection.ratingKey, { signal: signal ?? null });
+                                const collectionItems = this._mapToResolvedItems(collectionItemsPre);
+                                pending.push({
+                                    name: collection.title,
+                                    contentSource: {
+                                        type: 'collection',
+                                        collectionKey: collection.ratingKey,
+                                        collectionName: collection.title,
+                                    },
+                                    playbackMode: 'shuffle',
+                                    shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
+                                    initialContent: collectionItems,
+                                });
+                            } catch (e) {
+                                console.warn(`Failed to fetch items for collection ${collection.title}:`, e);
+                                errorsTotal++;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch collections for library ${library.title}:`, e);
+                    errorsTotal++;
                 }
             } else if (config.enabledStrategies.libraryFallback) {
-                pending.push({
-                    name: library.title,
-                    contentSource: {
-                        type: 'library',
-                        libraryId: library.id,
-                        libraryType: library.type === 'movie' ? 'movie' : 'show',
-                        includeWatched: true,
-                    },
-                    playbackMode: 'shuffle',
-                    shuffleSeed: shuffleSeedFor(`library:${library.id}`),
-                });
+                if (library.contentCount >= minItems) {
+                    pending.push({
+                        name: library.title,
+                        contentSource: {
+                            type: 'library',
+                            libraryId: library.id,
+                            libraryType: library.type === 'movie' ? 'movie' : 'show',
+                            includeWatched: true,
+                        },
+                        playbackMode: 'shuffle',
+                        shuffleSeed: shuffleSeedFor(`library:${library.id}`),
+                    });
+                } else {
+                    skippedCount++;
+                }
             } else {
-                skippedLibraries += 1;
+                skippedCount++;
             }
 
-            if (config.enabledStrategies.genres || config.enabledStrategies.directors) {
-                const items = await this._plexLibrary.getLibraryItems(library.id, { limit: MAX_SCAN_ITEMS });
-                const uniqueGenres = config.enabledStrategies.genres
-                    ? this._collectUniqueTags(items, 'genres')
-                    : [];
-                const uniqueDirectors = config.enabledStrategies.directors
-                    ? this._collectUniqueTags(items, 'directors')
-                    : [];
+            // 2. Item Scanning Strategies
+            const needsScan =
+                config.enabledStrategies.genres ||
+                config.enabledStrategies.directors ||
+                config.enabledStrategies.decades ||
+                config.enabledStrategies.runtimeRanges;
 
-                for (const genre of uniqueGenres) {
-                    if (pending.length >= effectiveMaxChannels) {
-                        reachedMaxChannels = true;
-                        break;
-                    }
-                    pending.push({
-                        name: `${library.title} - ${genre}`,
-                        contentSource: {
-                            type: 'library',
-                            libraryId: library.id,
-                            libraryType: library.type === 'movie' ? 'movie' : 'show',
-                            includeWatched: true,
-                        },
-                        contentFilters: [{ field: 'genre', operator: 'eq', value: genre }],
-                        playbackMode: 'shuffle',
-                        shuffleSeed: shuffleSeedFor(`genre:${library.id}:${genre}`),
-                    });
+            if (needsScan) {
+                reportLibraryProgress(libIndex, 'Analyzing content...', library.title);
+                if (checkCanceled()) {
+                    return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'scan_library_items' };
                 }
 
-                for (const director of uniqueDirectors) {
-                    if (pending.length >= effectiveMaxChannels) {
-                        reachedMaxChannels = true;
-                        break;
+                try {
+                    const scanOptions: LibraryQueryOptions = {
+                        signal: signal ?? null,
+                        limit: 3000
+                    };
+
+                    let rawItems: PlexMediaItem[];
+                    if (library.type === 'show') {
+                        scanOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
                     }
-                    pending.push({
-                        name: `${library.title} - ${director}`,
-                        contentSource: {
-                            type: 'library',
-                            libraryId: library.id,
-                            libraryType: library.type === 'movie' ? 'movie' : 'show',
-                            includeWatched: true,
-                        },
-                        contentFilters: [{ field: 'director', operator: 'eq', value: director }],
-                        playbackMode: 'shuffle',
-                        shuffleSeed: shuffleSeedFor(`director:${library.id}:${director}`),
-                    });
+                    rawItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
+                    const items = this._mapToResolvedItems(rawItems);
+
+                    const countTags = (field: 'genres' | 'directors'): { label: string; count: number }[] => {
+                        const counts = new Map<string, { label: string; count: number }>();
+                        for (const item of rawItems) {
+                            const values = item[field];
+                            if (!values) continue;
+                            for (const value of values) {
+                                const trimmed = value.trim();
+                                if (!trimmed) continue;
+                                const key = trimmed.toLowerCase();
+                                const existing = counts.get(key);
+                                if (existing) {
+                                    existing.count++;
+                                } else {
+                                    counts.set(key, { label: trimmed, count: 1 });
+                                }
+                            }
+                        }
+                        return Array.from(counts.values()).sort((a, b) => a.label.localeCompare(b.label));
+                    };
+
+                    // -- Genres
+                    if (config.enabledStrategies.genres) {
+                        const genres = countTags('genres');
+                        for (const genre of genres) {
+                            if (genre.count < minItems) continue;
+                            const genreItems = items.filter(item =>
+                                item.genres?.some(g => g.toLowerCase() === genre.label.toLowerCase())
+                            );
+                            pending.push({
+                                name: `${library.title} - ${genre.label}`,
+                                contentSource: {
+                                    type: 'library',
+                                    libraryId: library.id,
+                                    libraryType: library.type === 'movie' ? 'movie' : 'show',
+                                    includeWatched: true,
+                                },
+                                contentFilters: [{ field: 'genre', operator: 'eq', value: genre.label }],
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`genre:${library.id}:${genre.label}`),
+                                initialContent: genreItems
+                            });
+                        }
+                    }
+
+                    // -- Directors
+                    if (config.enabledStrategies.directors) {
+                        const directors = countTags('directors');
+                        for (const director of directors) {
+                            if (director.count < minItems) continue;
+                            const directorItems = items.filter(item =>
+                                item.directors?.some(d => d.toLowerCase() === director.label.toLowerCase())
+                            );
+                            pending.push({
+                                name: `${library.title} - ${director.label}`,
+                                contentSource: {
+                                    type: 'library',
+                                    libraryId: library.id,
+                                    libraryType: library.type === 'movie' ? 'movie' : 'show',
+                                    includeWatched: true,
+                                },
+                                contentFilters: [{ field: 'director', operator: 'eq', value: director.label }],
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`director:${library.id}:${director.label}`),
+                                initialContent: directorItems
+                            });
+                        }
+                    }
+
+                    // -- Decades
+                    if (config.enabledStrategies.decades) {
+                        const decadeCounts = new Map<number, number>();
+                        for (const item of rawItems) {
+                            if (item.year) {
+                                const decade = Math.floor(item.year / 10) * 10;
+                                decadeCounts.set(decade, (decadeCounts.get(decade) || 0) + 1);
+                            }
+                        }
+                        const sortedDecades = Array.from(decadeCounts.keys()).sort((a, b) => a - b);
+                        for (const decade of sortedDecades) {
+                            if ((decadeCounts.get(decade) || 0) < minItems) continue;
+                            const decadeItems = items.filter(item =>
+                                item.year && Math.floor(item.year / 10) * 10 === decade
+                            );
+                            pending.push({
+                                name: `${library.title} - ${decade}s`,
+                                contentSource: {
+                                    type: 'library',
+                                    libraryId: library.id,
+                                    libraryType: library.type === 'movie' ? 'movie' : 'show',
+                                    includeWatched: true,
+                                },
+                                contentFilters: [
+                                    { field: 'year', operator: 'gte', value: decade },
+                                    { field: 'year', operator: 'lt', value: decade + 10 },
+                                ],
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`decade:${library.id}:${decade}`),
+                                initialContent: decadeItems
+                            });
+                        }
+                    }
+
+                    // -- Runtime Ranges
+                    if (config.enabledStrategies.runtimeRanges) {
+                        const buckets = {
+                            '< 30m': { count: 0, min: 0, max: 30 * 60 * 1000 },
+                            '30m - 60m': { count: 0, min: 30 * 60 * 1000, max: 60 * 60 * 1000 },
+                            '60m - 90m': { count: 0, min: 60 * 60 * 1000, max: 90 * 60 * 1000 },
+                            '90m - 120m': { count: 0, min: 90 * 60 * 1000, max: 120 * 60 * 1000 },
+                            '> 120m': { count: 0, min: 120 * 60 * 1000, max: null as number | null },
+                        };
+
+                        for (const item of rawItems) {
+                            const dur = item.durationMs;
+                            if (!dur) continue;
+                            if (dur < 30 * 60000) buckets['< 30m'].count++;
+                            else if (dur < 60 * 60000) buckets['30m - 60m'].count++;
+                            else if (dur < 90 * 60000) buckets['60m - 90m'].count++;
+                            else if (dur < 120 * 60000) buckets['90m - 120m'].count++;
+                            else buckets['> 120m'].count++;
+                        }
+
+                        for (const [key, b] of Object.entries(buckets)) {
+                            if (b.count < minItems) continue;
+                            const rangeItems = items.filter(item => {
+                                const dur = item.durationMs;
+                                if (!dur) return false;
+                                return dur >= b.min && (b.max === null || dur < b.max);
+                            });
+
+                            const rangeFilters: ContentFilter[] = [
+                                { field: 'duration', operator: 'gte', value: b.min }
+                            ];
+                            if (b.max !== null) {
+                                rangeFilters.push({ field: 'duration', operator: 'lt', value: b.max });
+                            }
+
+                            pending.push({
+                                name: `${library.title} - ${key}`,
+                                contentSource: {
+                                    type: 'library',
+                                    libraryId: library.id,
+                                    libraryType: library.type === 'movie' ? 'movie' : 'show',
+                                    includeWatched: true,
+                                },
+                                contentFilters: rangeFilters,
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`runtime:${library.id}:${key}`),
+                                initialContent: rangeItems
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Failed to scan items for ${library.title}:`, e);
+                    errorsTotal++;
                 }
             }
         }
 
-        const tmpStorageKey = `retune_channels_build_tmp_v1:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-        const tmpCurrentKey = `retune_current_channel_build_tmp_v1:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        if (checkCanceled()) {
+            return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'build_pending' };
+        }
+
+        reportProgress('create_channels', 'Shuffling...', 'Setting up lineup', 0, pending.length);
+
+        const tempKey = `setup_${Date.now()}`;
         const builder = new ChannelManager({
             plexLibrary: this._plexLibrary,
-            storageKey: tmpStorageKey,
-            currentChannelKey: tmpCurrentKey,
+            storageKey: tempKey,
+            currentChannelKey: `${tempKey}_current`,
         });
 
+        const finalSummary: ChannelBuildSummary = {
+            created: 0,
+            skipped: skippedCount,
+            reachedMaxChannels: false,
+            errorCount: errorsTotal,
+            canceled: false,
+            lastTask: 'Initializing...',
+        };
+
         try {
-            for (const ch of pending) {
-                if (created >= effectiveMaxChannels) {
-                    reachedMaxChannels = true;
+            let pIndex = 0;
+            for (const p of pending) {
+                pIndex++;
+                if (finalSummary.created >= effectiveMaxChannels) {
+                    finalSummary.reachedMaxChannels = true;
                     break;
                 }
+
+                if (checkCanceled()) {
+                    finalSummary.canceled = true;
+                    finalSummary.lastTask = 'create_channels';
+                    return finalSummary;
+                }
+
+                if (pIndex % 5 === 0) {
+                    reportProgress('create_channels', 'Creating channels...', `Channel ${finalSummary.created + 1}`, pIndex, pending.length);
+                }
+
                 try {
-                    const createConfig: Partial<ChannelConfig> = {
-                        name: ch.name,
-                        contentSource: ch.contentSource,
-                        playbackMode: ch.playbackMode,
-                        shuffleSeed: ch.shuffleSeed,
+                    const channelParams: Partial<ChannelConfig> = {
+                        name: p.name,
+                        contentSource: p.contentSource,
+                        playbackMode: p.playbackMode,
+                        shuffleSeed: p.shuffleSeed,
                     };
-                    if (ch.contentFilters) {
-                        createConfig.contentFilters = ch.contentFilters;
+                    if (p.contentFilters) {
+                        channelParams.contentFilters = p.contentFilters;
                     }
-                    await builder.createChannel(createConfig);
-                    created += 1;
+
+                    await builder.createChannel(channelParams, {
+                        signal: signal ?? null,
+                        initialContent: p.initialContent
+                    });
+
+                    finalSummary.created++;
                 } catch (e) {
-                    errorCount += 1;
-                    if (errors.length < 5) {
-                        errors.push(e instanceof Error ? e.message : 'Unknown channel creation error');
-                    }
-                    if (e instanceof Error && e.message === 'Maximum number of channels reached') {
-                        reachedMaxChannels = true;
-                        break;
-                    }
+                    console.warn(`Failed to create channel ${p.name}:`, e);
+                    finalSummary.errorCount++;
+                    errorsList.push(p.name);
                 }
             }
 
-            const builtChannels = builder.getAllChannels();
-            if (builtChannels.length === 0) {
-                return {
-                    created: 0,
-                    skipped: skippedLibraries + pending.length,
-                    reachedMaxChannels,
-                    errorCount,
-                };
+            if (checkCanceled()) {
+                finalSummary.canceled = true;
+                finalSummary.lastTask = 'apply_channels';
+                return finalSummary;
             }
 
-            await this._channelManager.replaceAllChannels(builtChannels, { currentChannelId: builtChannels[0]?.id ?? null });
-            this._primeEpgChannels();
-            await this._refreshEpgSchedules();
+            reportProgress('apply_channels', 'Applying changes...', 'Saving library', finalSummary.created, finalSummary.created);
+            await this._channelManager.replaceAllChannels(builder.getAllChannels());
+
         } catch (e) {
-            console.error('[Orchestrator] Channel build failed; attempting rollback:', e);
-            try {
-                await this._channelManager.replaceAllChannels(previousChannels, { currentChannelId: previousCurrent });
-            } catch (rollbackError) {
-                console.error('[Orchestrator] Channel build rollback failed:', rollbackError);
-            }
+            console.error('[Orchestrator] Channel build failed:', e);
             throw e;
         } finally {
-            builder.cancelPendingRetries();
-            safeLocalStorageRemove(tmpStorageKey);
-            safeLocalStorageRemove(tmpCurrentKey);
+            safeLocalStorageRemove(tempKey);
+            safeLocalStorageRemove(`${tempKey}_current`);
         }
 
-        const skipped = skippedLibraries + Math.max(0, pending.length - created);
-        if (errors.length > 0) {
-            console.warn('[Orchestrator] Channel build errors (first few):', errors);
-        }
-
-        return { created, skipped, reachedMaxChannels, errorCount };
+        reportProgress('done', 'Done!', `Built ${finalSummary.created} channels`, finalSummary.created, finalSummary.created);
+        return finalSummary;
     }
 
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void {
@@ -1066,6 +1295,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             selectedLibraryIds: [...setupConfig.selectedLibraryIds],
             enabledStrategies: { ...setupConfig.enabledStrategies },
             maxChannels: setupConfig.maxChannels,
+            minItemsPerChannel: setupConfig.minItemsPerChannel,
             createdAt,
             updatedAt: Date.now(),
         };
@@ -1087,11 +1317,53 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     /**
+     * Maps raw Plex media items to scheduler-ready ResolvedContentItems.
+     */
+    private _mapToResolvedItems(items: PlexMediaItem[]): ResolvedContentItem[] {
+        return items.map((item, index) => {
+            let fullTitle = item.title;
+            if (item.type === 'episode') {
+                const seasonStr = typeof item.seasonNumber === 'number' ? `S${String(item.seasonNumber).padStart(2, '0')}` : '';
+                const epStr = typeof item.episodeNumber === 'number' ? `E${String(item.episodeNumber).padStart(2, '0')}` : '';
+                const epCode = seasonStr && epStr ? `${seasonStr}${epStr}` : '';
+                if (item.parentTitle && epCode) {
+                    fullTitle = `${item.parentTitle} - ${epCode} - ${item.title}`;
+                } else if (item.parentTitle) {
+                    fullTitle = `${item.parentTitle} - ${item.title}`;
+                }
+            }
+
+            const resolved: ResolvedContentItem = {
+                ratingKey: item.ratingKey,
+                type: item.type,
+                title: item.title,
+                fullTitle,
+                durationMs: item.durationMs,
+                thumb: item.thumb,
+                year: item.year || 0,
+                scheduledIndex: index,
+            };
+
+            // Only assign optional fields if they exist, and explicitly exclude undefined for exactOptionalPropertyTypes
+            if (item.seasonNumber !== undefined && item.seasonNumber !== null) resolved.seasonNumber = item.seasonNumber;
+            if (item.episodeNumber !== undefined && item.episodeNumber !== null) resolved.episodeNumber = item.episodeNumber;
+            if (item.rating !== undefined && item.rating !== null) resolved.rating = item.rating;
+            if (item.contentRating !== undefined && item.contentRating !== null) resolved.contentRating = item.contentRating;
+            if (item.genres !== undefined && item.genres !== null) resolved.genres = item.genres;
+            if (item.directors !== undefined && item.directors !== null) resolved.directors = item.directors;
+            if (item.viewCount !== undefined && item.viewCount !== null) resolved.watched = item.viewCount > 0;
+            if (item.addedAt instanceof Date) resolved.addedAt = item.addedAt.getTime();
+
+            return resolved;
+        });
+    }
+
+    /**
      * Switch to a channel by ID.
      * Stops current playback, resolves content, configures scheduler, and syncs.
      * @param channelId - ID of channel to switch to
      */
-    async switchToChannel(channelId: string): Promise<void> {
+    async switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void> {
         if (!this._channelManager || !this._scheduler || !this._videoPlayer) {
             console.error('Modules not initialized');
             return;
@@ -1132,6 +1404,11 @@ export class AppOrchestrator implements IAppOrchestrator {
                     },
                     'switchToChannel'
                 );
+                return;
+            }
+
+            if (options?.signal?.aborted) {
+                console.warn('Channel switch aborted after content resolution.');
                 return;
             }
 
@@ -1812,6 +2089,8 @@ export class AppOrchestrator implements IAppOrchestrator {
                 'playlists',
                 'genres',
                 'directors',
+                'decades',
+                'runtimeRanges',
             ];
             for (const key of requiredKeys) {
                 if (typeof (strategies as Record<string, unknown>)[key] !== 'boolean') {
@@ -1828,12 +2107,16 @@ export class AppOrchestrator implements IAppOrchestrator {
             const maxChannels = typeof parsed.maxChannels === 'number' && Number.isFinite(parsed.maxChannels)
                 ? parsed.maxChannels
                 : DEFAULT_CHANNEL_SETUP_MAX;
+            const minItemsPerChannel = typeof parsed.minItemsPerChannel === 'number' && Number.isFinite(parsed.minItemsPerChannel)
+                ? parsed.minItemsPerChannel
+                : 10;
 
             return {
                 serverId: parsed.serverId,
                 selectedLibraryIds: parsed.selectedLibraryIds,
                 enabledStrategies: strategies as ChannelSetupConfig['enabledStrategies'],
                 maxChannels,
+                minItemsPerChannel,
                 createdAt: parsed.createdAt,
                 updatedAt: parsed.updatedAt,
             };
@@ -1866,26 +2149,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         return record === null;
     }
 
-    private _collectUniqueTags(items: PlexMediaItem[], field: 'genres' | 'directors'): string[] {
-        const unique = new Map<string, string>();
-        for (const item of items) {
-            const values = item[field];
-            if (!values) {
-                continue;
-            }
-            for (const value of values) {
-                const trimmed = value.trim();
-                if (!trimmed) {
-                    continue;
-                }
-                const key = trimmed.toLowerCase();
-                if (!unique.has(key)) {
-                    unique.set(key, trimmed);
-                }
-            }
-        }
-        return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
-    }
+
 
     private _hashSeed(value: string): number {
         let hash = 2166136261;
@@ -2430,18 +2694,18 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._updateNowPlayingInfoForProgram(program);
         this._refreshEpgScheduleForLiveChannel();
 
-	        try {
-	            const stream = await this._resolveStreamForProgram(program);
-	            this._currentStreamDescriptor = stream;
+        try {
+            const stream = await this._resolveStreamForProgram(program);
+            this._currentStreamDescriptor = stream;
 
-	            // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
-	            // and fetch PMS transcode decision in the background to explain why video/audio transcodes.
-	            this._maybeAutoShowNowPlayingStreamDebugHud();
-	            void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+            // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
+            // and fetch PMS transcode decision in the background to explain why video/audio transcodes.
+            this._maybeAutoShowNowPlayingStreamDebugHud();
+            void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
 
-	            await this._videoPlayer.loadStream(stream);
-	            await this._videoPlayer.play();
-	            this._resetPlaybackFailureGuard();
+            await this._videoPlayer.loadStream(stream);
+            await this._videoPlayer.play();
+            this._resetPlaybackFailureGuard();
         } catch (error) {
             console.error('Failed to load stream:', error);
             this._handlePlaybackFailure('programStart', error);
@@ -2499,85 +2763,85 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
     }
 
-	    private _showNowPlayingInfoOverlay(): void {
-	        if (!this._nowPlayingInfo || !this._channelManager) {
-	            return;
-	        }
-	        const program = ((): ScheduledProgram | null => {
-	            // Prefer a fresh schedule query so elapsed/remaining are correct even if the
-	            // overlay is opened some time after the channel was tuned.
-	            try {
-	                if (this._scheduler) {
-	                    return this._scheduler.getCurrentProgram();
-	                }
-	            } catch {
-	                // Fallback to last-known snapshot if scheduler is unavailable.
-	            }
-	            return this._currentProgramForPlayback;
-	        })();
-	        if (!program) {
-	            this._navigation?.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-	            return;
-	        }
-	        const channel = this._channelManager.getCurrentChannel();
-	        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
-	        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
-	        this._nowPlayingInfo.show(viewModel);
-	        this._startNowPlayingInfoLiveUpdates();
-	        void this._fetchNowPlayingInfoDetails(program, channel);
-	        void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
-	    }
+    private _showNowPlayingInfoOverlay(): void {
+        if (!this._nowPlayingInfo || !this._channelManager) {
+            return;
+        }
+        const program = ((): ScheduledProgram | null => {
+            // Prefer a fresh schedule query so elapsed/remaining are correct even if the
+            // overlay is opened some time after the channel was tuned.
+            try {
+                if (this._scheduler) {
+                    return this._scheduler.getCurrentProgram();
+                }
+            } catch {
+                // Fallback to last-known snapshot if scheduler is unavailable.
+            }
+            return this._currentProgramForPlayback;
+        })();
+        if (!program) {
+            this._navigation?.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+            return;
+        }
+        const channel = this._channelManager.getCurrentChannel();
+        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
+        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
+        this._nowPlayingInfo.show(viewModel);
+        this._startNowPlayingInfoLiveUpdates();
+        void this._fetchNowPlayingInfoDetails(program, channel);
+        void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+    }
 
-	    private _hideNowPlayingInfoOverlay(): void {
-	        if (!this._nowPlayingInfo) {
-	            return;
-	        }
-	        this._stopNowPlayingInfoLiveUpdates();
-	        this._nowPlayingInfo.hide();
-	    }
+    private _hideNowPlayingInfoOverlay(): void {
+        if (!this._nowPlayingInfo) {
+            return;
+        }
+        this._stopNowPlayingInfoLiveUpdates();
+        this._nowPlayingInfo.hide();
+    }
 
-	    private _startNowPlayingInfoLiveUpdates(): void {
-	        if (this._nowPlayingInfoLiveUpdateTimer !== null) {
-	            return;
-	        }
-	        // Only update while the modal is open; do not reset auto-hide timer.
-	        this._nowPlayingInfoLiveUpdateTimer = setInterval(() => {
-	            if (!this._nowPlayingInfo || !this._navigation || !this._scheduler) {
-	                return;
-	            }
-	            if (!this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-	                return;
-	            }
-	            try {
+    private _startNowPlayingInfoLiveUpdates(): void {
+        if (this._nowPlayingInfoLiveUpdateTimer !== null) {
+            return;
+        }
+        // Only update while the modal is open; do not reset auto-hide timer.
+        this._nowPlayingInfoLiveUpdateTimer = setInterval(() => {
+            if (!this._nowPlayingInfo || !this._navigation || !this._scheduler) {
+                return;
+            }
+            if (!this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+                return;
+            }
+            try {
                 const program = this._scheduler.getCurrentProgram();
                 if (!program) return;
                 const channel = this._channelManager?.getCurrentChannel() ?? null;
                 const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
                 this._nowPlayingInfo.update(viewModel);
             } catch {
-	                // Best-effort; never throw from a UI refresh timer.
-	            }
-	        }, 1000);
-	    }
+                // Best-effort; never throw from a UI refresh timer.
+            }
+        }, 1000);
+    }
 
-	    private _stopNowPlayingInfoLiveUpdates(): void {
-	        if (this._nowPlayingInfoLiveUpdateTimer === null) {
-	            return;
-	        }
-	        clearInterval(this._nowPlayingInfoLiveUpdateTimer);
-	        this._nowPlayingInfoLiveUpdateTimer = null;
-	    }
+    private _stopNowPlayingInfoLiveUpdates(): void {
+        if (this._nowPlayingInfoLiveUpdateTimer === null) {
+            return;
+        }
+        clearInterval(this._nowPlayingInfoLiveUpdateTimer);
+        this._nowPlayingInfoLiveUpdateTimer = null;
+    }
 
-	    private _updateNowPlayingInfoForProgram(program: ScheduledProgram): void {
-	        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-	            return;
-	        }
-	        const channel = this._channelManager?.getCurrentChannel() ?? null;
+    private _updateNowPlayingInfoForProgram(program: ScheduledProgram): void {
+        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+            return;
+        }
+        const channel = this._channelManager?.getCurrentChannel() ?? null;
         const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
         this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
         this._nowPlayingInfo.update(viewModel);
-	        void this._fetchNowPlayingInfoDetails(program, channel);
-	    }
+        void this._fetchNowPlayingInfoDetails(program, channel);
+    }
 
     private async _fetchNowPlayingInfoDetails(
         program: ScheduledProgram,
@@ -2659,20 +2923,20 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         }
 
-	        const debugText = this._isNowPlayingStreamDebugEnabled()
-	            ? this._buildNowPlayingStreamDebugText()
-	            : null;
+        const debugText = this._isNowPlayingStreamDebugEnabled()
+            ? this._buildNowPlayingStreamDebugText()
+            : null;
 
-	        const baseViewModel: NowPlayingInfoViewModel = {
-	            title,
-	            subtitle,
-	            elapsedMs: program.elapsedMs,
-	            durationMs: program.item.durationMs,
-	            posterUrl,
-	            ...(channelName ? { channelName } : {}),
-	            ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
-	            ...(debugText ? { debugText } : {}),
-	        };
+        const baseViewModel: NowPlayingInfoViewModel = {
+            title,
+            subtitle,
+            elapsedMs: program.elapsedMs,
+            durationMs: program.item.durationMs,
+            posterUrl,
+            ...(channelName ? { channelName } : {}),
+            ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
+            ...(debugText ? { debugText } : {}),
+        };
 
         if (summary) {
             return {
@@ -2715,24 +2979,24 @@ export class AppOrchestrator implements IAppOrchestrator {
         return `${hours}h ${minutes}m`;
     }
 
-	    private _getNowPlayingInfoAutoHideMs(): number {
-	        const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS);
-	        const parsed = raw ? Number(raw) : NaN;
-	        const configured = this._config?.nowPlayingInfoConfig.autoHideMs;
-	        const candidates = [
-	            ...(Number.isFinite(parsed) ? [parsed] : []),
-	            ...(typeof configured === 'number' && Number.isFinite(configured) ? [configured] : []),
-	        ];
-	        for (const candidate of candidates) {
-	            if (candidate > 0) {
-	                const normalized = Math.max(1000, Math.floor(candidate));
-	                if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
-	                    return normalized;
-	                }
-	            }
-	        }
-	        return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
-	    }
+    private _getNowPlayingInfoAutoHideMs(): number {
+        const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS);
+        const parsed = raw ? Number(raw) : NaN;
+        const configured = this._config?.nowPlayingInfoConfig.autoHideMs;
+        const candidates = [
+            ...(Number.isFinite(parsed) ? [parsed] : []),
+            ...(typeof configured === 'number' && Number.isFinite(configured) ? [configured] : []),
+        ];
+        for (const candidate of candidates) {
+            if (candidate > 0) {
+                const normalized = Math.max(1000, Math.floor(candidate));
+                if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
+                    return normalized;
+                }
+            }
+        }
+        return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
+    }
 
     private _isNowPlayingStreamDebugEnabled(): boolean {
         try {
@@ -2757,72 +3021,72 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-	    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
+    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
         if (!this._navigation || !this._nowPlayingInfo) return;
         if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
 
-	        const currentScreen = this._navigation.getCurrentScreen();
-	        if (currentScreen !== 'player') return;
+        const currentScreen = this._navigation.getCurrentScreen();
+        if (currentScreen !== 'player') return;
 
-	        // Avoid stacking over other modals.
-	        if (this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) return;
-	        if (this._navigation.isModalOpen()) return;
+        // Avoid stacking over other modals.
+        if (this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) return;
+        if (this._navigation.isModalOpen()) return;
 
-	        this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
-	    }
+        this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
+    }
 
-	    private _formatKbps(kbps: number): string {
-	        if (!Number.isFinite(kbps)) return 'unknown';
-	        if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
-	        return `${kbps} kbps`;
-	    }
+    private _formatKbps(kbps: number): string {
+        if (!Number.isFinite(kbps)) return 'unknown';
+        if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
+        return `${kbps} kbps`;
+    }
 
-	    private _buildNowPlayingStreamDebugText(): string | null {
-	        if (!this._isNowPlayingStreamDebugEnabled()) return null;
-	        const decision = this._currentStreamDecision;
-	        if (!decision) return null;
+    private _buildNowPlayingStreamDebugText(): string | null {
+        if (!this._isNowPlayingStreamDebugEnabled()) return null;
+        const decision = this._currentStreamDecision;
+        if (!decision) return null;
 
-	        const lines: string[] = [];
-	        lines.push(decision.isDirectPlay ? 'DIRECT PLAY' : 'HLS REQUESTED (Plex decides copy vs transcode)');
+        const lines: string[] = [];
+        lines.push(decision.isDirectPlay ? 'DIRECT PLAY' : 'HLS REQUESTED (Plex decides copy vs transcode)');
 
-	        const w = typeof decision.width === 'number' ? decision.width : 0;
-	        const h = typeof decision.height === 'number' ? decision.height : 0;
-	        lines.push(
-	            `Target: ${decision.container} v=${decision.videoCodec} a=${decision.audioCodec} ${w}x${h} ${this._formatKbps(
-	                decision.bitrate
-	            )}`
-	        );
+        const w = typeof decision.width === 'number' ? decision.width : 0;
+        const h = typeof decision.height === 'number' ? decision.height : 0;
+        lines.push(
+            `Target: ${decision.container} v=${decision.videoCodec} a=${decision.audioCodec} ${w}x${h} ${this._formatKbps(
+                decision.bitrate
+            )}`
+        );
 
-	        if (decision.serverDecision) {
-	            const sd = decision.serverDecision;
-	            const parts = [
-	                sd.videoDecision ? `v=${sd.videoDecision}` : null,
-	                sd.audioDecision ? `a=${sd.audioDecision}` : null,
-	                sd.subtitleDecision ? `sub=${sd.subtitleDecision}` : null,
-	            ].filter(Boolean);
-	            if (parts.length > 0) lines.push(`PMS: ${parts.join(' ')}`);
-	            if (sd.decisionText) lines.push(`PMS: ${sd.decisionText}`);
-	        } else if (decision.isTranscoding) {
-	            lines.push('PMS: (decision pending)');
-	        }
+        if (decision.serverDecision) {
+            const sd = decision.serverDecision;
+            const parts = [
+                sd.videoDecision ? `v=${sd.videoDecision}` : null,
+                sd.audioDecision ? `a=${sd.audioDecision}` : null,
+                sd.subtitleDecision ? `sub=${sd.subtitleDecision}` : null,
+            ].filter(Boolean);
+            if (parts.length > 0) lines.push(`PMS: ${parts.join(' ')}`);
+            if (sd.decisionText) lines.push(`PMS: ${sd.decisionText}`);
+        } else if (decision.isTranscoding) {
+            lines.push('PMS: (decision pending)');
+        }
 
-	        if (decision.directPlay?.reasons?.length) {
-	            lines.push(`Blocked: ${decision.directPlay.reasons.join(', ')}`);
-	        }
-	        if (decision.audioFallback) {
-	            lines.push(
-	                `Fallback: ${decision.audioFallback.fromCodec} -> ${decision.audioFallback.toCodec}`
-	            );
-	        }
-	        if (decision.source) {
-	            lines.push(
-	                `Src: ${decision.source.container} v=${decision.source.videoCodec} a=${decision.source.audioCodec}`
-	            );
-	        }
+        if (decision.directPlay?.reasons?.length) {
+            lines.push(`Blocked: ${decision.directPlay.reasons.join(', ')}`);
+        }
+        if (decision.audioFallback) {
+            lines.push(
+                `Fallback: ${decision.audioFallback.fromCodec} -> ${decision.audioFallback.toCodec}`
+            );
+        }
+        if (decision.source) {
+            lines.push(
+                `Src: ${decision.source.container} v=${decision.source.videoCodec} a=${decision.source.audioCodec}`
+            );
+        }
 
-	        // Keep short for TVs (CSS also clamps, but avoid generating huge strings).
-	        return lines.slice(0, 6).join('\n');
-	    }
+        // Keep short for TVs (CSS also clamps, but avoid generating huge strings).
+        return lines.slice(0, 6).join('\n');
+    }
 
     private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
         if (!this._isNowPlayingStreamDebugEnabled()) return;

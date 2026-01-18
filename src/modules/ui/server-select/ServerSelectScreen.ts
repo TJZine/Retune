@@ -8,6 +8,8 @@ import { AppOrchestrator } from '../../../Orchestrator';
 import type { PlexServer } from '../../plex/discovery/types';
 import { PlexApiError } from '../../plex/auth';
 import type { FocusableElement } from '../../navigation';
+import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
+import { safeLocalStorageGet } from '../../../utils/storage';
 
 
 export class ServerSelectScreen {
@@ -70,7 +72,7 @@ export class ServerSelectScreen {
         const refreshButton = document.createElement('button');
         refreshButton.id = 'btn-server-refresh';
         refreshButton.className = 'screen-button';
-        refreshButton.textContent = 'Refresh';
+        refreshButton.textContent = 'Retry discovery';
         refreshButton.addEventListener('click', () => {
             this.refresh().catch(console.error);
         });
@@ -115,7 +117,69 @@ export class ServerSelectScreen {
         this._clearError();
         this._setStatus('', '');
         this._registerFocusables();
-        this.refresh().catch(console.error);
+        this._attemptAutoConnect().catch(console.error);
+    }
+
+    private async _attemptAutoConnect(): Promise<void> {
+        if (this._isLoading) return;
+        this._isLoading = true;
+        this._listEl.innerHTML = '';
+        this._setStatus('Connecting…', '');
+
+        // Disable controls
+        this._refreshButton.disabled = true;
+        this._setupButton.disabled = true;
+        this._clearButton.disabled = true;
+
+        try {
+            const servers = await this._orchestrator.discoverServers(false);
+            const savedId = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+
+            if (savedId && servers.some(s => s.id === savedId)) {
+                const success = await this._orchestrator.selectServer(savedId);
+                if (success) {
+                    this._setStatus('Connected…', 'Continuing startup…');
+                    this._isLoading = false;
+                    this._refreshButton.disabled = false;
+                    this._setupButton.disabled = false;
+                    this._clearButton.disabled = false;
+                    return;
+                }
+            }
+
+            // Fallback to rendering list
+            this._renderServers(servers);
+            if (servers.length === 0) {
+                this._setStatus('No servers found.', 'Ensure your Plex server is reachable.');
+            } else {
+                this._setStatus('Select a server from the list.', '');
+            }
+        } catch (error) {
+            this._handleError(error, 'Failed to discover servers.');
+            this._setStatus('Discovery failed.', '');
+            this._renderServers([]);
+        } finally {
+            this._isLoading = false;
+            this._refreshButton.disabled = false;
+            this._setupButton.disabled = false;
+            this._clearButton.disabled = false;
+            this._restoreFocus();
+        }
+    }
+
+    private _restoreFocus(): void {
+        const nav = this._orchestrator.getNavigation();
+        if (nav) {
+            if (this._restoreFocusTimeoutId !== null) {
+                clearTimeout(this._restoreFocusTimeoutId);
+                this._restoreFocusTimeoutId = null;
+            }
+            this._restoreFocusTimeoutId = setTimeout(() => {
+                this._restoreFocusTimeoutId = null;
+                if (!this._container.classList.contains('visible')) return;
+                nav.setFocus('btn-server-refresh');
+            }, 50);
+        }
     }
 
     hide(): void {
@@ -186,6 +250,14 @@ export class ServerSelectScreen {
     }
 
     private _renderServers(servers: PlexServer[]): void {
+        const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
+        let healthMap: Record<string, { status: string; type: string; latencyMs: number } | undefined> = {};
+        try {
+            healthMap = rawHealth ? JSON.parse(rawHealth) : {};
+        } catch (e) {
+            console.warn('[ServerSelect] Failed to parse health data:', e);
+        }
+
         // Clean up existing focusables to prevent phantom navigation targets
         const nav = this._orchestrator.getNavigation();
         if (nav) {
@@ -231,12 +303,26 @@ export class ServerSelectScreen {
             const selectButton = document.createElement('button');
             selectButton.id = `btn-server-select-${i}`;
             selectButton.className = 'screen-button secondary';
-            selectButton.textContent = 'Select';
+            selectButton.textContent = 'Test & Select';
             selectButton.addEventListener('click', () => {
                 this._selectServer(server).catch(console.error);
             });
             actions.appendChild(selectButton);
             row.appendChild(actions);
+
+            // Add health pill
+            const health = healthMap[server.id];
+            const pill = document.createElement('div');
+            const statusClass = health?.status === 'auth_required' ? 'auth-required' : (health?.status || 'unknown');
+            pill.className = `server-status-pill ${statusClass}`;
+
+            let statusText = 'Unknown';
+            if (health?.status === 'ok') statusText = 'OK';
+            else if (health?.status === 'unreachable') statusText = 'Unreachable';
+            else if (health?.status === 'auth_required') statusText = 'Auth Required';
+
+            pill.textContent = statusText;
+            main.appendChild(pill);
 
             this._listEl.appendChild(row);
 
@@ -287,18 +373,17 @@ export class ServerSelectScreen {
 
     private _buildServerMeta(server: PlexServer): string {
         const ownership = server.owned ? 'Owned' : `Shared by ${server.sourceTitle}`;
-        const total = server.connections.length;
-        let localCount = 0;
-        let relayCount = 0;
-        for (const connection of server.connections) {
-            if (connection.local) {
-                localCount += 1;
-            }
-            if (connection.relay) {
-                relayCount += 1;
-            }
-        }
-        return `${ownership} • Connections: ${total} (local ${localCount}, relay ${relayCount})`;
+
+
+        const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
+        const healthMap = rawHealth ? JSON.parse(rawHealth) : {};
+        const health = healthMap[server.id];
+
+        const lastInfo = health?.status === 'ok'
+            ? `Last: ${health.type} ${health.latencyMs}ms`
+            : (health?.status === 'unreachable' ? 'Last: Unreachable' : '—');
+
+        return `${ownership} • ${lastInfo}`;
     }
 
     private _setStatus(status: string, detail: string): void {

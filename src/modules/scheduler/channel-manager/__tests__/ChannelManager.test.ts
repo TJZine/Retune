@@ -142,14 +142,14 @@ describe('ChannelManager', () => {
                     number: 0,
                     contentSource: createMockContentSource(),
                 })
-            ).rejects.toThrow('Channel number must be between 1 and 999');
+            ).rejects.toThrow('Channel number must be between 1 and 500');
 
             await expect(
                 manager.createChannel({
-                    number: 1000,
+                    number: 501,
                     contentSource: createMockContentSource(),
                 })
-            ).rejects.toThrow('Channel number must be between 1 and 999');
+            ).rejects.toThrow('Channel number must be between 1 and 500');
         });
 
         it('should emit channelCreated event', async () => {

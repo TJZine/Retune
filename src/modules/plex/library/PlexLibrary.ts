@@ -92,9 +92,9 @@ export class PlexLibrary implements IPlexLibrary {
      * Get all libraries.
      * @returns Promise resolving to list of libraries
      */
-    async getLibraries(): Promise<PlexLibraryType[]> {
+    async getLibraries(signal?: AbortSignal | null): Promise<PlexLibraryType[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTIONS);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawLibrarySection>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawLibrarySection>>(url, { signal: signal ?? null });
 
         if (!response) {
             return [];
@@ -168,7 +168,7 @@ export class PlexLibrary implements IPlexLibrary {
             }
 
             const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
-            const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+            const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options.signal ?? null });
 
             if (!response) {
                 break; // Empty/error response, stop pagination
@@ -200,9 +200,9 @@ export class PlexLibrary implements IPlexLibrary {
      * @param ratingKey - Item's unique rating key
      * @returns Promise resolving to item or null if not found
      */
-    async getItem(ratingKey: string): Promise<PlexMediaItem | null> {
+    async getItem(ratingKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem | null> {
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA(ratingKey));
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return null;
@@ -225,12 +225,12 @@ export class PlexLibrary implements IPlexLibrary {
      * @param libraryId - Library section ID (must be a show library)
      * @returns Promise resolving to list of shows
      */
-    async getShows(libraryId: string): Promise<PlexMediaItem[]> {
+    async getShows(libraryId: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]> {
         const params = {
             type: PLEX_MEDIA_TYPES.SHOW,
         };
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -245,9 +245,9 @@ export class PlexLibrary implements IPlexLibrary {
      * @param showKey - Show's rating key
      * @returns Promise resolving to list of seasons
      */
-    async getShowSeasons(showKey: string): Promise<PlexSeason[]> {
+    async getShowSeasons(showKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexSeason[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA_CHILDREN(showKey));
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawSeason>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawSeason>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -262,9 +262,9 @@ export class PlexLibrary implements IPlexLibrary {
      * @param seasonKey - Season's rating key
      * @returns Promise resolving to list of episodes
      */
-    async getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]> {
+    async getSeasonEpisodes(seasonKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_METADATA_CHILDREN(seasonKey));
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -279,13 +279,13 @@ export class PlexLibrary implements IPlexLibrary {
      * @param showKey - Show's rating key
      * @returns Promise resolving to all episodes sorted by season/episode
      */
-    async getShowEpisodes(showKey: string): Promise<PlexMediaItem[]> {
+    async getShowEpisodes(showKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]> {
         // Get all seasons
-        const seasons = await this.getShowSeasons(showKey);
+        const seasons = await this.getShowSeasons(showKey, options);
 
         // Fetch episodes for each season in parallel
         const episodePromises = seasons.map((season) =>
-            this.getSeasonEpisodes(season.ratingKey)
+            this.getSeasonEpisodes(season.ratingKey, options)
         );
         const episodeArrays = await Promise.all(episodePromises);
 
@@ -363,7 +363,7 @@ export class PlexLibrary implements IPlexLibrary {
      * @param libraryId - Library section ID
      * @returns Promise resolving to list of collections
      */
-    async getCollections(libraryId: string): Promise<PlexCollection[]> {
+    async getCollections(libraryId: string, signal?: AbortSignal | null): Promise<PlexCollection[]> {
         // Use type=18 (COLLECTION) filter on the library 'all' endpoint
         const params = {
             type: PLEX_MEDIA_TYPES.COLLECTION,
@@ -371,7 +371,7 @@ export class PlexLibrary implements IPlexLibrary {
             includeMeta: 1,  // Standard metadata
         };
         const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawCollection>>(url, { signal: signal ?? null });
 
         if (!response) {
             return [];
@@ -386,13 +386,13 @@ export class PlexLibrary implements IPlexLibrary {
      * @param collectionKey - Collection's rating key
      * @returns Promise resolving to list of items
      */
-    async getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]> {
+    async getCollectionItems(collectionKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]> {
         const params = {
             includeGuids: 1,
             includeMeta: 1,
         };
         const url = this._buildUrl(PLEX_ENDPOINTS.COLLECTION_CHILDREN(collectionKey), params);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -406,9 +406,9 @@ export class PlexLibrary implements IPlexLibrary {
      * Get user playlists.
      * @returns Promise resolving to list of playlists
      */
-    async getPlaylists(): Promise<PlexPlaylist[]> {
+    async getPlaylists(signal?: AbortSignal | null): Promise<PlexPlaylist[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.PLAYLISTS);
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawPlaylist>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawPlaylist>>(url, { signal: signal ?? null });
 
         if (!response) {
             return [];
@@ -423,9 +423,9 @@ export class PlexLibrary implements IPlexLibrary {
      * @param playlistKey - Playlist's rating key
      * @returns Promise resolving to list of items
      */
-    async getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]> {
+    async getPlaylistItems(playlistKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]> {
         const url = this._buildUrl(PLEX_ENDPOINTS.PLAYLIST_ITEMS(playlistKey));
-        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options?.signal ?? null });
 
         if (!response) {
             return [];
@@ -557,52 +557,52 @@ export class PlexLibrary implements IPlexLibrary {
      * @param options - Optional fetch options
      * @returns Parsed JSON response or null for 404/empty/parse errors
      */
-	    private async _fetchWithRetry<T>(
-	        url: string,
-	        options: RequestInit = {}
-	    ): Promise<T | null> {
-	        const logger = this._config.logger ?? { warn: console.warn, error: console.error };
+    private async _fetchWithRetry<T>(
+        url: string,
+        options: RequestInit = {}
+    ): Promise<T | null> {
+        const logger = this._config.logger ?? { warn: console.warn, error: console.error };
         let timeoutRetries = 0;
         let serverErrorRetried = false;
         let rateLimitRetries = 0;
 
-	        while (true) {
-	            try {
-	                const controller = new AbortController();
-	                const timeoutId = setTimeout(
-	                    () => controller.abort(),
-	                    PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
-	                );
+        while (true) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(
+                    () => controller.abort(),
+                    PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
+                );
 
-	                let response: Response;
-	                try {
-	                    // Plex has started warning that `X-Plex-Container-Size` must be provided as a header.
-	                    // Retune historically provides paging via query params; mirror those values as headers
-	                    // to avoid future 400s while keeping existing URL construction unchanged.
-	                    const pagingHeaders: Record<string, string> = {};
-	                    try {
-	                        const u = new URL(url);
-	                        const start = u.searchParams.get('X-Plex-Container-Start');
-	                        const size = u.searchParams.get('X-Plex-Container-Size');
-	                        if (start) pagingHeaders['X-Plex-Container-Start'] = start;
-	                        if (size) pagingHeaders['X-Plex-Container-Size'] = size;
-	                    } catch {
-	                        // Ignore invalid URLs; fetch will surface a more actionable error.
-	                    }
+                let response: Response;
+                try {
+                    // Plex has started warning that `X-Plex-Container-Size` must be provided as a header.
+                    // Retune historically provides paging via query params; mirror those values as headers
+                    // to avoid future 400s while keeping existing URL construction unchanged.
+                    const pagingHeaders: Record<string, string> = {};
+                    try {
+                        const u = new URL(url);
+                        const start = u.searchParams.get('X-Plex-Container-Start');
+                        const size = u.searchParams.get('X-Plex-Container-Size');
+                        if (start) pagingHeaders['X-Plex-Container-Start'] = start;
+                        if (size) pagingHeaders['X-Plex-Container-Size'] = size;
+                    } catch {
+                        // Ignore invalid URLs; fetch will surface a more actionable error.
+                    }
 
-	                    response = await fetch(url, {
-	                        ...options,
-	                        headers: {
-	                            Accept: 'application/json',
-	                            ...this._config.getAuthHeaders(),
-	                            ...pagingHeaders,
-	                            ...options.headers,
-	                        },
-	                        signal: controller.signal,
-	                    });
-	                } finally {
-	                    clearTimeout(timeoutId);
-	                }
+                    response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            Accept: 'application/json',
+                            ...this._config.getAuthHeaders(),
+                            ...pagingHeaders,
+                            ...options.headers,
+                        },
+                        signal: options.signal || controller.signal,
+                    });
+                } finally {
+                    clearTimeout(timeoutId);
+                }
 
                 // Handle 401 Unauthorized - emit event, no retry
                 if (response.status === 401) {

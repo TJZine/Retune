@@ -195,7 +195,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                     : 'unknown error';
                 throw new PlexApiError(
                     AppErrorCode.SERVER_UNREACHABLE,
-                    `Failed to discover servers: ${message} (last url: ${lastUrl || 'unknown'})`,
+                    `Failed to discover servers: ${message} (last url: ${this._redactUrl(lastUrl) || 'unknown'})`,
                     undefined,
                     true
                 );
@@ -212,7 +212,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
             return servers;
         } catch (error) {
-            const lastUrlInfo = lastUrl || 'unknown';
+            const lastUrlInfo = this._redactUrl(lastUrl) || 'unknown';
             if (error instanceof PlexApiError) {
                 console.error(`[Discovery] Discovery failed (API Error): ${error.message} (last url: ${lastUrlInfo})`);
                 throw error;
@@ -252,7 +252,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
     public async testConnection(
         _server: PlexServer,
         connection: PlexConnection
-    ): Promise<number | null> {
+    ): Promise<number | 'auth_required' | null> {
         const url = new URL(PLEX_DISCOVERY_CONSTANTS.IDENTITY_ENDPOINT, connection.uri).toString();
         const headers = this._getAuthHeaders();
         const startTime = Date.now();
@@ -271,6 +271,9 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
 
             clearTimeout(timeoutId);
 
+            if (response.status === 401 || response.status === 403) {
+                return 'auth_required';
+            }
             if (!response.ok) {
                 return null;
             }
@@ -294,8 +297,9 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      */
     public async findFastestConnection(
         server: PlexServer
-    ): Promise<PlexConnection | null> {
+    ): Promise<{ connection: PlexConnection | null; authRequired: boolean }> {
         const config = this._mixedContentConfig;
+        let authRequired = false;
 
         // Separate connections by protocol per mixed-content handling requirements
         const httpsConns = server.connections.filter(c => c.protocol === 'https');
@@ -311,22 +315,28 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             // Test HTTPS connections in priority order
             for (const conn of localHttps) {
                 const latency = await this.testConnection(server, conn);
-                if (latency !== null) {
-                    return this._createConnectionWithLatency(conn, latency);
+                if (latency === 'auth_required') {
+                    authRequired = true;
+                } else if (latency !== null) {
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
 
             for (const conn of remoteHttps) {
                 const latency = await this.testConnection(server, conn);
-                if (latency !== null) {
-                    return this._createConnectionWithLatency(conn, latency);
+                if (latency === 'auth_required') {
+                    authRequired = true;
+                } else if (latency !== null) {
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
 
             for (const conn of relayHttps) {
                 const latency = await this.testConnection(server, conn);
-                if (latency !== null) {
-                    return this._createConnectionWithLatency(conn, latency);
+                if (latency === 'auth_required') {
+                    authRequired = true;
+                } else if (latency !== null) {
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
         }
@@ -345,8 +355,10 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                     latencyMs: null,
                 };
                 const latency = await this.testConnection(server, upgradedConn);
-                if (latency !== null) {
-                    return this._createConnectionWithLatency(upgradedConn, latency);
+                if (latency === 'auth_required') {
+                    authRequired = true;
+                } else if (latency !== null) {
+                    return { connection: this._createConnectionWithLatency(upgradedConn, latency), authRequired };
                 }
             }
         }
@@ -356,17 +368,19 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             const localHttp = httpConns.filter(c => c.local && !c.relay);
             for (const conn of localHttp) {
                 const latency = await this.testConnection(server, conn);
-                if (latency !== null) {
+                if (latency === 'auth_required') {
+                    authRequired = true;
+                } else if (latency !== null) {
                     // Log warning if logWarnings is enabled
                     if (config.logWarnings) {
                         console.warn('[Discovery] Using HTTP connection - HTTPS unavailable');
                     }
-                    return this._createConnectionWithLatency(conn, latency);
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
         }
 
-        return null;
+        return { connection: null, authRequired };
     }
 
     /**
@@ -404,9 +418,10 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
             return false;
         }
 
-        const connection = await this.findFastestConnection(server);
+        const { connection, authRequired } = await this.findFastestConnection(server);
 
         if (!connection) {
+            this._persistServerHealth(serverId, authRequired ? 'auth_required' : 'unreachable');
             return false;
         }
 
@@ -432,6 +447,11 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
         // Emit events
         this._emitter.emit('serverChange', serverWithConnection);
         this._emitter.emit('connectionChange', connection.uri);
+
+        this._persistServerHealth(serverId, 'ok', {
+            connection: connection,
+            latency: connection.latencyMs ?? 0
+        });
 
         return true;
     }
@@ -789,20 +809,93 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 false
             );
         }
+        if (response.status === 429) {
+            throw new PlexApiError(
+                AppErrorCode.RATE_LIMITED,
+                'Request failed with status 429',
+                429,
+                true
+            );
+        }
         if (response.status >= 500) {
             throw new PlexApiError(
                 AppErrorCode.SERVER_UNREACHABLE,
                 'Server error: ' + String(response.status),
                 response.status,
-                true
+                false
             );
         }
         throw new PlexApiError(
             AppErrorCode.SERVER_UNREACHABLE,
-            'Request failed with status ' + String(response.status),
+            'Unknown error during server discovery',
             response.status,
-            false
+            true
         );
+    }
+
+    private _persistServerHealth(
+        serverId: string,
+        status: 'ok' | 'unreachable' | 'auth_required',
+        details?: { connection?: PlexConnection; latency?: number }
+    ): void {
+        try {
+            const raw = localStorage.getItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
+            const healthMap = raw ? JSON.parse(raw) : {};
+            const previous = healthMap[serverId];
+
+            const record = {
+                status,
+                type: details?.connection
+                    ? details.connection.relay
+                        ? 'relay'
+                        : details.connection.local
+                            ? 'local'
+                            : 'remote'
+                    : previous?.type || 'unknown',
+                latencyMs: typeof details?.latency === 'number'
+                    ? details.latency
+                    : (previous?.latencyMs || 0),
+                testedAt: Date.now(),
+            };
+
+            healthMap[serverId] = record;
+            localStorage.setItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY, JSON.stringify(healthMap));
+        } catch {
+            // ignore
+        }
+    }
+
+    private _redactUrl(url: string | undefined): string {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url);
+            const sensitiveKeys = ['X-Plex-Token', 'token', 'access_token'];
+
+            // Redact query parameters
+            for (const key of sensitiveKeys) {
+                if (parsed.searchParams.has(key)) {
+                    parsed.searchParams.set(key, 'REDACTED');
+                }
+            }
+
+            // Redact fragment (Plex sometimes passes tokens in hash)
+            if (parsed.hash) {
+                for (const key of sensitiveKeys) {
+                    if (parsed.hash.includes(`${key}=`)) {
+                        parsed.hash = '#REDACTED_FRAGMENT';
+                        break;
+                    }
+                }
+            }
+
+            return parsed.toString();
+        } catch {
+            // Fallback for malformed URLs
+            return url
+                .replace(/X-Plex-Token=[^&]*/g, 'X-Plex-Token=REDACTED')
+                .replace(/access_token=[^&]*/g, 'access_token=REDACTED')
+                .replace(/token=[^&]*/g, 'token=REDACTED');
+        }
     }
 
     /**

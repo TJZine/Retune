@@ -46,7 +46,7 @@ export interface IPlexServerDiscovery {
      * @param connection - Connection endpoint to test
      * @returns Promise resolving to latency in ms, or null if failed
      */
-    testConnection(server: PlexServer, connection: PlexConnection): Promise<number | null>;
+    testConnection(server: PlexServer, connection: PlexConnection): Promise<number | 'auth_required' | null>;
 
     /**
      * Find the fastest working connection for a server.
@@ -54,7 +54,10 @@ export interface IPlexServerDiscovery {
      * @param server - Server to test connections for
      * @returns Promise resolving to best connection, or null if all fail
      */
-    findFastestConnection(server: PlexServer): Promise<PlexConnection | null>;
+    findFastestConnection(server: PlexServer): Promise<{
+        connection: PlexConnection | null;
+        authRequired: boolean;
+    }>;
 
     // Server Selection
 
