@@ -61,7 +61,6 @@ import {
     type ChannelManagerConfig,
     type ChannelConfig,
     type ResolvedChannelContent,
-    type ResolvedContentItem,
     type ContentFilter,
 } from './modules/scheduler/channel-manager';
 import {
@@ -265,7 +264,7 @@ export interface IAppOrchestrator {
     selectServer(serverId: string): Promise<boolean>;
     clearSelectedServer(): void;
     getSelectedServerId(): string | null;
-    getLibrariesForSetup(): Promise<PlexLibraryType[]>;
+    getLibrariesForSetup(signal?: AbortSignal | null): Promise<PlexLibraryType[]>;
     createChannelsFromSetup(config: ChannelSetupConfig, options?: { signal?: AbortSignal; onProgress?: (p: ChannelBuildProgress) => void }): Promise<ChannelBuildSummary>;
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
     requestChannelSetupRerun(): void;
@@ -850,11 +849,11 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._plexDiscovery.clearSelection();
     }
 
-    async getLibrariesForSetup(): Promise<PlexLibraryType[]> {
+    async getLibrariesForSetup(signal?: AbortSignal | null): Promise<PlexLibraryType[]> {
         if (!this._plexLibrary) {
             throw new Error('PlexLibrary not initialized');
         }
-        const libraries = await this._plexLibrary.getLibraries();
+        const libraries = await this._plexLibrary.getLibraries(signal ?? null);
         return libraries.filter((lib) => lib.type === 'movie' || lib.type === 'show');
     }
 
@@ -887,7 +886,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         reportProgress('fetch_playlists', 'Preparing...', 'Loading libraries', 0, null);
 
-        const libraries = await this.getLibrariesForSetup();
+        const libraries = await this.getLibrariesForSetup(signal ?? null);
         const selectedLibraries = libraries
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
@@ -896,7 +895,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         let skippedCount = 0;
         let reachedMax = false;
         let errorsTotal = 0;
-        const errorsList: string[] = [];
 
         const requestedMax = Number.isFinite(config.maxChannels) ? config.maxChannels : DEFAULT_CHANNEL_SETUP_MAX;
         const effectiveMaxChannels = Math.min(
@@ -913,7 +911,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             playbackMode: ChannelConfig['playbackMode'];
             shuffleSeed: number;
             contentFilters?: ContentFilter[];
-            initialContent?: ResolvedContentItem[];
         };
 
         const pending: PendingChannel[] = [];
@@ -923,7 +920,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // 0. Server-wide Playlists (Playlists in Plex are global, not per-library)
         if (config.enabledStrategies.playlists) {
-            reportProgress('fetch_playlists', 'Checking playlists...', 'Scanning server', 0, null);
+            reportProgress('fetch_playlists', 'Fetching playlists...', 'Scanning server', 0, null);
             try {
                 const playlists = await this._plexLibrary.getPlaylists(signal ?? null);
                 for (const pl of playlists) {
@@ -932,24 +929,18 @@ export class AppOrchestrator implements IAppOrchestrator {
                     }
 
                     if (pl.leafCount >= minItems) {
-                        try {
-                            const plItemsPre = await this._plexLibrary.getPlaylistItems(pl.ratingKey, { signal: signal ?? null });
-                            const plItems = this._mapToResolvedItems(plItemsPre);
-                            pending.push({
-                                name: pl.title,
-                                contentSource: {
-                                    type: 'playlist',
-                                    playlistKey: pl.ratingKey,
-                                    playlistName: pl.title,
-                                },
-                                playbackMode: 'shuffle',
-                                shuffleSeed: shuffleSeedFor(`playlist:${pl.ratingKey}`),
-                                initialContent: plItems,
-                            });
-                        } catch (e) {
-                            console.warn(`Failed to fetch items for playlist ${pl.title}:`, e);
-                            errorsTotal++;
-                        }
+                        pending.push({
+                            name: pl.title,
+                            contentSource: {
+                                type: 'playlist',
+                                playlistKey: pl.ratingKey,
+                                playlistName: pl.title,
+                            },
+                            playbackMode: 'shuffle',
+                            shuffleSeed: shuffleSeedFor(`playlist:${pl.ratingKey}`),
+                        });
+                    } else {
+                        skippedCount++;
                     }
                 }
             } catch (e) {
@@ -966,29 +957,23 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             // 1. Collections
             if (config.enabledStrategies.collections) {
-                reportLibraryProgress(libIndex, 'Checking collections...', library.title);
+                reportProgress('fetch_collections', 'Fetching collections...', library.title, libIndex, selectedLibraries.length);
                 try {
                     const collections = await this._plexLibrary.getCollections(library.id, signal ?? null);
                     for (const collection of collections) {
                         if (collection.childCount >= minItems) {
-                            try {
-                                const collectionItemsPre = await this._plexLibrary.getCollectionItems(collection.ratingKey, { signal: signal ?? null });
-                                const collectionItems = this._mapToResolvedItems(collectionItemsPre);
-                                pending.push({
-                                    name: collection.title,
-                                    contentSource: {
-                                        type: 'collection',
-                                        collectionKey: collection.ratingKey,
-                                        collectionName: collection.title,
-                                    },
-                                    playbackMode: 'shuffle',
-                                    shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
-                                    initialContent: collectionItems,
-                                });
-                            } catch (e) {
-                                console.warn(`Failed to fetch items for collection ${collection.title}:`, e);
-                                errorsTotal++;
-                            }
+                            pending.push({
+                                name: collection.title,
+                                contentSource: {
+                                    type: 'collection',
+                                    collectionKey: collection.ratingKey,
+                                    collectionName: collection.title,
+                                },
+                                playbackMode: 'shuffle',
+                                shuffleSeed: shuffleSeedFor(`collection:${collection.ratingKey}`),
+                            });
+                        } else {
+                            skippedCount++;
                         }
                     }
                 } catch (e) {
@@ -996,7 +981,17 @@ export class AppOrchestrator implements IAppOrchestrator {
                     errorsTotal++;
                 }
             } else if (config.enabledStrategies.libraryFallback) {
-                if (library.contentCount >= minItems) {
+                let libraryCount = library.contentCount;
+                if (libraryCount === 0) {
+                    try {
+                        libraryCount = await this._plexLibrary.getLibraryItemCount(library.id, { signal: signal ?? null });
+                    } catch (e) {
+                        console.warn(`Failed to fetch item count for ${library.title}:`, e);
+                        errorsTotal++;
+                    }
+                }
+
+                if (libraryCount === 0 || libraryCount >= minItems) {
                     pending.push({
                         name: library.title,
                         contentSource: {
@@ -1023,7 +1018,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 config.enabledStrategies.runtimeRanges;
 
             if (needsScan) {
-                reportLibraryProgress(libIndex, 'Analyzing content...', library.title);
+                reportLibraryProgress(libIndex, 'Resolving filters...', library.title);
                 if (checkCanceled()) {
                     return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'scan_library_items' };
                 }
@@ -1031,7 +1026,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 try {
                     const scanOptions: LibraryQueryOptions = {
                         signal: signal ?? null,
-                        limit: 3000
+                        limit: 500,
                     };
 
                     let rawItems: PlexMediaItem[];
@@ -1039,7 +1034,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                         scanOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
                     }
                     rawItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
-                    const items = this._mapToResolvedItems(rawItems);
 
                     const countTags = (field: 'genres' | 'directors'): { label: string; count: number }[] => {
                         const counts = new Map<string, { label: string; count: number }>();
@@ -1066,9 +1060,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                         const genres = countTags('genres');
                         for (const genre of genres) {
                             if (genre.count < minItems) continue;
-                            const genreItems = items.filter(item =>
-                                item.genres?.some(g => g.toLowerCase() === genre.label.toLowerCase())
-                            );
                             pending.push({
                                 name: `${library.title} - ${genre.label}`,
                                 contentSource: {
@@ -1080,7 +1071,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 contentFilters: [{ field: 'genre', operator: 'eq', value: genre.label }],
                                 playbackMode: 'shuffle',
                                 shuffleSeed: shuffleSeedFor(`genre:${library.id}:${genre.label}`),
-                                initialContent: genreItems
                             });
                         }
                     }
@@ -1090,9 +1080,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                         const directors = countTags('directors');
                         for (const director of directors) {
                             if (director.count < minItems) continue;
-                            const directorItems = items.filter(item =>
-                                item.directors?.some(d => d.toLowerCase() === director.label.toLowerCase())
-                            );
                             pending.push({
                                 name: `${library.title} - ${director.label}`,
                                 contentSource: {
@@ -1104,7 +1091,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 contentFilters: [{ field: 'director', operator: 'eq', value: director.label }],
                                 playbackMode: 'shuffle',
                                 shuffleSeed: shuffleSeedFor(`director:${library.id}:${director.label}`),
-                                initialContent: directorItems
                             });
                         }
                     }
@@ -1121,9 +1107,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                         const sortedDecades = Array.from(decadeCounts.keys()).sort((a, b) => a - b);
                         for (const decade of sortedDecades) {
                             if ((decadeCounts.get(decade) || 0) < minItems) continue;
-                            const decadeItems = items.filter(item =>
-                                item.year && Math.floor(item.year / 10) * 10 === decade
-                            );
                             pending.push({
                                 name: `${library.title} - ${decade}s`,
                                 contentSource: {
@@ -1138,7 +1121,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 ],
                                 playbackMode: 'shuffle',
                                 shuffleSeed: shuffleSeedFor(`decade:${library.id}:${decade}`),
-                                initialContent: decadeItems
                             });
                         }
                     }
@@ -1165,12 +1147,6 @@ export class AppOrchestrator implements IAppOrchestrator {
 
                         for (const [key, b] of Object.entries(buckets)) {
                             if (b.count < minItems) continue;
-                            const rangeItems = items.filter(item => {
-                                const dur = item.durationMs;
-                                if (!dur) return false;
-                                return dur >= b.min && (b.max === null || dur < b.max);
-                            });
-
                             const rangeFilters: ContentFilter[] = [
                                 { field: 'duration', operator: 'gte', value: b.min }
                             ];
@@ -1189,7 +1165,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 contentFilters: rangeFilters,
                                 playbackMode: 'shuffle',
                                 shuffleSeed: shuffleSeedFor(`runtime:${library.id}:${key}`),
-                                initialContent: rangeItems
                             });
                         }
                     }
@@ -1206,11 +1181,13 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         reportProgress('create_channels', 'Shuffling...', 'Setting up lineup', 0, pending.length);
 
-        const tempKey = `setup_${Date.now()}`;
+        const tempKeyId = String(Date.now());
+        const tempKey = `retune_channels_build_tmp_v1:${tempKeyId}`;
+        const tempCurrentKey = `retune_current_channel_build_tmp_v1:${tempKeyId}`;
         const builder = new ChannelManager({
             plexLibrary: this._plexLibrary,
             storageKey: tempKey,
-            currentChannelKey: `${tempKey}_current`,
+            currentChannelKey: tempCurrentKey,
         });
 
         const finalSummary: ChannelBuildSummary = {
@@ -1252,16 +1229,12 @@ export class AppOrchestrator implements IAppOrchestrator {
                         channelParams.contentFilters = p.contentFilters;
                     }
 
-                    await builder.createChannel(channelParams, {
-                        signal: signal ?? null,
-                        initialContent: p.initialContent
-                    });
+                    await builder.createChannel(channelParams, { signal: signal ?? null });
 
                     finalSummary.created++;
                 } catch (e) {
                     console.warn(`Failed to create channel ${p.name}:`, e);
                     finalSummary.errorCount++;
-                    errorsList.push(p.name);
                 }
             }
 
@@ -1271,15 +1244,19 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return finalSummary;
             }
 
-            reportProgress('apply_channels', 'Applying changes...', 'Saving library', finalSummary.created, finalSummary.created);
+            reportProgress('apply_channels', 'Saving...', 'Saving library', finalSummary.created, finalSummary.created);
             await this._channelManager.replaceAllChannels(builder.getAllChannels());
+
+            reportProgress('refresh_epg', 'Refreshing guide...', 'Loading schedules', 0, null);
+            this._primeEpgChannels();
+            await this._refreshEpgSchedules();
 
         } catch (e) {
             console.error('[Orchestrator] Channel build failed:', e);
             throw e;
         } finally {
             safeLocalStorageRemove(tempKey);
-            safeLocalStorageRemove(`${tempKey}_current`);
+            safeLocalStorageRemove(tempCurrentKey);
         }
 
         reportProgress('done', 'Done!', `Built ${finalSummary.created} channels`, finalSummary.created, finalSummary.created);
@@ -1314,48 +1291,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._navigation) {
             this._navigation.goTo('channel-setup');
         }
-    }
-
-    /**
-     * Maps raw Plex media items to scheduler-ready ResolvedContentItems.
-     */
-    private _mapToResolvedItems(items: PlexMediaItem[]): ResolvedContentItem[] {
-        return items.map((item, index) => {
-            let fullTitle = item.title;
-            if (item.type === 'episode') {
-                const seasonStr = typeof item.seasonNumber === 'number' ? `S${String(item.seasonNumber).padStart(2, '0')}` : '';
-                const epStr = typeof item.episodeNumber === 'number' ? `E${String(item.episodeNumber).padStart(2, '0')}` : '';
-                const epCode = seasonStr && epStr ? `${seasonStr}${epStr}` : '';
-                if (item.parentTitle && epCode) {
-                    fullTitle = `${item.parentTitle} - ${epCode} - ${item.title}`;
-                } else if (item.parentTitle) {
-                    fullTitle = `${item.parentTitle} - ${item.title}`;
-                }
-            }
-
-            const resolved: ResolvedContentItem = {
-                ratingKey: item.ratingKey,
-                type: item.type,
-                title: item.title,
-                fullTitle,
-                durationMs: item.durationMs,
-                thumb: item.thumb,
-                year: item.year || 0,
-                scheduledIndex: index,
-            };
-
-            // Only assign optional fields if they exist, and explicitly exclude undefined for exactOptionalPropertyTypes
-            if (item.seasonNumber !== undefined && item.seasonNumber !== null) resolved.seasonNumber = item.seasonNumber;
-            if (item.episodeNumber !== undefined && item.episodeNumber !== null) resolved.episodeNumber = item.episodeNumber;
-            if (item.rating !== undefined && item.rating !== null) resolved.rating = item.rating;
-            if (item.contentRating !== undefined && item.contentRating !== null) resolved.contentRating = item.contentRating;
-            if (item.genres !== undefined && item.genres !== null) resolved.genres = item.genres;
-            if (item.directors !== undefined && item.directors !== null) resolved.directors = item.directors;
-            if (item.viewCount !== undefined && item.viewCount !== null) resolved.watched = item.viewCount > 0;
-            if (item.addedAt instanceof Date) resolved.addedAt = item.addedAt.getTime();
-
-            return resolved;
-        });
     }
 
     /**

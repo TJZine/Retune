@@ -50,6 +50,14 @@ export interface IPlexLibrary {
     getLibraryItems(libraryId: string, options?: LibraryQueryOptions): Promise<PlexMediaItem[]>;
 
     /**
+     * Get total item count for a library without fetching items.
+     * @param libraryId - Library section ID
+     * @param options - Optional query options (filter/signal)
+     * @returns Promise resolving to item count (0 if unavailable)
+     */
+    getLibraryItemCount(libraryId: string, options?: LibraryQueryOptions): Promise<number>;
+
+    /**
      * Get a specific media item by rating key.
      * @param ratingKey - Item's unique rating key
      * @returns Promise resolving to item or null if not found

@@ -543,7 +543,7 @@ export class ChannelSetupScreen {
                 barFill.classList.remove('indeterminate');
             } else {
                 // Indeterminate
-                barFill.style.width = '100%';
+                barFill.style.width = '';
                 barFill.classList.add('indeterminate');
             }
         };
@@ -576,6 +576,7 @@ export class ChannelSetupScreen {
                 barFill.style.width = '100%';
                 barFill.classList.remove('indeterminate');
 
+                cancelButton.disabled = false;
                 doneButton.disabled = result.created === 0;
                 cancelButton.textContent = 'Back'; // Allow going back to modify?
                 // Usually Done is the way forward.

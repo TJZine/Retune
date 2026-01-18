@@ -374,14 +374,34 @@ export class ServerSelectScreen {
     private _buildServerMeta(server: PlexServer): string {
         const ownership = server.owned ? 'Owned' : `Shared by ${server.sourceTitle}`;
 
-
         const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
-        const healthMap = rawHealth ? JSON.parse(rawHealth) : {};
+        let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined> = {};
+        try {
+            healthMap = rawHealth ? JSON.parse(rawHealth) : {};
+        } catch (e) {
+            console.warn('[ServerSelect] Failed to parse health data:', e);
+        }
         const health = healthMap[server.id];
 
-        const lastInfo = health?.status === 'ok'
-            ? `Last: ${health.type} ${health.latencyMs}ms`
-            : (health?.status === 'unreachable' ? 'Last: Unreachable' : '—');
+        const typeLabel = health?.type === 'local'
+            ? 'Local'
+            : health?.type === 'remote'
+                ? 'Remote'
+                : health?.type === 'relay'
+                    ? 'Relay'
+                    : null;
+
+        const latencyLabel = typeof health?.latencyMs === 'number' && health.latencyMs > 0
+            ? `${health.latencyMs}ms`
+            : null;
+
+        const lastInfo = health?.status === 'auth_required'
+            ? 'Auth required'
+            : typeLabel && latencyLabel
+                ? `Last: ${typeLabel} ${latencyLabel}`
+                : typeLabel
+                    ? `Last: ${typeLabel}`
+                    : 'Last: —';
 
         return `${ownership} • ${lastInfo}`;
     }

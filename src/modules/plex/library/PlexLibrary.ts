@@ -196,6 +196,40 @@ export class PlexLibrary implements IPlexLibrary {
     }
 
     /**
+     * Get total item count for a library without fetching items.
+     * Uses X-Plex-Container-Size=0 to avoid payload costs.
+     */
+    async getLibraryItemCount(
+        libraryId: string,
+        options: LibraryQueryOptions = {}
+    ): Promise<number> {
+        const params: Record<string, string | number> = {
+            'X-Plex-Container-Start': 0,
+            'X-Plex-Container-Size': 0,
+        };
+
+        if (options.sort) {
+            params['sort'] = options.sort;
+        }
+
+        if (options.filter) {
+            Object.assign(params, options.filter);
+        }
+
+        if (options.includeCollections) {
+            params['includeCollections'] = 1;
+        }
+
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ALL(libraryId), params);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawMediaItem>>(url, { signal: options.signal ?? null });
+        if (!response) {
+            return 0;
+        }
+        const total = response.MediaContainer.totalSize ?? response.MediaContainer.size;
+        return typeof total === 'number' && Number.isFinite(total) ? total : 0;
+    }
+
+    /**
      * Get a specific media item by rating key.
      * @param ratingKey - Item's unique rating key
      * @returns Promise resolving to item or null if not found
@@ -567,8 +601,20 @@ export class PlexLibrary implements IPlexLibrary {
         let rateLimitRetries = 0;
 
         while (true) {
+            let externalAborted = false;
+            const externalSignal = options.signal ?? null;
             try {
                 const controller = new AbortController();
+                const onExternalAbort = (): void => {
+                    externalAborted = true;
+                    controller.abort();
+                };
+                if (externalSignal) {
+                    if (externalSignal.aborted) {
+                        throw new DOMException('The operation was aborted', 'AbortError');
+                    }
+                    externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+                }
                 const timeoutId = setTimeout(
                     () => controller.abort(),
                     PLEX_LIBRARY_CONSTANTS.REQUEST_TIMEOUT_MS
@@ -598,10 +644,13 @@ export class PlexLibrary implements IPlexLibrary {
                             ...pagingHeaders,
                             ...options.headers,
                         },
-                        signal: options.signal || controller.signal,
+                        signal: controller.signal,
                     });
                 } finally {
                     clearTimeout(timeoutId);
+                    if (externalSignal) {
+                        externalSignal.removeEventListener('abort', onExternalAbort);
+                    }
                 }
 
                 // Handle 401 Unauthorized - emit event, no retry
@@ -697,6 +746,9 @@ export class PlexLibrary implements IPlexLibrary {
                 return data;
 
             } catch (error) {
+                if (externalAborted || options.signal?.aborted) {
+                    throw error;
+                }
                 // Handle timeout/abort errors - retry with exponential backoff
                 if (error instanceof Error && error.name === 'AbortError') {
                     if (timeoutRetries < PLEX_LIBRARY_CONSTANTS.MAX_TIMEOUT_RETRIES) {
