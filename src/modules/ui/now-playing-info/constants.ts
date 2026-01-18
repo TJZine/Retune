@@ -14,6 +14,7 @@ export const NOW_PLAYING_INFO_CLASSES = {
     SUBTITLE: 'now-playing-info-subtitle',
     DESCRIPTION: 'now-playing-info-description',
     CONTEXT: 'now-playing-info-context',
+    DEBUG: 'now-playing-info-debug',
     PROGRESS: 'now-playing-info-progress',
     PROGRESS_BAR: 'now-playing-info-progress-bar',
     PROGRESS_FILL: 'now-playing-info-progress-fill',

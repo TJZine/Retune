@@ -20,4 +20,9 @@ export interface NowPlayingInfoViewModel {
     elapsedMs?: number;
     durationMs?: number;
     posterUrl?: string | null;
+    /**
+     * Optional stream/debug information (monospace). Intended for developer use.
+     * Keep short; this overlay is designed for quick-glance viewing on TVs.
+     */
+    debugText?: string;
 }

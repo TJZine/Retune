@@ -85,8 +85,6 @@ export interface VideoPlayerConfig {
     retryAttempts: number;
     /** Base delay between retries in milliseconds */
     retryDelayMs: number;
-    /** Whether to run in Demo Mode (simulated playback) */
-    demoMode?: boolean;
 }
 
 // ============================================

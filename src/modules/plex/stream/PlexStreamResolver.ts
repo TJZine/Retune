@@ -215,7 +215,42 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         try {
             // 4. Check direct play compatibility ON THE SELECTED MEDIA VERSION
-            const directDecision = this._getDirectPlayDecision(media);
+            const allowDirectPlayAudioFallback = ((): boolean => {
+                try {
+                    return isStoredTrue(
+                        safeLocalStorageGet(RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK)
+                    );
+                } catch {
+                    return false;
+                }
+            })();
+
+            let directDecision = this._getDirectPlayDecision(media);
+            let directPlayAudioStreamId: string | undefined;
+            if (
+                allowDirectPlayAudioFallback &&
+                defaultAudio &&
+                this._isTrueHdCodec(defaultAudio.codec) &&
+                audioStream &&
+                audioStream.id &&
+                !this._isTrueHdCodec(audioStream.codec)
+            ) {
+                // If the only blocker is TrueHD (or other audio incompatibility), and we found a
+                // compatible fallback track, try allowing Direct Play and hint Plex with audioStreamID.
+                // This is intentionally opt-in since some client stacks may not honor audioStreamID
+                // for direct URLs.
+                const nonAudioReasons = directDecision.reasons.filter(
+                    (r) => !r.startsWith('unsupported_audio_codec:') && r !== 'dts_passthrough_disabled'
+                );
+                if (nonAudioReasons.length === 0) {
+                    const overridden = this._getDirectPlayDecision(media, audioStream.codec);
+                    if (overridden.canDirect) {
+                        directDecision = overridden;
+                        directPlayAudioStreamId = audioStream.id;
+                    }
+                }
+            }
+
             const canDirect = directDecision.canDirect;
             const debugEnabled = ((): boolean => {
                 try {
@@ -256,11 +291,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             if (canDirect && request.directPlay !== false) {
                 // Direct play
-                playbackUrl = this._buildDirectPlayUrl(part.key, sessionId);
+                playbackUrl = this._buildDirectPlayUrl(part.key, sessionId, directPlayAudioStreamId);
                 protocol = 'http';
                 container = media.container;
                 videoCodec = media.videoCodec;
-                audioCodec = media.audioCodec;
+                audioCodec = (audioStream?.codec ?? media.audioCodec).toLowerCase();
             } else {
                 // Transcode to HLS
                 const maxBitrate = typeof request.maxBitrate === 'number'
@@ -544,7 +579,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         return this._getDirectPlayDecision(media).canDirect;
     }
 
-    private _getDirectPlayDecision(media: PlexMediaFile): { canDirect: boolean; reasons: string[] } {
+    private _getDirectPlayDecision(
+        media: PlexMediaFile,
+        audioCodecOverride?: string | null | undefined
+    ): { canDirect: boolean; reasons: string[] } {
         const reasons: string[] = [];
 
         // Check container (pre-normalized to lowercase in ResponseParser)
@@ -578,7 +616,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // Check audio codec (pre-normalized to lowercase in ResponseParser)
-        const audioCodec = media.audioCodec.toLowerCase();
+        const audioCodec = (audioCodecOverride ?? media.audioCodec).toLowerCase();
         const isDtsFamily =
             audioCodec.startsWith('dts') ||
             audioCodec.startsWith('dca'); // includes dca-ma (DTS-HD MA)
@@ -711,7 +749,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Bind the transcoder session key to our app sessionId so we can terminate it later
         params.set('session', sessionId);
         params.set('X-Plex-Session-Identifier', sessionId);
-        if (options.audioStreamId) {
+        if (typeof options.audioStreamId === 'string' && options.audioStreamId.length > 0) {
             params.set('audioStreamID', options.audioStreamId);
         }
 
@@ -768,8 +806,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const supportsHevc =
             canPlay('video/mp4; codecs="hvc1.1.6.L93.B0"') ||
             canPlay('video/mp4; codecs="hev1.1.6.L93.B0"') ||
-            // Fallback: webOS 23+ (Chromium 108+) should support HEVC decode.
-            (isWebOs && chromeMajor !== null && chromeMajor >= 108);
+            // Fallback: webOS 23+ (Chromium 94+) should support HEVC decode.
+            (isWebOs && chromeMajor !== null && chromeMajor >= 94);
 
         const supportsVp9 =
             canPlay('video/webm; codecs="vp9"') ||
@@ -987,6 +1025,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             { method: 'GET', headers: this._config.getAuthHeaders() },
             4000
         );
+        if (!response.ok) {
+            throw new Error(`PMS decision request failed: ${response.status}`);
+        }
         const raw = await response.text();
 
         const parsed = this._parseUniversalDecisionResponse(raw);
@@ -1085,7 +1126,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @param partKey - Media part key
      * @returns Full playback URL
      */
-    private _buildDirectPlayUrl(partKey: string, sessionId: string): string {
+    private _buildDirectPlayUrl(
+        partKey: string,
+        sessionId: string,
+        audioStreamId?: string
+    ): string {
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             throw this._createError(
@@ -1096,13 +1141,18 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         const baseUri = this._selectBaseUriForMixedContent(serverUri);
-        return this._buildUrlWithToken(baseUri, partKey, sessionId);
+        return this._buildUrlWithToken(baseUri, partKey, sessionId, audioStreamId);
     }
 
     /**
      * Build URL with auth token.
      */
-    private _buildUrlWithToken(baseUri: string, partKey: string, sessionId: string): string {
+    private _buildUrlWithToken(
+        baseUri: string,
+        partKey: string,
+        sessionId: string,
+        audioStreamId?: string
+    ): string {
         const headers = this._config.getAuthHeaders();
         const token = headers['X-Plex-Token'];
         const baseUrl = new URL(baseUri);
@@ -1116,6 +1166,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             url.searchParams.set('X-Plex-Token', token);
         }
         url.searchParams.set('X-Plex-Session-Identifier', sessionId);
+        if (typeof audioStreamId === 'string' && audioStreamId.length > 0) {
+            url.searchParams.set('audioStreamID', audioStreamId);
+        }
 
         // Video element requests cannot include headers; attach identity via query params.
         for (const [key, value] of Object.entries(headers)) {

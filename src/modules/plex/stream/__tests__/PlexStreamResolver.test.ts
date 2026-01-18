@@ -376,6 +376,50 @@ describe('PlexStreamResolver', () => {
             expect(decision.playbackUrl).toContain('audioStreamID=audio-2');
         });
 
+        it('should optionally try Direct Play when a TrueHD fallback track exists', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((k: string) =>
+                        k === 'retune_direct_play_audio_fallback' ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const mockItem = createMockMediaItem(
+                {
+                    container: 'mkv',
+                    videoCodec: 'h264',
+                    audioCodec: 'truehd',
+                },
+                {
+                    extraStreams: [
+                        {
+                            id: 'audio-2',
+                            streamType: 2,
+                            codec: 'eac3',
+                            language: 'English',
+                            languageCode: 'en',
+                            channels: 6,
+                            title: 'English (EAC3)',
+                        },
+                    ],
+                }
+            );
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(mockItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isDirectPlay).toBe(true);
+            expect(decision.isTranscoding).toBe(false);
+            expect(decision.selectedAudioStream?.id).toBe('audio-2');
+            expect(decision.playbackUrl).toContain('/library/parts/');
+            expect(decision.playbackUrl).toContain('audioStreamID=audio-2');
+        });
+
         it('should avoid commentary-only fallbacks for TrueHD and transcode the default track', async () => {
             const mockItem = createMockMediaItem(
                 {
@@ -553,6 +597,8 @@ describe('PlexStreamResolver', () => {
             const resolver = new PlexStreamResolver(config);
 
             mockFetch.mockResolvedValue({
+                ok: true,
+                status: 200,
                 text: async () =>
                     '<MediaContainer decisionCode="1000" decisionText="Transcode"><TranscodeSession videoDecision="copy" audioDecision="transcode" subtitleDecision="none" /></MediaContainer>',
             });

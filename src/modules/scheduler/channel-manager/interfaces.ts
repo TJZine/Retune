@@ -46,13 +46,6 @@ export interface IChannelManager {
      */
     deleteChannel(id: string): Promise<void>;
 
-    // Demo Mode support
-    /**
-     * seedDemoChannels.
-     * Creates deterministic channels for Demo Mode.
-     */
-    seedDemoChannels(): Promise<void>;
-
     // Retrieval
 
     /**

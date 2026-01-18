@@ -80,6 +80,21 @@
   color: var(--color-text-muted);
 }
 
+.now-playing-info-debug {
+  margin: 6px 0 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  max-height: 7.8em; /* ~6 lines */
+  overflow: hidden;
+}
+
 .now-playing-info-progress {
   display: flex;
   flex-direction: column;

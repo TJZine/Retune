@@ -243,7 +243,6 @@ const mockChannelManager = {
     loadChannels: jest.fn().mockResolvedValue(undefined),
     setStorageKeys: jest.fn(),
     replaceAllChannels: jest.fn().mockResolvedValue(undefined),
-    seedDemoChannels: jest.fn().mockResolvedValue(undefined),
     getAllChannels: jest.fn().mockReturnValue([mockChannel]),
     getCurrentChannel: jest.fn().mockReturnValue(mockChannel),
     getChannel: jest.fn().mockReturnValue(mockChannel),
@@ -364,7 +363,11 @@ describe('AppOrchestrator', () => {
     let orchestrator: AppOrchestrator;
     let schedulerHandlers: { programStart?: (program: unknown) => void };
     let playerHandlers: { ended?: () => void; error?: (error: unknown) => void };
-    let navHandlers: { keyPress?: (payload: unknown) => void };
+    let navHandlers: {
+        keyPress?: (payload: unknown) => void;
+        modalOpen?: (payload: unknown) => void;
+        modalClose?: (payload: unknown) => void;
+    };
     let pauseHandler: (() => void | Promise<void>) | null;
     let resumeHandler: (() => void | Promise<void>) | null;
 
@@ -414,6 +417,12 @@ describe('AppOrchestrator', () => {
             (event: string, handler: (payload: unknown) => void) => {
                 if (event === 'keyPress') {
                     navHandlers.keyPress = handler;
+                }
+                if (event === 'modalOpen') {
+                    navHandlers.modalOpen = handler;
+                }
+                if (event === 'modalClose') {
+                    navHandlers.modalClose = handler;
                 }
                 return jest.fn();
             });
@@ -861,72 +870,6 @@ describe('AppOrchestrator', () => {
         });
     });
 
-    describe('demo mode', () => {
-        beforeEach(async () => {
-            mockLocalStorage.getItem.mockImplementation((key: string) => {
-                if (key === 'retune_mode') return 'demo';
-                return null;
-            });
-            await orchestrator.initialize(mockConfig);
-        });
-
-        it('seeds demo channels when no channels are loaded', async () => {
-            mockChannelManager.getAllChannels.mockReturnValueOnce([]);
-
-            await orchestrator.start();
-
-            expect(mockChannelManager.seedDemoChannels).toHaveBeenCalled();
-        });
-
-        it('skips Plex auth and discovery during startup', async () => {
-            await orchestrator.start();
-
-            expect(mockPlexAuth.getStoredCredentials).not.toHaveBeenCalled();
-            expect(mockPlexAuth.validateToken).not.toHaveBeenCalled();
-            expect(mockPlexDiscovery.initialize).not.toHaveBeenCalled();
-
-            expect(mockVideoPlayer.initialize).toHaveBeenCalledWith(
-                expect.objectContaining({ demoMode: true })
-            );
-
-            const ChannelManagerCtor = require('../modules/scheduler/channel-manager').ChannelManager as jest.Mock;
-            expect(ChannelManagerCtor).toHaveBeenCalled();
-            const calledWith = ChannelManagerCtor.mock.calls.map((c) => c[0] as { storageKey?: string });
-            expect(calledWith.some((cfg) => cfg?.storageKey === 'retune_channels_demo_v1')).toBe(true);
-        });
-
-        it('handles programStart without calling Plex stream resolution', async () => {
-            await orchestrator.start();
-
-            expect(schedulerHandlers.programStart).toBeDefined();
-            schedulerHandlers.programStart?.({
-                item: {
-                    ratingKey: 'demo-1-0',
-                    type: 'movie',
-                    title: 'Demo Item',
-                    fullTitle: 'Demo Item',
-                    durationMs: 600000,
-                    thumb: null,
-                    year: 0,
-                    scheduledIndex: 0,
-                },
-                scheduledStartTime: 0,
-                scheduledEndTime: 600000,
-                elapsedMs: 0,
-                remainingMs: 600000,
-                scheduleIndex: 0,
-                loopNumber: 0,
-                streamDescriptor: null,
-                isCurrent: true,
-            });
-            await new Promise((resolve) => setImmediate(resolve));
-
-            expect(mockPlexStreamResolver.resolveStream).not.toHaveBeenCalled();
-            expect(mockVideoPlayer.loadStream).toHaveBeenCalledTimes(1);
-            expect(mockVideoPlayer.play).toHaveBeenCalledTimes(1);
-        });
-    });
-
     describe('switchToChannel', () => {
         beforeEach(async () => {
             // Reset mocks that may have been modified by previous tests
@@ -1131,6 +1074,73 @@ describe('AppOrchestrator', () => {
                 originalEvent: { preventDefault: jest.fn() },
             });
             expect(mockEpg.handleBack).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Now Playing Info overlay', () => {
+        beforeEach(async () => {
+            await orchestrator.initialize(mockConfig);
+            await orchestrator.start();
+        });
+
+        it('should live-update progress while open', async () => {
+            jest.useFakeTimers();
+
+            const baseProgram = {
+                item: {
+                    ratingKey: 'rk1',
+                    title: 'Test Movie',
+                    durationMs: 120_000,
+                    type: 'movie',
+                },
+                scheduledStartTime: Date.now(),
+                scheduledEndTime: Date.now() + 120_000,
+                elapsedMs: 0,
+                remainingMs: 120_000,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: true,
+            };
+
+            // Program start sets _currentProgramForPlayback so the modal can render.
+            await (schedulerHandlers.programStart as (p: unknown) => Promise<void>)(baseProgram);
+
+            // While open, orchestrator should pull fresh elapsed values from scheduler.getCurrentProgram().
+            // Use a monotonic mock since other orchestrator flows may also query getCurrentProgram().
+            let elapsedMs = 0;
+            mockScheduler.getCurrentProgram.mockImplementation(() => {
+                elapsedMs += 1000;
+                return { ...baseProgram, elapsedMs, remainingMs: Math.max(0, 120_000 - elapsedMs) };
+            });
+
+            mockNavigation.isModalOpen.mockImplementation((modalId?: string) => modalId === 'now-playing-info');
+
+            const modalOpen = navHandlers.modalOpen as (payload: unknown) => void;
+            expect(modalOpen).toBeDefined();
+            modalOpen({ modalId: 'now-playing-info' });
+
+            jest.advanceTimersByTime(1100);
+            jest.advanceTimersByTime(1100);
+
+            const nowPlayingModule = require('../modules/ui/now-playing-info');
+            const instance = (nowPlayingModule.NowPlayingInfoOverlay as jest.Mock).mock.results[0]?.value;
+            expect((instance.update as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+
+            const firstUpdateVm = (instance.update as jest.Mock).mock.calls[0]?.[0];
+            const secondUpdateVm = (instance.update as jest.Mock).mock.calls[1]?.[0];
+            expect(typeof firstUpdateVm.elapsedMs).toBe('number');
+            expect(typeof secondUpdateVm.elapsedMs).toBe('number');
+            expect(secondUpdateVm.elapsedMs).toBeGreaterThan(firstUpdateVm.elapsedMs);
+
+            // Closing should stop the timer (no further updates).
+            const callCount = (instance.update as jest.Mock).mock.calls.length;
+            const modalClose = navHandlers.modalClose as (payload: unknown) => void;
+            modalClose({ modalId: 'now-playing-info' });
+            jest.advanceTimersByTime(3000);
+            expect((instance.update as jest.Mock).mock.calls.length).toBe(callCount);
+
+            jest.useRealTimers();
         });
     });
 

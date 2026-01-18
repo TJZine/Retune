@@ -12,6 +12,7 @@
 export const RETUNE_STORAGE_KEYS = {
     // Audio / Playback
     DTS_PASSTHROUGH: 'retune_enable_dts_passthrough',
+    DIRECT_PLAY_AUDIO_FALLBACK: 'retune_direct_play_audio_fallback',
 
     // Setup / Onboarding
     AUDIO_SETUP_COMPLETE: 'retune_audio_setup_complete',
@@ -20,6 +21,8 @@ export const RETUNE_STORAGE_KEYS = {
     SCANLINE_EFFECT: 'retune_scanline_effect',
     THEME: 'retune_theme',
     NOW_PLAYING_INFO_AUTO_HIDE_MS: 'retune_now_playing_info_auto_hide_ms',
+    NOW_PLAYING_STREAM_DEBUG: 'retune_now_playing_stream_debug',
+    NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW: 'retune_now_playing_stream_debug_auto_show',
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',
