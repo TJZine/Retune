@@ -23,6 +23,7 @@ import { SplashScreen } from './modules/ui/splash';
 import { SettingsScreen } from './modules/ui/settings';
 import { AudioSetupScreen } from './modules/ui/audio-setup';
 import { STORAGE_KEYS } from './types';
+import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import {
     safeClearRetuneStorage,
     safeLocalStorageGet,
@@ -850,57 +851,65 @@ export class App {
 
         const presetSelect = this._devMenuContainer.querySelector('#dev-transcode-preset') as HTMLSelectElement | null;
         if (presetSelect) {
-            presetSelect.value = read('retune_transcode_preset');
+            presetSelect.value = read(RETUNE_STORAGE_KEYS.TRANSCODE_PRESET);
         }
 	        const compatEl = this._devMenuContainer.querySelector('#dev-transcode-compat') as HTMLInputElement | null;
 	        if (compatEl) {
-	            compatEl.checked = read('retune_transcode_compat') === '1';
+	            compatEl.checked = read(RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT) === '1';
 	        }
 	        const directPlayAudioFallbackEl = this._devMenuContainer.querySelector('#dev-directplay-audio-fallback') as HTMLInputElement | null;
 	        if (directPlayAudioFallbackEl) {
-	            directPlayAudioFallbackEl.checked = read('retune_direct_play_audio_fallback') === '1';
+	            directPlayAudioFallbackEl.checked =
+	                read(RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK) === '1';
 	        }
 	        const nowPlayingStreamDebugEl = this._devMenuContainer.querySelector('#dev-nowplaying-stream-debug') as HTMLInputElement | null;
 	        if (nowPlayingStreamDebugEl) {
-	            nowPlayingStreamDebugEl.checked = read('retune_now_playing_stream_debug') === '1';
+	            nowPlayingStreamDebugEl.checked =
+	                read(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG) === '1';
 	        }
 	        const nowPlayingStreamDebugAutoEl = this._devMenuContainer.querySelector('#dev-nowplaying-stream-debug-auto') as HTMLInputElement | null;
 	        if (nowPlayingStreamDebugAutoEl) {
-	            nowPlayingStreamDebugAutoEl.checked = read('retune_now_playing_stream_debug_auto_show') === '1';
+	            nowPlayingStreamDebugAutoEl.checked =
+	                read(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW) === '1';
 	        }
 
         const setInputValue = (id: string, key: string): void => {
             const el = this._devMenuContainer!.querySelector(id) as HTMLInputElement | null;
             if (el) el.value = read(key);
         };
-        setInputValue('#dev-transcode-platform', 'retune_transcode_platform');
-        setInputValue('#dev-transcode-platform-version', 'retune_transcode_platform_version');
-        setInputValue('#dev-transcode-device', 'retune_transcode_device');
-        setInputValue('#dev-transcode-device-name', 'retune_transcode_device_name');
-        setInputValue('#dev-transcode-model', 'retune_transcode_model');
-        setInputValue('#dev-transcode-product', 'retune_transcode_product');
-        setInputValue('#dev-transcode-version', 'retune_transcode_version');
-        setInputValue('#dev-transcode-profile-name', 'retune_transcode_profile_name');
-        setInputValue('#dev-transcode-profile-version', 'retune_transcode_profile_version');
+        setInputValue('#dev-transcode-platform', RETUNE_STORAGE_KEYS.TRANSCODE_PLATFORM);
+        setInputValue('#dev-transcode-platform-version', RETUNE_STORAGE_KEYS.TRANSCODE_PLATFORM_VERSION);
+        setInputValue('#dev-transcode-device', RETUNE_STORAGE_KEYS.TRANSCODE_DEVICE);
+        setInputValue('#dev-transcode-device-name', RETUNE_STORAGE_KEYS.TRANSCODE_DEVICE_NAME);
+        setInputValue('#dev-transcode-model', RETUNE_STORAGE_KEYS.TRANSCODE_MODEL);
+        setInputValue('#dev-transcode-product', RETUNE_STORAGE_KEYS.TRANSCODE_PRODUCT);
+        setInputValue('#dev-transcode-version', RETUNE_STORAGE_KEYS.TRANSCODE_VERSION);
+        setInputValue('#dev-transcode-profile-name', RETUNE_STORAGE_KEYS.TRANSCODE_PROFILE_NAME);
+        setInputValue('#dev-transcode-profile-version', RETUNE_STORAGE_KEYS.TRANSCODE_PROFILE_VERSION);
 
 	        this._devMenuContainer.querySelector('#dev-transcode-save')?.addEventListener('click', () => {
-	            if (presetSelect) writeOrRemove('retune_transcode_preset', presetSelect.value);
-	            if (compatEl) safeLocalStorageSet('retune_transcode_compat', compatEl.checked ? '1' : '0');
+	            if (presetSelect) writeOrRemove(RETUNE_STORAGE_KEYS.TRANSCODE_PRESET, presetSelect.value);
+	            if (compatEl) {
+	                safeLocalStorageSet(
+	                    RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT,
+	                    compatEl.checked ? '1' : '0'
+	                );
+	            }
 	            if (directPlayAudioFallbackEl) {
 	                safeLocalStorageSet(
-	                    'retune_direct_play_audio_fallback',
+	                    RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
 	                    directPlayAudioFallbackEl.checked ? '1' : '0'
 	                );
 	            }
 	            if (nowPlayingStreamDebugEl) {
 	                safeLocalStorageSet(
-	                    'retune_now_playing_stream_debug',
+	                    RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG,
 	                    nowPlayingStreamDebugEl.checked ? '1' : '0'
 	                );
 	            }
 	            if (nowPlayingStreamDebugAutoEl) {
 	                safeLocalStorageSet(
-	                    'retune_now_playing_stream_debug_auto_show',
+	                    RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW,
 	                    nowPlayingStreamDebugAutoEl.checked ? '1' : '0'
 	                );
 	            }
@@ -908,15 +917,42 @@ export class App {
 	                const el = this._devMenuContainer!.querySelector(id) as HTMLInputElement | null;
 	                return el ? el.value : '';
 	            };
-            writeOrRemove('retune_transcode_platform', getInput('#dev-transcode-platform'));
-            writeOrRemove('retune_transcode_platform_version', getInput('#dev-transcode-platform-version'));
-            writeOrRemove('retune_transcode_device', getInput('#dev-transcode-device'));
-            writeOrRemove('retune_transcode_device_name', getInput('#dev-transcode-device-name'));
-            writeOrRemove('retune_transcode_model', getInput('#dev-transcode-model'));
-            writeOrRemove('retune_transcode_product', getInput('#dev-transcode-product'));
-            writeOrRemove('retune_transcode_version', getInput('#dev-transcode-version'));
-            writeOrRemove('retune_transcode_profile_name', getInput('#dev-transcode-profile-name'));
-            writeOrRemove('retune_transcode_profile_version', getInput('#dev-transcode-profile-version'));
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_PLATFORM,
+                getInput('#dev-transcode-platform')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_PLATFORM_VERSION,
+                getInput('#dev-transcode-platform-version')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_DEVICE,
+                getInput('#dev-transcode-device')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_DEVICE_NAME,
+                getInput('#dev-transcode-device-name')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_MODEL,
+                getInput('#dev-transcode-model')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_PRODUCT,
+                getInput('#dev-transcode-product')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_VERSION,
+                getInput('#dev-transcode-version')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_PROFILE_NAME,
+                getInput('#dev-transcode-profile-name')
+            );
+            writeOrRemove(
+                RETUNE_STORAGE_KEYS.TRANSCODE_PROFILE_VERSION,
+                getInput('#dev-transcode-profile-version')
+            );
             this._showToast('Saved transcode overrides');
         });
 

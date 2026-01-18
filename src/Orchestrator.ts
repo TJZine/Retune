@@ -725,10 +725,14 @@ export class AppOrchestrator implements IAppOrchestrator {
                 if (typeof req.audioStreamId === 'string') {
                     opts.audioStreamId = req.audioStreamId;
                 }
-                decision.serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
+                const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
                     program.item.ratingKey,
                     opts
                 );
+                if (decision !== this._currentStreamDecision) {
+                    return this.getPlaybackInfoSnapshot();
+                }
+                decision.serverDecision = serverDecision;
                 this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
             } catch (error) {
                 console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
@@ -2545,11 +2549,12 @@ export class AppOrchestrator implements IAppOrchestrator {
 	                return;
 	            }
 	            try {
-	                const program = this._scheduler.getCurrentProgram();
-	                const channel = this._channelManager?.getCurrentChannel() ?? null;
-	                const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
-	                this._nowPlayingInfo.update(viewModel);
-	            } catch {
+                const program = this._scheduler.getCurrentProgram();
+                if (!program) return;
+                const channel = this._channelManager?.getCurrentChannel() ?? null;
+                const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
+                this._nowPlayingInfo.update(viewModel);
+            } catch {
 	                // Best-effort; never throw from a UI refresh timer.
 	            }
 	        }, 1000);

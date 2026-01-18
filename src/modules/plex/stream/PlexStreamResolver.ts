@@ -749,7 +749,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Bind the transcoder session key to our app sessionId so we can terminate it later
         params.set('session', sessionId);
         params.set('X-Plex-Session-Identifier', sessionId);
-        if (options.audioStreamId) {
+        if (typeof options.audioStreamId === 'string' && options.audioStreamId.length > 0) {
             params.set('audioStreamID', options.audioStreamId);
         }
 
@@ -1166,7 +1166,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             url.searchParams.set('X-Plex-Token', token);
         }
         url.searchParams.set('X-Plex-Session-Identifier', sessionId);
-        if (audioStreamId) {
+        if (typeof audioStreamId === 'string' && audioStreamId.length > 0) {
             url.searchParams.set('audioStreamID', audioStreamId);
         }
 
