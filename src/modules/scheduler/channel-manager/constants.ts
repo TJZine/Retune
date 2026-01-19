@@ -38,13 +38,13 @@ export const CACHE_TTL_MS = 60 * 60 * 1000;
 export const DEFAULT_CHANNEL_SETUP_MAX = 100;
 
 /** Maximum number of channels allowed */
-export const MAX_CHANNELS = 999;
+export const MAX_CHANNELS = 500;
 
 /** Minimum channel number */
 export const MIN_CHANNEL_NUMBER = 1;
 
 /** Maximum channel number */
-export const MAX_CHANNEL_NUMBER = 999;
+export const MAX_CHANNEL_NUMBER = 500;
 
 // ============================================
 // Error Messages
@@ -54,7 +54,7 @@ export const CHANNEL_ERROR_MESSAGES = {
     CHANNEL_NOT_FOUND: 'Channel not found',
     CONTENT_SOURCE_REQUIRED: 'Content source is required',
     MAX_CHANNELS_REACHED: 'Maximum number of channels reached',
-    INVALID_CHANNEL_NUMBER: 'Channel number must be between 1 and 999',
+    INVALID_CHANNEL_NUMBER: 'Channel number must be between 1 and 500',
     DUPLICATE_CHANNEL_NUMBER: 'Channel number already in use',
     INVALID_IMPORT_DATA: 'Import file is invalid',
     EMPTY_CONTENT: 'No playable content found after filtering',

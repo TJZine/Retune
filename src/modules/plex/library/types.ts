@@ -67,6 +67,8 @@ export interface PlexMediaItem {
     viewOffset?: number;
     viewCount?: number;
     lastViewedAt?: Date;
+    grandparentRatingKey?: string;
+    parentRatingKey?: string;
     media: PlexMediaFile[];
 }
 
@@ -171,6 +173,7 @@ export interface LibraryQueryOptions {
     offset?: number;
     limit?: number;
     includeCollections?: boolean;
+    signal?: AbortSignal | null;
 }
 
 /**
@@ -325,6 +328,8 @@ export interface RawMediaItem {
     viewOffset?: number;
     viewCount?: number;
     lastViewedAt?: number;
+    grandparentRatingKey?: string;
+    parentRatingKey?: string;
     Media?: RawMediaFile[];
 }
 

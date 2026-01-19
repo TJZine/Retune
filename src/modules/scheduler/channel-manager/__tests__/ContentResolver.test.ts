@@ -90,7 +90,7 @@ describe('ContentResolver', () => {
 
             const result = await resolver.resolveSource(source);
 
-            expect(mockLibrary.getLibraryItems).toHaveBeenCalledWith('lib1');
+            expect(mockLibrary.getLibraryItems).toHaveBeenCalledWith('lib1', undefined);
             expect(result).toHaveLength(2);
             expect(result[0]!.ratingKey).toBe('1');
         });
@@ -107,7 +107,7 @@ describe('ContentResolver', () => {
 
             const result = await resolver.resolveSource(source);
 
-            expect(mockLibrary.getCollectionItems).toHaveBeenCalledWith('col1');
+            expect(mockLibrary.getCollectionItems).toHaveBeenCalledWith('col1', undefined);
             expect(result).toHaveLength(1);
         });
 
@@ -133,8 +133,8 @@ describe('ContentResolver', () => {
 
             const result = await resolver.resolveSource(source);
 
-            expect(mockLibrary.getCollectionItems).toHaveBeenCalledWith('col-shows');
-            expect(mockLibrary.getShowEpisodes).toHaveBeenCalledWith('show-1');
+            expect(mockLibrary.getCollectionItems).toHaveBeenCalledWith('col-shows', undefined);
+            expect(mockLibrary.getShowEpisodes).toHaveBeenCalledWith('show-1', undefined);
             expect(result).toHaveLength(2);
             expect(result[0]!.type).toBe('episode');
             expect(result[0]!.genres).toEqual(['Animation']);
@@ -158,7 +158,7 @@ describe('ContentResolver', () => {
 
             const result = await resolver.resolveSource(source);
 
-            expect(mockLibrary.getShowEpisodes).toHaveBeenCalledWith('show1');
+            expect(mockLibrary.getShowEpisodes).toHaveBeenCalledWith('show1', undefined);
             expect(result).toHaveLength(3);
         });
 
@@ -196,7 +196,7 @@ describe('ContentResolver', () => {
 
             const result = await resolver.resolveSource(source);
 
-            expect(mockLibrary.getPlaylistItems).toHaveBeenCalledWith('playlist1');
+            expect(mockLibrary.getPlaylistItems).toHaveBeenCalledWith('playlist1', undefined);
             expect(result).toHaveLength(1);
         });
 

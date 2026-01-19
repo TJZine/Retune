@@ -13,6 +13,7 @@ import type {
     ChannelConfig,
     ChannelContentSource,
     ResolvedChannelContent,
+    ResolvedContentItem,
     ImportResult,
     ChannelManagerEventMap,
     ChannelManagerState,
@@ -340,7 +341,10 @@ export class ChannelManager implements IChannelManager {
      * @param config - Partial channel configuration
      * @returns Promise resolving to complete channel config
      */
-    async createChannel(config: Partial<ChannelConfig>): Promise<ChannelConfig> {
+    async createChannel(
+        config: Partial<ChannelConfig>,
+        options?: { signal?: AbortSignal | null; initialContent?: ResolvedContentItem[] | undefined }
+    ): Promise<ChannelConfig> {
         // Validate content source
         if (!config.contentSource) {
             throw new Error(CHANNEL_ERROR_MESSAGES.CONTENT_SOURCE_REQUIRED);
@@ -405,10 +409,24 @@ export class ChannelManager implements IChannelManager {
 
         // Resolve content initially
         try {
-            const content = await this._resolveContentInternal(channel);
-            channel.itemCount = content.items.length;
-            channel.totalDurationMs = content.totalDurationMs;
-            channel.lastContentRefresh = Date.now();
+            if (options?.initialContent) {
+                channel.itemCount = options.initialContent.length;
+                channel.totalDurationMs = options.initialContent.reduce((sum, item) => sum + item.durationMs, 0);
+                channel.lastContentRefresh = Date.now();
+                // Cache it for immediate use
+                this._state.resolvedContent.set(channel.id, {
+                    items: options.initialContent,
+                    orderedItems: options.initialContent,
+                    totalDurationMs: channel.totalDurationMs,
+                    channelId: channel.id,
+                    resolvedAt: channel.lastContentRefresh
+                });
+            } else {
+                const content = await this._resolveContentInternal(channel, options);
+                channel.itemCount = content.items.length;
+                channel.totalDurationMs = content.totalDurationMs;
+                channel.lastContentRefresh = Date.now();
+            }
         } catch (error) {
             this._logger.warn(`Failed initial content resolution for channel ${channel.id}`, error);
         }
@@ -535,7 +553,10 @@ export class ChannelManager implements IChannelManager {
      * Resolve content for a channel (uses cache if valid).
      * @throws {ChannelError} With AppErrorCode.CHANNEL_NOT_FOUND if channel doesn't exist
      */
-    async resolveChannelContent(channelId: string): Promise<ResolvedChannelContent> {
+    async resolveChannelContent(
+        channelId: string,
+        options?: { signal?: AbortSignal }
+    ): Promise<ResolvedChannelContent> {
         const channel = this._state.channels.get(channelId);
         if (!channel) {
             throw new ChannelError(
@@ -557,14 +578,17 @@ export class ChannelManager implements IChannelManager {
             };
         }
 
-        return this._resolveContentInternal(channel);
+        return this._resolveContentInternal(channel, options);
     }
 
     /**
      * Force refresh content for a channel (bypasses cache).
      * @throws {ChannelError} With AppErrorCode.CHANNEL_NOT_FOUND if channel doesn't exist
      */
-    async refreshChannelContent(channelId: string): Promise<ResolvedChannelContent> {
+    async refreshChannelContent(
+        channelId: string,
+        options?: { signal?: AbortSignal | null }
+    ): Promise<ResolvedChannelContent> {
         const channel = this._state.channels.get(channelId);
         if (!channel) {
             throw new ChannelError(
@@ -575,8 +599,9 @@ export class ChannelManager implements IChannelManager {
         }
 
         this._state.resolvedContent.delete(channelId);
-        return this._resolveContentInternal(channel);
+        return this._resolveContentInternal(channel, options);
     }
+
 
     // ============================================
     // Ordering / Current Channel
@@ -921,12 +946,15 @@ export class ChannelManager implements IChannelManager {
     // Private Methods
     // ============================================
 
-    private async _resolveContentInternal(channel: ChannelConfig): Promise<ResolvedChannelContent> {
+    private async _resolveContentInternal(
+        channel: ChannelConfig,
+        options?: { signal?: AbortSignal | null }
+    ): Promise<ResolvedChannelContent> {
         const cached = this._state.resolvedContent.get(channel.id);
 
         try {
             // Resolve from source
-            const rawItems = await this._contentResolver.resolveSource(channel.contentSource);
+            const rawItems = await this._contentResolver.resolveSource(channel.contentSource, options);
 
             // Issue 1 (Round 4): If source itself returns empty, it's CONTENT_UNAVAILABLE (library/collection deleted)
             // This is different from filtering removing all items

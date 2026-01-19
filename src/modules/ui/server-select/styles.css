@@ -1,0 +1,32 @@
+.server-status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-top: 4px;
+    align-self: flex-start;
+}
+
+.server-status-pill.ok {
+    background-color: var(--color-status-ok-bg, rgba(0, 128, 0, 0.2));
+    color: var(--color-status-ok, #4ade80);
+    border: 1px solid var(--color-status-ok-border, rgba(0, 128, 0, 0.3));
+}
+
+.server-status-pill.unreachable {
+    background-color: var(--color-status-error-bg, rgba(128, 0, 0, 0.2));
+    color: var(--color-status-error, #f87171);
+    border: 1px solid var(--color-status-error-border, rgba(128, 0, 0, 0.3));
+}
+
+.server-status-pill.auth-required {
+    background-color: var(--color-status-warning-bg, rgba(255, 165, 0, 0.2));
+    color: var(--color-status-warning, #fbbf24);
+    border: 1px solid var(--color-status-warning-border, rgba(255, 165, 0, 0.3));
+}
+
+.server-status-pill.unknown {
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-muted);
+}
