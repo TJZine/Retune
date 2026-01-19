@@ -29,7 +29,7 @@ export interface IPlexLibrary {
      * Get all libraries.
      * @returns Promise resolving to list of libraries
      */
-    getLibraries(): Promise<PlexLibrary[]>;
+    getLibraries(options?: { signal?: AbortSignal | null }): Promise<PlexLibrary[]>;
 
     /**
      * Get a specific library by ID.
@@ -50,11 +50,19 @@ export interface IPlexLibrary {
     getLibraryItems(libraryId: string, options?: LibraryQueryOptions): Promise<PlexMediaItem[]>;
 
     /**
+     * Get total item count for a library without fetching items.
+     * @param libraryId - Library section ID
+     * @param options - Optional query options (filter/signal)
+     * @returns Promise resolving to item count (0 if unavailable)
+     */
+    getLibraryItemCount(libraryId: string, options?: LibraryQueryOptions): Promise<number>;
+
+    /**
      * Get a specific media item by rating key.
      * @param ratingKey - Item's unique rating key
      * @returns Promise resolving to item or null if not found
      */
-    getItem(ratingKey: string): Promise<PlexMediaItem | null>;
+    getItem(ratingKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem | null>;
 
     // TV Show Hierarchy
 
@@ -63,28 +71,28 @@ export interface IPlexLibrary {
      * @param libraryId - Library section ID (must be a show library)
      * @returns Promise resolving to list of shows
      */
-    getShows(libraryId: string): Promise<PlexMediaItem[]>;
+    getShows(libraryId: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
 
     /**
      * Get seasons for a show.
      * @param showKey - Show's rating key
      * @returns Promise resolving to list of seasons
      */
-    getShowSeasons(showKey: string): Promise<PlexSeason[]>;
+    getShowSeasons(showKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexSeason[]>;
 
     /**
      * Get episodes for a season.
      * @param seasonKey - Season's rating key
      * @returns Promise resolving to list of episodes
      */
-    getSeasonEpisodes(seasonKey: string): Promise<PlexMediaItem[]>;
+    getSeasonEpisodes(seasonKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
 
     /**
      * Get all episodes for a show (flattened across all seasons).
      * @param showKey - Show's rating key
      * @returns Promise resolving to all episodes sorted by season/episode
      */
-    getShowEpisodes(showKey: string): Promise<PlexMediaItem[]>;
+    getShowEpisodes(showKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
 
     // Search
 
@@ -103,27 +111,27 @@ export interface IPlexLibrary {
      * @param libraryId - Library section ID
      * @returns Promise resolving to list of collections
      */
-    getCollections(libraryId: string): Promise<PlexCollection[]>;
+    getCollections(libraryId: string, options?: { signal?: AbortSignal | null }): Promise<PlexCollection[]>;
 
     /**
      * Get items in a collection.
      * @param collectionKey - Collection's rating key
      * @returns Promise resolving to list of items
      */
-    getCollectionItems(collectionKey: string): Promise<PlexMediaItem[]>;
+    getCollectionItems(collectionKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
 
     /**
      * Get user playlists.
      * @returns Promise resolving to list of playlists
      */
-    getPlaylists(): Promise<PlexPlaylist[]>;
+    getPlaylists(options?: { signal?: AbortSignal | null }): Promise<PlexPlaylist[]>;
 
     /**
      * Get items in a playlist.
      * @param playlistKey - Playlist's rating key
      * @returns Promise resolving to list of items
      */
-    getPlaylistItems(playlistKey: string): Promise<PlexMediaItem[]>;
+    getPlaylistItems(playlistKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
 
     // Image URLs
 

@@ -55,36 +55,41 @@ export class ContentResolver {
      * @returns Promise resolving to content items
      * @throws Error if resolution fails (for cached fallback handling by caller)
      */
-    async resolveSource(source: ChannelContentSource): Promise<ResolvedContentItem[]> {
+    async resolveSource(
+        source: ChannelContentSource,
+        options?: { signal?: AbortSignal | null }
+    ): Promise<ResolvedContentItem[]> {
         let items: ResolvedContentItem[];
 
         switch (source.type) {
             case 'library':
-                items = await this._resolveLibrarySource(source);
+                items = await this._resolveLibrarySource(source, options);
                 break;
             case 'collection':
-                items = await this._resolveCollectionSource(source);
+                items = await this._resolveCollectionSource(source, options);
                 break;
             case 'show':
-                items = await this._resolveShowSource(source);
+                items = await this._resolveShowSource(source, options);
                 break;
             case 'playlist':
-                items = await this._resolvePlaylistSource(source);
+                items = await this._resolvePlaylistSource(source, options);
                 break;
             case 'manual':
-                items = await this._resolveManualSource(source);
+                items = await this._resolveManualSource(source, options);
                 break;
             case 'mixed':
-                items = await this._resolveMixedSource(source);
+                items = await this._resolveMixedSource(source, options);
                 break;
-            default:
-                this._logger.warn(`Unknown source type: ${(source as BaseContentSource).type}`);
+            default: {
+                const type = (source as { type: string }).type;
+                this._logger.warn(`Unknown source type: ${type}`);
                 items = [];
+            }
         }
 
         // Defensive expansion: Shows are containers, not playable items.
         // Expand any that slipped through (common in Collections containing shows).
-        const expanded = await this._expandShowContainers(items);
+        const expanded = await this._expandShowContainers(items, options);
 
         // Final defensive filter: if any shows remain, drop them and warn.
         const playable = expanded.filter((item) => item.type !== 'show');
@@ -97,7 +102,10 @@ export class ContentResolver {
         return playable.map((item, index) => ({ ...item, scheduledIndex: index }));
     }
 
-    private async _expandShowContainers(items: ResolvedContentItem[]): Promise<ResolvedContentItem[]> {
+    private async _expandShowContainers(
+        items: ResolvedContentItem[],
+        options?: { signal?: AbortSignal | null }
+    ): Promise<ResolvedContentItem[]> {
         const expanded: ResolvedContentItem[] = [];
 
         for (const item of items) {
@@ -107,7 +115,7 @@ export class ContentResolver {
             }
 
             try {
-                const episodes = await this._library.getShowEpisodes(item.ratingKey);
+                const episodes = await this._library.getShowEpisodes(item.ratingKey, options);
                 if (episodes.length === 0) {
                     this._logger.warn('Show item returned no episodes during expansion', item.ratingKey);
                     continue;
@@ -245,53 +253,62 @@ export class ContentResolver {
     // ============================================
 
     private async _resolveLibrarySource(
-        source: LibraryContentSource
+        source: LibraryContentSource,
+        options?: { signal?: AbortSignal | null }
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
         if (source.libraryType !== 'show') {
-            const items = await this._library.getLibraryItems(source.libraryId);
+            const items = await this._library.getLibraryItems(source.libraryId, options);
             return items.map((item, index) => this._toResolvedItem(item, index));
         }
 
-        // Prefer a single call if Plex returns episodes directly for the section.
+        // --- TV Library "Fast Path" with Parent Decoration (Issue 2/3) ---
+
+        // 1. Fetch episodes directly (Plex type=4)
         const episodeItems = await this._library.getLibraryItems(source.libraryId, {
+            ...options,
             filter: { type: PLEX_MEDIA_TYPES.EPISODE },
         });
-        const playableEpisodes = episodeItems.filter((item) => item.durationMs > 0);
-        if (playableEpisodes.length > 0) {
-            return playableEpisodes.map((item, index) => this._toResolvedItem(item, index));
+
+        // 2. Fetch shows to get parent metadata (one request per library section)
+        // This avoids N+1 queries during expansion and provides filtering context.
+        const shows = await this._library.getLibraryItems(source.libraryId, options);
+        const parentMap = new Map<string, PlexMediaItemMinimal>();
+        for (const show of shows) {
+            // Index by ratingKey or key? Plex grandparents usually refer to show ratingKey.
+            parentMap.set(show.ratingKey, show);
         }
 
-        // Fallback: expand each show into episodes and propagate show metadata for filtering.
-        const shows = await this._library.getLibraryItems(source.libraryId);
-        const expanded: PlexMediaItemMinimal[] = [];
-        for (const show of shows) {
-            try {
-                const episodes = await this._library.getShowEpisodes(show.ratingKey);
-                for (const episode of episodes) {
-                    const merged: PlexMediaItemMinimal = { ...episode };
+        const decorated: PlexMediaItemMinimal[] = [];
+        for (const episode of episodeItems) {
+            if (episode.durationMs <= 0) continue;
 
-                    // Propagate show-level metadata to episodes for filtering, without assigning undefined
-                    if (!merged.genres && show.genres) merged.genres = show.genres;
-                    if (!merged.directors && show.directors) merged.directors = show.directors;
-                    if (!merged.contentRating && show.contentRating) merged.contentRating = show.contentRating;
-                    if (merged.year === 0 && show.year) merged.year = show.year;
+            // Plex usually provides grandparentRatingKey in episode metadata.
+            // If not present, we can't decorate, but we still keep the episode.
+            const parentKey = episode.grandparentRatingKey || episode.parentRatingKey;
+            const parent = parentKey ? parentMap.get(parentKey) : null;
 
-                    expanded.push(merged);
-                }
-            } catch (error) {
-                this._logger.warn('Failed to expand show library item', show.ratingKey, error);
+            if (parent) {
+                const merged: PlexMediaItemMinimal = { ...episode };
+                if (!merged.genres && parent.genres) merged.genres = parent.genres;
+                if (!merged.directors && parent.directors) merged.directors = parent.directors;
+                if (!merged.contentRating && parent.contentRating) merged.contentRating = parent.contentRating;
+                if ((!merged.year || merged.year === 0) && parent.year) merged.year = parent.year;
+                decorated.push(merged);
+            } else {
+                decorated.push(episode);
             }
         }
 
-        return expanded.map((item, index) => this._toResolvedItem(item, index));
+        return decorated.map((item, index) => this._toResolvedItem(item, index));
     }
 
     private async _resolveCollectionSource(
-        source: CollectionContentSource
+        source: CollectionContentSource,
+        options?: { signal?: AbortSignal | null }
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
-        const items = await this._library.getCollectionItems(source.collectionKey);
+        const items = await this._library.getCollectionItems(source.collectionKey, options);
         const expanded: PlexMediaItemMinimal[] = [];
 
         for (const item of items) {
@@ -301,7 +318,7 @@ export class ContentResolver {
                 item.seasonNumber === undefined
             ) {
                 try {
-                    const episodes = await this._library.getShowEpisodes(item.ratingKey);
+                    const episodes = await this._library.getShowEpisodes(item.ratingKey, options);
                     if (episodes.length > 0) {
                         expanded.push(...episodes);
                         continue;
@@ -316,14 +333,17 @@ export class ContentResolver {
         return expanded.map((item, index) => this._toResolvedItem(item, index));
     }
 
-    private async _resolveShowSource(source: ShowContentSource): Promise<ResolvedContentItem[]> {
+    private async _resolveShowSource(
+        source: ShowContentSource,
+        options?: { signal?: AbortSignal | null }
+    ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
-        const episodes = await this._library.getShowEpisodes(source.showKey);
+        const items = await this._library.getShowEpisodes(source.showKey, options);
 
-        let filtered = episodes;
+        let filtered = items;
         const seasonFilter = source.seasonFilter;
         if (seasonFilter && seasonFilter.length) {
-            filtered = episodes.filter(
+            filtered = items.filter(
                 (ep) =>
                     typeof ep.seasonNumber === 'number' &&
                     seasonFilter.indexOf(ep.seasonNumber) !== -1
@@ -334,16 +354,18 @@ export class ContentResolver {
     }
 
     private async _resolvePlaylistSource(
-        source: PlaylistContentSource
+        source: PlaylistContentSource,
+        options?: { signal?: AbortSignal | null }
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
-        const items = await this._library.getPlaylistItems(source.playlistKey);
+        const items = await this._library.getPlaylistItems(source.playlistKey, options);
         return items.map((item, index) => this._toResolvedItem(item, index));
     }
 
     // Issue 7: Use cached metadata from manual source instead of fetching from Plex
     private _resolveManualSource(
-        source: ManualContentSource
+        source: ManualContentSource,
+        _options?: { signal?: AbortSignal | null }
     ): Promise<ResolvedContentItem[]> {
         const results: ResolvedContentItem[] = [];
 
@@ -379,12 +401,13 @@ export class ContentResolver {
     }
 
     private async _resolveMixedSource(
-        source: MixedContentSource
+        source: MixedContentSource,
+        options?: { signal?: AbortSignal | null }
     ): Promise<ResolvedContentItem[]> {
         const allResolved: ResolvedContentItem[][] = [];
 
         for (const subSource of source.sources) {
-            const items = await this.resolveSource(subSource);
+            const items = await this.resolveSource(subSource, options);
             allResolved.push(items);
         }
 
@@ -582,7 +605,3 @@ export class ContentResolver {
     }
 }
 
-// Re-export for type inference
-interface BaseContentSource {
-    type: string;
-}

@@ -135,6 +135,8 @@ export function parseMediaItem(data: RawMediaItem): PlexMediaItem {
     }
     if (data.grandparentTitle !== undefined) item.grandparentTitle = data.grandparentTitle;
     if (data.parentTitle !== undefined) item.parentTitle = data.parentTitle;
+    if (data.grandparentRatingKey !== undefined) item.grandparentRatingKey = data.grandparentRatingKey;
+    if (data.parentRatingKey !== undefined) item.parentRatingKey = data.parentRatingKey;
     if (data.parentIndex !== undefined) item.seasonNumber = data.parentIndex;
     if (data.index !== undefined) item.episodeNumber = data.index;
     if (data.lastViewedAt !== undefined) item.lastViewedAt = new Date(data.lastViewedAt * 1000);

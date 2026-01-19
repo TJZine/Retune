@@ -319,10 +319,10 @@ describe('PlexServerDiscovery', () => {
                 ],
             });
 
-            const conn = await discovery.findFastestConnection(mockServer);
+            const result = await discovery.findFastestConnection(mockServer);
 
-            expect(conn).not.toBeNull();
-            expect(conn!.uri).toBe('https://local:32400');
+            expect(result.connection).not.toBeNull();
+            expect(result.connection!.uri).toBe('https://local:32400');
         });
 
         it('should prefer remote over relay connections', async () => {
@@ -341,10 +341,10 @@ describe('PlexServerDiscovery', () => {
                 ],
             });
 
-            const conn = await discovery.findFastestConnection(mockServer);
+            const result = await discovery.findFastestConnection(mockServer);
 
-            expect(conn).not.toBeNull();
-            expect(conn!.uri).toBe('https://remote:32400');
+            expect(result.connection).not.toBeNull();
+            expect(result.connection!.uri).toBe('https://remote:32400');
         });
 
         it('should fall back to relay when others fail', async () => {
@@ -368,10 +368,10 @@ describe('PlexServerDiscovery', () => {
                 ],
             });
 
-            const conn = await discovery.findFastestConnection(mockServer);
+            const result = await discovery.findFastestConnection(mockServer);
 
-            expect(conn).not.toBeNull();
-            expect(conn!.uri).toBe('https://relay:32400');
+            expect(result.connection).not.toBeNull();
+            expect(result.connection!.uri).toBe('https://relay:32400');
         });
 
         it('should return null when all connections fail', async () => {
@@ -384,9 +384,9 @@ describe('PlexServerDiscovery', () => {
                 ],
             });
 
-            const conn = await discovery.findFastestConnection(mockServer);
+            const result = await discovery.findFastestConnection(mockServer);
 
-            expect(conn).toBeNull();
+            expect(result.connection).toBeNull();
         });
     });
 
