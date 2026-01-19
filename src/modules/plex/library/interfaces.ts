@@ -12,6 +12,7 @@ import type {
     PlexPlaylist,
     LibraryQueryOptions,
     SearchOptions,
+    PlexLibraryEvents,
 } from './types';
 
 // ============================================
@@ -152,6 +153,22 @@ export interface IPlexLibrary {
      * @param libraryId - Library section ID to refresh
      */
     refreshLibrary(libraryId: string): Promise<void>;
+
+    /**
+     * Register event handler.
+     */
+    on<K extends keyof PlexLibraryEvents>(
+        event: K,
+        handler: (payload: PlexLibraryEvents[K]) => void
+    ): void;
+
+    /**
+     * Remove event handler.
+     */
+    off<K extends keyof PlexLibraryEvents>(
+        event: K,
+        handler: (payload: PlexLibraryEvents[K]) => void
+    ): void;
 }
 
 /**

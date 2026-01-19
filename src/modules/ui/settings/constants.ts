@@ -13,6 +13,8 @@ import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 export const SETTINGS_STORAGE_KEYS = {
     /** DTS passthrough enabled */
     DTS_PASSTHROUGH: RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH,
+    /** Direct play audio fallback enabled */
+    DIRECT_PLAY_AUDIO_FALLBACK: RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
     /** Color theme */
     THEME: RETUNE_STORAGE_KEYS.THEME,
     /** Scanline effect enabled */
@@ -33,6 +35,7 @@ export const SETTINGS_STORAGE_KEYS = {
 export const DEFAULT_SETTINGS: SettingsConfig = {
     audio: {
         dtsPassthrough: false,
+        directPlayAudioFallback: false,
     },
     display: {
         theme: 'dark',

@@ -353,7 +353,6 @@ export interface ChannelManagerState {
  * Stored data format for localStorage
  */
 export interface StoredChannelData {
-    version: number;
     channels: ChannelConfig[];
     channelOrder: string[];
     currentChannelId: string | null;

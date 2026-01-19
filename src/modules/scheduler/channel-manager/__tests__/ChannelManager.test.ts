@@ -430,7 +430,6 @@ describe('ChannelManager', () => {
 
             mockLocalStorage.clear();
             mockStorage[STORAGE_KEY] = JSON.stringify({
-                version: 2,
                 channels: [{ ...channel, contentSource: null }],
                 channelOrder: [channel.id],
                 currentChannelId: channel.id,
@@ -451,7 +450,6 @@ describe('ChannelManager', () => {
 
             mockLocalStorage.clear();
             mockStorage[STORAGE_KEY] = JSON.stringify({
-                version: 2,
                 channels: [{
                     ...channel,
                     contentSource: {
@@ -486,7 +484,6 @@ describe('ChannelManager', () => {
 
             mockLocalStorage.clear();
             mockStorage[STORAGE_KEY] = JSON.stringify({
-                version: 2,
                 channels: [ch1, ch2],
                 channelOrder: [],
                 currentChannelId: 'missing',

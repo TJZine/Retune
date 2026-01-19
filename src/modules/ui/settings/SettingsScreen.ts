@@ -100,6 +100,17 @@ export class SettingsScreen {
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH, value),
                     },
+                    {
+                        id: 'settings-direct-play-audio-fallback',
+                        label: 'Direct Play Audio Fallback',
+                        description: 'Allow Direct Play using a compatible fallback audio track',
+                        value: this._loadBoolSetting(
+                            SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+                            DEFAULT_SETTINGS.audio.directPlayAudioFallback
+                        ),
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK, value),
+                    },
                 ],
             },
             {
@@ -317,6 +328,11 @@ export class SettingsScreen {
                 return {
                     storageKey: SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH,
                     defaultValue: DEFAULT_SETTINGS.audio.dtsPassthrough,
+                };
+            case 'settings-direct-play-audio-fallback':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+                    defaultValue: DEFAULT_SETTINGS.audio.directPlayAudioFallback,
                 };
             case 'settings-scanline-effect':
                 return {

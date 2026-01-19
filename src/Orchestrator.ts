@@ -26,8 +26,8 @@ import {
     type INavigationManager,
     type NavigationConfig,
     type Screen,
-    type KeyEvent,
 } from './modules/navigation';
+import { NavigationCoordinator } from './modules/navigation/NavigationCoordinator';
 import {
     PlexAuth,
     type IPlexAuth,
@@ -53,6 +53,8 @@ import {
     type IPlexStreamResolver,
     type PlexStreamResolverConfig,
     type StreamDecision,
+    type StreamResolverError,
+    mapPlexStreamErrorCodeToAppErrorCode,
 } from './modules/plex/stream';
 import { MIME_TYPES } from './modules/plex/stream/constants'; // Fix Direct Play MIME types
 import {
@@ -72,8 +74,6 @@ import {
     type IChannelScheduler,
     type ScheduledProgram,
     type ScheduleConfig,
-    ShuffleGenerator,
-    ScheduleCalculator,
 } from './modules/scheduler/scheduler';
 import {
     VideoPlayer,
@@ -83,11 +83,13 @@ import {
     type PlaybackError,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
+import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
 import {
     EPGComponent,
     type IEPGComponent,
     type EPGConfig,
 } from './modules/ui/epg';
+import { EPGCoordinator, type EpgUiStatus } from './modules/ui/epg/EPGCoordinator';
 import {
     NowPlayingInfoOverlay,
     type INowPlayingInfoOverlay,
@@ -101,9 +103,10 @@ import {
     InitializationCoordinator,
     type IInitializationCoordinator,
 } from './core';
+import { NowPlayingDebugManager } from './modules/debug/NowPlayingDebugManager';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
-import { isStoredTrue, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 
 // ============================================
@@ -308,12 +311,13 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _scheduler: IChannelScheduler | null = null;
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
-    private _epgScheduleLoadToken = 0;
+    private _epgCoordinator: EPGCoordinator | null = null;
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
     private _nowPlayingInfoFetchToken = 0;
     private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
-    private _nowPlayingStreamDecisionFetchToken = 0;
-    private _nowPlayingStreamDecisionFetchedForSessionId: string | null = null;
+    private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
+    private _playbackRecovery: PlaybackRecoveryManager | null = null;
+    private _navigationCoordinator: NavigationCoordinator | null = null;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
@@ -331,19 +335,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _channelSetupRerunRequested: boolean = false;
     private _initCoordinator: IInitializationCoordinator | null = null;
 
-    // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
-    private _playbackFailureWindowStartMs: number = 0;
-    private _playbackFailureCount: number = 0;
-    private _playbackFailureTripped: boolean = false;
-    private _playbackFailureWindowMs: number = 2000;
-    private _playbackFailureTripCount: number = 3;
-
-    // Playback fallback: when a Direct stream fails due to container/codec support, retry via HLS Direct Stream.
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
-    private _directFallbackAttemptedForItemKey: Set<string> = new Set();
-    private _streamRecoveryInProgress: boolean = false;
 
     constructor() {
         this._initializeModuleStatus();
@@ -405,7 +399,8 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return null;
             },
         };
-        this._plexLibrary = new PlexLibrary(plexLibraryConfig);
+        const plexLibrary = new PlexLibrary(plexLibraryConfig);
+        this._plexLibrary = plexLibrary;
 
         // PlexStreamResolver needs config with accessors
         const streamResolverConfig: PlexStreamResolverConfig = {
@@ -444,11 +439,12 @@ export class AppOrchestrator implements IAppOrchestrator {
             },
             clientIdentifier: config.plexConfig.clientIdentifier,
         };
-        this._plexStreamResolver = new PlexStreamResolver(streamResolverConfig);
+        const plexStreamResolver = new PlexStreamResolver(streamResolverConfig);
+        this._plexStreamResolver = plexStreamResolver;
 
         // ChannelManager needs config
         const channelManagerConfig: ChannelManagerConfig = {
-            plexLibrary: this._plexLibrary,
+            plexLibrary: plexLibrary,
             storageKey: STORAGE_KEYS.CHANNELS_REAL,
             currentChannelKey: STORAGE_KEYS.CURRENT_CHANNEL,
         };
@@ -465,6 +461,86 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Now Playing Info overlay - no constructor args, initialize later
         this._nowPlayingInfo = new NowPlayingInfoOverlay();
+
+        this._epgCoordinator = new EPGCoordinator({
+            getEpg: (): IEPGComponent | null => this._epg,
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getEpgUiStatus: (): EpgUiStatus => this._moduleStatus.get('epg-ui')?.status as EpgUiStatus,
+            ensureEpgInitialized: (): Promise<void> =>
+                this._initCoordinator?.ensureEPGInitialized() ?? Promise.resolve(),
+            getEpgConfig: (): EPGConfig | null => this._config?.epgConfig ?? null,
+            getLocalMidnightMs: (t: number): number => this._getLocalMidnightMs(t),
+            buildDailyScheduleConfig: (
+                channel: ChannelConfig,
+                items: ResolvedChannelContent['items'],
+                referenceTimeMs: number
+            ): ScheduleConfig => this._buildDailyScheduleConfig(channel, items, referenceTimeMs),
+            getPreserveFocusOnOpen: (): boolean => this._lastChannelChangeSource === 'guide',
+            setLastChannelChangeSourceToGuide: (): void => {
+                this._lastChannelChangeSource = 'guide';
+            },
+            switchToChannel: (channelId: string): Promise<void> => this.switchToChannel(channelId),
+        });
+
+        this._nowPlayingDebugManager = new NowPlayingDebugManager({
+            nowPlayingModalId: NOW_PLAYING_INFO_MODAL_ID,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
+            getNowPlayingInfo: (): INowPlayingInfoOverlay | null => this._nowPlayingInfo,
+            getCurrentProgram: (): ScheduledProgram | null =>
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
+            getCurrentStreamDecision: (): StreamDecision | null => this._currentStreamDecision,
+            requestNowPlayingOverlayRefresh: (): void =>
+                this._refreshNowPlayingInfoOverlayIfOpen(),
+        });
+
+        this._playbackRecovery = new PlaybackRecoveryManager({
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getCurrentProgramForPlayback: (): ScheduledProgram | null => this._currentProgramForPlayback,
+            getCurrentStreamDescriptor: (): StreamDescriptor | null => this._currentStreamDescriptor,
+            setCurrentStreamDecision: (decision: StreamDecision): void => {
+                this._currentStreamDecision = decision;
+            },
+            setCurrentStreamDescriptor: (descriptor: StreamDescriptor): void => {
+                this._currentStreamDescriptor = descriptor;
+            },
+            buildPlexResourceUrl: (pathOrUrl: string): string | null =>
+                this._buildPlexResourceUrl(pathOrUrl),
+            getMimeType: (decision: StreamDecision): string => this._getMimeType(decision),
+            handleGlobalError: (error: AppError, context: string): void =>
+                this.handleGlobalError(error, context),
+        });
+
+        this._navigationCoordinator = new NavigationCoordinator({
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getEpg: (): IEPGComponent | null => this._epg,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getPlexAuth: (): IPlexAuth | null => this._plexAuth,
+            isNowPlayingModalOpen: (): boolean => {
+                const isOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
+                if (isOpen) {
+                    this._nowPlayingInfo?.resetAutoHideTimer();
+                }
+                return isOpen;
+            },
+            toggleNowPlayingInfoOverlay: (): void => this._toggleNowPlayingInfoOverlay(),
+            showNowPlayingInfoOverlay: (): void => this._showNowPlayingInfoOverlay(),
+            hideNowPlayingInfoOverlay: (): void => this._hideNowPlayingInfoOverlay(),
+            setLastChannelChangeSourceRemote: (): void => {
+                this._lastChannelChangeSource = 'remote';
+            },
+            setLastChannelChangeSourceNumber: (): void => {
+                this._lastChannelChangeSource = 'number';
+            },
+            switchToNextChannel: (): void => this._switchToNextChannel(),
+            switchToPreviousChannel: (): void => this._switchToPreviousChannel(),
+            switchToChannelByNumber: (n: number): Promise<void> => this.switchToChannelByNumber(n),
+            toggleEpg: (): void => this.toggleEPG(),
+            shouldRunChannelSetup: (): boolean => this._shouldRunChannelSetup(),
+        });
 
         // Create InitializationCoordinator with dependencies and callbacks
         this._initCoordinator = new InitializationCoordinator(
@@ -510,7 +586,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Follows 5-phase initialization order per spec.
      */
     async start(): Promise<void> {
-        this._resetPlaybackFailureGuard();
+        this._playbackRecovery?.resetPlaybackFailureGuard();
         if (!this._initCoordinator) {
             throw new Error('Orchestrator must be initialized before starting');
         }
@@ -723,36 +799,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             return this.getPlaybackInfoSnapshot();
         }
 
-        if (decision.isTranscoding && decision.transcodeRequest) {
-            const sessionId = decision.transcodeRequest.sessionId;
-            if (
-                decision.serverDecision &&
-                this._nowPlayingStreamDecisionFetchedForSessionId === sessionId
-            ) {
-                return this.getPlaybackInfoSnapshot();
-            }
-            try {
-                const req = decision.transcodeRequest;
-                const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                    sessionId: req.sessionId,
-                    maxBitrate: req.maxBitrate,
-                };
-                if (typeof req.audioStreamId === 'string') {
-                    opts.audioStreamId = req.audioStreamId;
-                }
-                const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
-                    program.item.ratingKey,
-                    opts
-                );
-                if (decision !== this._currentStreamDecision) {
-                    return this.getPlaybackInfoSnapshot();
-                }
-                decision.serverDecision = serverDecision;
-                this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-            } catch (error) {
-                console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
-            }
-        }
+        await this._nowPlayingDebugManager?.ensureServerDecisionForPlaybackInfoSnapshot();
 
         return this.getPlaybackInfoSnapshot();
     }
@@ -866,6 +913,14 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         const signal = options?.signal;
+        const buildStartMs = Date.now();
+        let libraryFetchMs = 0;
+        let playlistMs = 0;
+        let collectionsMs = 0;
+        let libraryQueryMs = 0;
+        let createChannelsMs = 0;
+        let applyChannelsMs = 0;
+        let refreshEpgMs = 0;
         const reportProgress = (
             task: ChannelBuildProgress['task'],
             label: string,
@@ -886,7 +941,9 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         reportProgress('fetch_playlists', 'Preparing...', 'Loading libraries', 0, null);
 
+        const librariesStart = Date.now();
         const libraries = await this.getLibrariesForSetup(signal ?? null);
+        libraryFetchMs += Date.now() - librariesStart;
         const selectedLibraries = libraries
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
@@ -925,7 +982,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (config.enabledStrategies.playlists) {
             reportProgress('fetch_playlists', 'Fetching playlists...', 'Scanning server', 0, null);
             try {
+                const playlistsStart = Date.now();
                 const playlists = await this._plexLibrary.getPlaylists({ signal: signal ?? null });
+                playlistMs += Date.now() - playlistsStart;
                 for (const pl of playlists) {
                     if (checkCanceled()) {
                         return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'fetch_playlists' };
@@ -963,7 +1022,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (config.enabledStrategies.collections) {
                 reportProgress('fetch_collections', 'Fetching collections...', library.title, libIndex, selectedLibraries.length);
                 try {
+                    const collectionsStart = Date.now();
                     const collections = await this._plexLibrary.getCollections(library.id, { signal: signal ?? null });
+                    collectionsMs += Date.now() - collectionsStart;
                     for (const collection of collections) {
                         if (collection.childCount >= minItems) {
                             pending.push({
@@ -995,7 +1056,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                         if (library.type === 'show') {
                             countOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
                         }
+                        const countStart = Date.now();
                         libraryCount = await this._plexLibrary.getLibraryItemCount(library.id, countOptions);
+                        libraryQueryMs += Date.now() - countStart;
                     } catch (e) {
                         console.warn(`Failed to fetch item count for ${library.title}:`, e);
                         errorsTotal++;
@@ -1050,7 +1113,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 limit: CHANNEL_SETUP_SCAN_LIMIT,
                                 filter: { type: PLEX_MEDIA_TYPES.SHOW },
                             };
+                            const tagStart = Date.now();
                             tagItems = await this._plexLibrary.getLibraryItems(library.id, tagOptions);
+                            libraryQueryMs += Date.now() - tagStart;
                         } else {
                             tagItems = [];
                         }
@@ -1061,12 +1126,16 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 limit: CHANNEL_SETUP_SCAN_LIMIT,
                                 filter: { type: PLEX_MEDIA_TYPES.EPISODE },
                             };
+                            const scanStart = Date.now();
                             scanItems = await this._plexLibrary.getLibraryItems(library.id, episodeOptions);
+                            libraryQueryMs += Date.now() - scanStart;
                         } else {
                             scanItems = [];
                         }
                     } else {
+                        const scanStart = Date.now();
                         tagItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
+                        libraryQueryMs += Date.now() - scanStart;
                         scanItems = tagItems;
                     }
 
@@ -1235,6 +1304,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         };
 
         try {
+            const createStart = Date.now();
             let pIndex = 0;
             for (const p of pending) {
                 pIndex++;
@@ -1272,6 +1342,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     finalSummary.errorCount++;
                 }
             }
+            createChannelsMs += Date.now() - createStart;
 
             if (checkCanceled()) {
                 finalSummary.canceled = true;
@@ -1280,16 +1351,31 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
 
             reportProgress('apply_channels', 'Saving...', 'Saving library', finalSummary.created, finalSummary.created);
+            const applyStart = Date.now();
             await this._channelManager.replaceAllChannels(builder.getAllChannels());
+            applyChannelsMs += Date.now() - applyStart;
 
             reportProgress('refresh_epg', 'Refreshing guide...', 'Loading schedules', 0, null);
-            this._primeEpgChannels();
-            await this._refreshEpgSchedules();
+            this._epgCoordinator?.primeEpgChannels();
+            const refreshStart = Date.now();
+            await this._epgCoordinator?.refreshEpgSchedules();
+            refreshEpgMs += Date.now() - refreshStart;
 
         } catch (e) {
             console.error('[Orchestrator] Channel build failed:', e);
             throw e;
         } finally {
+            const totalMs = Date.now() - buildStartMs;
+            console.warn('[ChannelSetup] Timing:', {
+                totalMs,
+                libraryFetchMs,
+                playlistMs,
+                collectionsMs,
+                libraryQueryMs,
+                createChannelsMs,
+                applyChannelsMs,
+                refreshEpgMs,
+            });
             safeLocalStorageRemove(tempKey);
             safeLocalStorageRemove(tempCurrentKey);
         }
@@ -1340,8 +1426,8 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         // New channel = new playback attempt; unblock any prior fast-fail guard.
-        this._resetPlaybackFailureGuard();
-        this._directFallbackAttemptedForItemKey.clear();
+        this._playbackRecovery?.resetPlaybackFailureGuard();
+        this._playbackRecovery?.resetDirectFallbackAttempts();
 
         // Prevent concurrent channel switches from causing state corruption
         if (this._isChannelSwitching) {
@@ -1445,67 +1531,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Open the EPG overlay.
      */
     openEPG(): void {
-        if (!this._epg) {
-            return;
-        }
-
-        // Prime data when EPG is already initialized.
-        if (this._moduleStatus.get('epg-ui')?.status === 'ready') {
-            this._primeEpgChannels();
-            void this._refreshEpgSchedules();
-        }
-
-        const show = (): void => {
-            const preserveFocus = this._lastChannelChangeSource === 'guide';
-            this._epg?.show({ preserveFocus });
-            if (!preserveFocus) {
-                this._focusEpgOnCurrentChannel();
-                this._epg?.focusNow();
-            }
-        };
-
-        // Allow EPG to be opened even before full app initialization completes
-        // (e.g., during auth/server-select flows in the simulator).
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            // Best-effort attempt immediately (helps in tests/mocks and if already initialized).
-            show();
-            if (this._initCoordinator) {
-                void this._initCoordinator.ensureEPGInitialized()
-                    .then(() => {
-                        this._primeEpgChannels();
-                        void this._refreshEpgSchedules();
-                        show();
-                    })
-                    .catch((error: unknown) => console.error('[Orchestrator] Failed to init EPG:', error));
-            }
-            return;
-        }
-
-        show();
-    }
-
-    private _focusEpgOnCurrentChannel(): void {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        const current = this._channelManager.getCurrentChannel();
-        if (!current) {
-            return;
-        }
-        const channels = this._channelManager.getAllChannels();
-        const index = channels.findIndex((channel) => channel.id === current.id);
-        if (index >= 0) {
-            this._epg.focusChannel(index);
-        }
+        this._epgCoordinator?.openEPG();
     }
 
     /**
      * Close the EPG overlay.
      */
     closeEPG(): void {
-        if (this._epg) {
-            this._epg.hide();
-        }
+        this._epgCoordinator?.closeEPG();
     }
 
     /**
@@ -1541,154 +1574,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Toggle EPG visibility.
      */
     toggleEPG(): void {
-        if (this._epg) {
-            if (this._epg.isVisible()) {
-                this.closeEPG();
-            } else {
-                this.openEPG();
-            }
-        }
-    }
-
-    private _primeEpgChannels(): void {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-        this._epg.loadChannels(this._channelManager.getAllChannels());
-    }
-
-    private _getEpgScheduleRangeMs(): { startTime: number; endTime: number } | null {
-        if (!this._config) {
-            return null;
-        }
-        const totalHours = this._config.epgConfig.totalHours;
-        const slotMinutes = this._config.epgConfig.timeSlotMinutes;
-        const slotMs = slotMinutes * 60_000;
-        const PAST_WINDOW_MINUTES = 30;
-        const now = Date.now();
-        const dayStart = this._getLocalMidnightMs(now);
-        const startTime = Math.max(
-            Math.floor((now - (PAST_WINDOW_MINUTES * 60_000)) / slotMs) * slotMs,
-            dayStart
-        );
-        const endTime = startTime + totalHours * 60 * 60 * 1000;
-
-        return { startTime, endTime };
-    }
-
-    private async _refreshEpgSchedules(): Promise<void> {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-
-        const range = this._getEpgScheduleRangeMs();
-        if (!range) {
-            return;
-        }
-
-        const { startTime, endTime } = range;
-        this._epg.setGridAnchorTime(startTime);
-        const channels = this._channelManager.getAllChannels();
-        if (channels.length === 0) {
-            return;
-        }
-
-        const loadToken = ++this._epgScheduleLoadToken;
-        const shuffler = new ShuffleGenerator();
-
-        // Safety limit to avoid long blocking loops on TV hardware.
-        const MAX_CHANNELS_TO_PRELOAD = 100;
-        const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
-        const liveChannelId = this._channelManager.getCurrentChannel()?.id ?? null;
-
-        for (const channel of channelsToLoad) {
-            if (loadToken !== this._epgScheduleLoadToken) {
-                return;
-            }
-            try {
-                // If the scheduler has been manually shifted (e.g., auto-skip on playback failures),
-                // the "daily schedule" will no longer match live playback for the active channel.
-                // Use the scheduler's own window for the currently playing channel.
-                if (liveChannelId && channel.id === liveChannelId && this._scheduler) {
-                    const state = this._scheduler.getState();
-                    if (state.isActive && state.channelId === channel.id) {
-                        const window = this._scheduler.getScheduleWindow(startTime, endTime);
-                        this._epg.loadScheduleForChannel(channel.id, {
-                            ...window,
-                            programs: [...window.programs],
-                        });
-                        continue;
-                    }
-                }
-
-                const resolved = await this._channelManager.resolveChannelContent(channel.id);
-
-                const scheduleConfig = this._buildDailyScheduleConfig(channel, resolved.items, startTime);
-
-                const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
-                const programs = ScheduleCalculator.generateScheduleWindow(
-                    startTime,
-                    endTime,
-                    index,
-                    scheduleConfig.anchorTime
-                );
-
-                this._epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
-            } catch (error) {
-                console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
-            }
-        }
-
-        if (
-            loadToken === this._epgScheduleLoadToken &&
-            this._epg.isVisible() &&
-            !this._epg.getFocusedProgram()
-        ) {
-            this._epg.focusNow();
-        }
-    }
-
-    private _refreshEpgScheduleForLiveChannel(): void {
-        if (!this._epg || !this._channelManager || !this._scheduler) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-        if (!this._epg.isVisible()) {
-            return;
-        }
-
-        const range = this._getEpgScheduleRangeMs();
-        if (!range) {
-            return;
-        }
-
-        const current = this._channelManager.getCurrentChannel();
-        if (!current) {
-            return;
-        }
-
-        const state = this._scheduler.getState();
-        if (!state.isActive || state.channelId !== current.id) {
-            return;
-        }
-
-        try {
-            const window = this._scheduler.getScheduleWindow(range.startTime, range.endTime);
-            this._epg.loadScheduleForChannel(current.id, {
-                ...window,
-                programs: [...window.programs],
-            });
-        } catch (error) {
-            console.warn('[Orchestrator] Failed to refresh live EPG schedule:', error);
-        }
+        this._epgCoordinator?.toggleEPG();
     }
 
     /**
@@ -2263,7 +2149,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._scheduler.loadChannel(this._buildDailyScheduleConfig(current, content.items, now));
         this._scheduler.syncToCurrentTime();
 
-        await this._refreshEpgSchedules();
+        await this._epgCoordinator?.refreshEpgSchedules();
         this._activeScheduleDayKey = dayKey;
         this._pendingDayRolloverDayKey = null;
     }
@@ -2285,6 +2171,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         this._wireSchedulerEvents();
         this._wirePlayerEvents();
+        this._wirePlexEvents();
         this._wireNavigationEvents();
         this._wireEpgEvents();
         this._wireLifecycleEvents();
@@ -2358,19 +2245,19 @@ export class AppOrchestrator implements IAppOrchestrator {
                 if (error.code === 'PLAYBACK_FORMAT_UNSUPPORTED') {
                     void (async (): Promise<void> => {
                         try {
-                            const ok = await this._attemptTranscodeFallbackForCurrentProgram(
+                            const ok = await this._playbackRecovery?.attemptTranscodeFallbackForCurrentProgram(
                                 'PLAYBACK_FORMAT_UNSUPPORTED'
                             );
                             if (!ok) {
-                                this._handlePlaybackFailure('video-player', error);
+                                this._playbackRecovery?.handlePlaybackFailure('video-player', error);
                             }
                         } catch (fallbackError) {
-                            this._handlePlaybackFailure('video-player', fallbackError);
+                            this._playbackRecovery?.handlePlaybackFailure('video-player', fallbackError);
                         }
                     })();
                     return;
                 }
-                this._handlePlaybackFailure('video-player', error);
+                this._playbackRecovery?.handlePlaybackFailure('video-player', error);
             }
         };
         this._videoPlayer.on('error', errorHandler);
@@ -2381,67 +2268,50 @@ export class AppOrchestrator implements IAppOrchestrator {
         });
     }
 
-    private _resetPlaybackFailureGuard(): void {
-        this._playbackFailureWindowStartMs = 0;
-        this._playbackFailureCount = 0;
-        this._playbackFailureTripped = false;
-        if (this._scheduler) {
-            this._scheduler.resumeSyncTimer();
-        }
-    }
-
-    private _handlePlaybackFailure(context: string, error: unknown): void {
-        if (this._playbackFailureTripped) {
-            return;
-        }
-
-        const now = Date.now();
-
-        // Reset window if stale
-        if (
-            this._playbackFailureWindowStartMs === 0 ||
-            now - this._playbackFailureWindowStartMs > this._playbackFailureWindowMs
-        ) {
-            this._playbackFailureWindowStartMs = now;
-            this._playbackFailureCount = 0;
-        }
-
-        this._playbackFailureCount++;
-
-        // Trip guard: stop auto-skipping and surface the error to the user
-        if (this._playbackFailureCount >= this._playbackFailureTripCount) {
-            this._playbackFailureTripped = true;
-            if (this._scheduler) {
-                this._scheduler.pauseSyncTimer();
-            }
-            const message = ((): string => {
-                if (error instanceof Error) {
-                    return error.message;
+    private _wirePlexEvents(): void {
+        if (this._plexLibrary) {
+            const authExpiredHandler = (): void => {
+                this.handleGlobalError(
+                    {
+                        code: AppErrorCode.AUTH_EXPIRED,
+                        message: 'Authentication expired',
+                        recoverable: true,
+                    },
+                    'plex-library'
+                );
+            };
+            this._plexLibrary.on('authExpired', authExpiredHandler);
+            this._eventUnsubscribers.push(() => {
+                if (this._plexLibrary && typeof this._plexLibrary.off === 'function') {
+                    this._plexLibrary.off('authExpired', authExpiredHandler);
                 }
+            });
+        }
+
+        if (this._plexStreamResolver) {
+            const errorHandler = (error: StreamResolverError): void => {
+                const mapped = mapPlexStreamErrorCodeToAppErrorCode(error.code);
                 if (
-                    error &&
-                    typeof error === 'object' &&
-                    'message' in error &&
-                    typeof (error as { message?: unknown }).message === 'string'
+                    mapped === AppErrorCode.AUTH_REQUIRED ||
+                    mapped === AppErrorCode.AUTH_EXPIRED ||
+                    mapped === AppErrorCode.AUTH_INVALID
                 ) {
-                    return (error as { message: string }).message;
+                    this.handleGlobalError(
+                        {
+                            code: mapped,
+                            message: error.message,
+                            recoverable: error.recoverable,
+                        },
+                        'plex-stream'
+                    );
                 }
-                return String(error);
-            })();
-            this.handleGlobalError(
-                {
-                    code: AppErrorCode.PLAYBACK_FAILED,
-                    message: `Playback failed repeatedly (${context}): ${message}`,
-                    recoverable: true,
-                },
-                'playback'
-            );
-            return;
-        }
-
-        // Single/rare failure: skip as before
-        if (this._scheduler) {
-            this._scheduler.skipToNext();
+            };
+            this._plexStreamResolver.on('error', errorHandler);
+            this._eventUnsubscribers.push(() => {
+                if (this._plexStreamResolver && typeof this._plexStreamResolver.off === 'function') {
+                    this._plexStreamResolver.off('error', errorHandler);
+                }
+            });
         }
     }
 
@@ -2449,175 +2319,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Wire navigation key events and screen changes.
      */
     private _wireNavigationEvents(): void {
-        if (!this._navigation) return;
-
-        // Key press handler
-        const keyHandler = (event: KeyEvent): void => {
-            this._handleKeyPress(event);
-        };
-        this._navigation.on('keyPress', keyHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('keyPress', keyHandler);
-            }
-        });
-
-        // Channel number entry handler
-        const channelNumberHandler = (payload: { channelNumber: number }): void => {
-            if (!Number.isFinite(payload.channelNumber)) {
-                return;
-            }
-            this._lastChannelChangeSource = 'number';
-            this.switchToChannelByNumber(payload.channelNumber).catch(console.error);
-        };
-        this._navigation.on('channelNumberEntered', channelNumberHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('channelNumberEntered', channelNumberHandler);
-            }
-        });
-
-        // Guide/EPG Toggle Handler
-        const guideHandler = (): void => {
-            // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
-            this.toggleEPG();
-        };
-        this._navigation.on('guide', guideHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('guide', guideHandler);
-            }
-        });
-
-        // Settings Toggle Handler
-        const settingsHandler = (): void => {
-            const currentScreen = this._navigation?.getCurrentScreen();
-            if (currentScreen === 'player' || currentScreen === 'guide') {
-                this._navigation?.goTo('settings');
-            }
-        };
-        this._navigation.on('settings', settingsHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('settings', settingsHandler);
-            }
-        });
-
-        // Screen change handler - show/hide screens
-        const screenHandler = (payload: { from: string; to: string }): void => {
-            this._handleScreenChange(payload.from, payload.to);
-        };
-        this._navigation.on('screenChange', screenHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('screenChange', screenHandler);
-            }
-        });
-
-        // Modal open/close handler (Now Playing Info overlay)
-        const modalOpenHandler = (payload: { modalId: string }): void => {
-            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
-                this._showNowPlayingInfoOverlay();
-            }
-        };
-        const modalCloseHandler = (payload: { modalId: string }): void => {
-            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
-                this._hideNowPlayingInfoOverlay();
-            }
-        };
-        this._navigation.on('modalOpen', modalOpenHandler);
-        this._navigation.on('modalClose', modalCloseHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('modalOpen', modalOpenHandler);
-                this._navigation.off('modalClose', modalCloseHandler);
-            }
-        });
-    }
-
-    /**
-     * Handle screen transitions.
-     * @param from - Previous screen
-     * @param to - New screen
-     */
-    private _handleScreenChange(from: string, to: string): void {
-        if (to === 'player' && this._shouldRunChannelSetup()) {
-            if (this._navigation) {
-                this._navigation.replaceScreen('channel-setup');
-            }
-            return;
-        }
-
-        // Hide EPG when leaving guide
-        if (from === 'guide' && to !== 'guide') {
-            if (this._epg) {
-                this._epg.hide();
-            }
-        }
-
-        // Close Now Playing Info overlay when leaving player
-        if (from === 'player' && to !== 'player') {
-            if (this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-                this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-            }
-        }
-
-        // Show EPG when entering guide
-        if (to === 'guide') {
-            if (this._epg) {
-                const preserveFocus = this._lastChannelChangeSource === 'guide';
-                this._epg.show({ preserveFocus });
-                if (!preserveFocus) {
-                    this._focusEpgOnCurrentChannel();
-                    this._epg.focusNow();
-                }
-            }
-        }
-
-        // Pause playback when leaving player for settings/channel-edit
-        if (from === 'player' && (to === 'settings' || to === 'channel-edit')) {
-            if (this._videoPlayer) {
-                this._videoPlayer.pause();
-            }
-        }
-
-        // Resume playback when returning to player
-        if (to === 'player' && from !== 'player') {
-            if (this._videoPlayer) {
-                this._videoPlayer.play().catch(console.error);
-            }
-        }
+        this._eventUnsubscribers.push(...(this._navigationCoordinator?.wireNavigationEvents() ?? []));
     }
 
     /**
      * Wire EPG channel selection events.
      */
     private _wireEpgEvents(): void {
-        if (!this._epg) return;
-
-        const handler = (payload: { channel: ChannelConfig; program: ScheduledProgram }): void => {
-            this._lastChannelChangeSource = 'guide';
-            const now = Date.now();
-            if (
-                payload.program.scheduleIndex === -1 ||
-                payload.program.item.ratingKey.includes('-placeholder-')
-            ) {
-                // Placeholder program (e.g., "Loading..." / "No Program"): never trigger playback.
-                return;
-            }
-            if (now < payload.program.scheduledStartTime) {
-                // Future program: keep guide open; info panel already shows details on focus.
-                return;
-            }
-            this.closeEPG();
-            this.switchToChannel(payload.channel.id).catch(console.error);
-        };
-        this._epg.on('channelSelected', handler);
-        this._eventUnsubscribers.push(() => {
-            if (this._epg) {
-                this._epg.off('channelSelected', handler);
-            }
-        });
+        this._eventUnsubscribers.push(...(this._epgCoordinator?.wireEpgEvents() ?? []));
     }
 
     /**
@@ -2660,25 +2369,35 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         this._currentProgramForPlayback = program;
+        const programAtStart = program;
         this._notifyNowPlaying(program);
         this._updateNowPlayingInfoForProgram(program);
-        this._refreshEpgScheduleForLiveChannel();
+        this._epgCoordinator?.refreshEpgScheduleForLiveChannel();
 
         try {
-            const stream = await this._resolveStreamForProgram(program);
+            const stream = await this._playbackRecovery?.resolveStreamForProgram(programAtStart);
+            if (this._currentProgramForPlayback !== programAtStart) {
+                return;
+            }
+            if (!stream) {
+                return;
+            }
             this._currentStreamDescriptor = stream;
 
             // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
             // and fetch PMS transcode decision in the background to explain why video/audio transcodes.
-            this._maybeAutoShowNowPlayingStreamDebugHud();
-            void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+            this._nowPlayingDebugManager?.maybeAutoShowNowPlayingStreamDebugHud();
+            void this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud();
 
             await this._videoPlayer.loadStream(stream);
             await this._videoPlayer.play();
-            this._resetPlaybackFailureGuard();
+            this._playbackRecovery?.resetPlaybackFailureGuard();
         } catch (error) {
+            if (this._playbackRecovery?.tryHandleStreamResolverAuthError(error)) {
+                return;
+            }
             console.error('Failed to load stream:', error);
-            this._handlePlaybackFailure('programStart', error);
+            this._playbackRecovery?.handlePlaybackFailure('programStart', error);
         }
     }
 
@@ -2759,7 +2478,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._nowPlayingInfo.show(viewModel);
         this._startNowPlayingInfoLiveUpdates();
         void this._fetchNowPlayingInfoDetails(program, channel);
-        void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+        void this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud();
     }
 
     private _hideNowPlayingInfoOverlay(): void {
@@ -2792,6 +2511,23 @@ export class AppOrchestrator implements IAppOrchestrator {
                 // Best-effort; never throw from a UI refresh timer.
             }
         }, 1000);
+    }
+
+    private _refreshNowPlayingInfoOverlayIfOpen(): void {
+        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+            return;
+        }
+        try {
+            const freshProgram =
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
+            const channel = this._channelManager?.getCurrentChannel() ?? null;
+            if (freshProgram) {
+                const viewModel = this._buildNowPlayingInfoViewModel(freshProgram, channel, null);
+                this._nowPlayingInfo.update(viewModel);
+            }
+        } catch {
+            // ignore
+        }
     }
 
     private _stopNowPlayingInfoLiveUpdates(): void {
@@ -2893,9 +2629,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         }
 
-        const debugText = this._isNowPlayingStreamDebugEnabled()
-            ? this._buildNowPlayingStreamDebugText()
-            : null;
+        const debugText = this._nowPlayingDebugManager?.buildNowPlayingStreamDebugText() ?? null;
 
         const baseViewModel: NowPlayingInfoViewModel = {
             title,
@@ -2968,281 +2702,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
     }
 
-    private _isNowPlayingStreamDebugEnabled(): boolean {
-        try {
-            return isStoredTrue(
-                safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG)
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    private _isNowPlayingStreamDebugAutoShowEnabled(): boolean {
-        try {
-            return (
-                this._isNowPlayingStreamDebugEnabled() &&
-                isStoredTrue(
-                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW)
-                )
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
-        if (!this._navigation || !this._nowPlayingInfo) return;
-        if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
-
-        const currentScreen = this._navigation.getCurrentScreen();
-        if (currentScreen !== 'player') return;
-
-        // Avoid stacking over other modals.
-        if (this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) return;
-        if (this._navigation.isModalOpen()) return;
-
-        this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
-    }
-
-    private _formatKbps(kbps: number): string {
-        if (!Number.isFinite(kbps)) return 'unknown';
-        if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
-        return `${kbps} kbps`;
-    }
-
-    private _buildNowPlayingStreamDebugText(): string | null {
-        if (!this._isNowPlayingStreamDebugEnabled()) return null;
-        const decision = this._currentStreamDecision;
-        if (!decision) return null;
-
-        const lines: string[] = [];
-        lines.push(decision.isDirectPlay ? 'DIRECT PLAY' : 'HLS REQUESTED (Plex decides copy vs transcode)');
-
-        const w = typeof decision.width === 'number' ? decision.width : 0;
-        const h = typeof decision.height === 'number' ? decision.height : 0;
-        lines.push(
-            `Target: ${decision.container} v=${decision.videoCodec} a=${decision.audioCodec} ${w}x${h} ${this._formatKbps(
-                decision.bitrate
-            )}`
-        );
-
-        if (decision.serverDecision) {
-            const sd = decision.serverDecision;
-            const parts = [
-                sd.videoDecision ? `v=${sd.videoDecision}` : null,
-                sd.audioDecision ? `a=${sd.audioDecision}` : null,
-                sd.subtitleDecision ? `sub=${sd.subtitleDecision}` : null,
-            ].filter(Boolean);
-            if (parts.length > 0) lines.push(`PMS: ${parts.join(' ')}`);
-            if (sd.decisionText) lines.push(`PMS: ${sd.decisionText}`);
-        } else if (decision.isTranscoding) {
-            lines.push('PMS: (decision pending)');
-        }
-
-        if (decision.directPlay?.reasons?.length) {
-            lines.push(`Blocked: ${decision.directPlay.reasons.join(', ')}`);
-        }
-        if (decision.audioFallback) {
-            lines.push(
-                `Fallback: ${decision.audioFallback.fromCodec} -> ${decision.audioFallback.toCodec}`
-            );
-        }
-        if (decision.source) {
-            lines.push(
-                `Src: ${decision.source.container} v=${decision.source.videoCodec} a=${decision.source.audioCodec}`
-            );
-        }
-
-        // Keep short for TVs (CSS also clamps, but avoid generating huge strings).
-        return lines.slice(0, 6).join('\n');
-    }
-
-    private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
-        if (!this._isNowPlayingStreamDebugEnabled()) return;
-        if (!this._plexStreamResolver) return;
-
-        const program = this._currentProgramForPlayback;
-        const decision = this._currentStreamDecision;
-        if (!program || !decision || !decision.isTranscoding || !decision.transcodeRequest) {
-            return;
-        }
-
-        const sessionId = decision.transcodeRequest.sessionId;
-        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
-            return;
-        }
-
-        const token = ++this._nowPlayingStreamDecisionFetchToken;
-        try {
-            const req = decision.transcodeRequest;
-            const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                sessionId: req.sessionId,
-                maxBitrate: req.maxBitrate,
-            };
-            if (typeof req.audioStreamId === 'string') {
-                opts.audioStreamId = req.audioStreamId;
-            }
-
-            const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
-                program.item.ratingKey,
-                opts
-            );
-            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
-            if (this._currentStreamDecision !== decision) return;
-
-            decision.serverDecision = serverDecision;
-            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-
-            if (this._nowPlayingInfo && this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-                try {
-                    const freshProgram =
-                        this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
-                    const channel = this._channelManager?.getCurrentChannel() ?? null;
-                    if (freshProgram) {
-                        const viewModel = this._buildNowPlayingInfoViewModel(
-                            freshProgram,
-                            channel,
-                            null
-                        );
-                        this._nowPlayingInfo.update(viewModel);
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-        } catch {
-            // Debug-only; ignore failures.
-        }
-    }
-
-    private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
-        if (this._streamRecoveryInProgress) {
-            return false;
-        }
-        const program = this._currentProgramForPlayback;
-        if (!program || !this._videoPlayer || !this._plexStreamResolver) {
-            return false;
-        }
-        const currentProtocol = this._currentStreamDescriptor?.protocol ?? null;
-        if (currentProtocol !== 'direct') {
-            return false;
-        }
-        const itemKey = program.item.ratingKey;
-        if (this._directFallbackAttemptedForItemKey.has(itemKey)) {
-            return false;
-        }
-
-        this._directFallbackAttemptedForItemKey.add(itemKey);
-        this._streamRecoveryInProgress = true;
-
-        try {
-            console.warn('[Orchestrator] Direct playback failed, retrying via HLS Direct Stream:', {
-                reason,
-                itemKey,
-            });
-
-            const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
-            const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
-                itemKey: itemKey,
-                startOffsetMs: clampedOffset,
-                directPlay: false,
-            });
-            this._currentStreamDecision = decision;
-
-            const metadata: StreamDescriptor['mediaMetadata'] = {
-                title: program.item.title,
-                durationMs: program.item.durationMs,
-            };
-            if (program.item.type === 'episode' && program.item.fullTitle) {
-                metadata.subtitle = program.item.fullTitle;
-            }
-            if (program.item.thumb) {
-                const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
-                if (thumbUrl) {
-                    metadata.thumb = thumbUrl;
-                }
-            }
-            if (program.item.year !== undefined) {
-                metadata.year = program.item.year;
-            }
-
-            const descriptor: StreamDescriptor = {
-                url: decision.playbackUrl,
-                protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-                mimeType: this._getMimeType(decision),
-                startPositionMs: clampedOffset,
-                mediaMetadata: metadata,
-                subtitleTracks: [],
-                audioTracks: [],
-                durationMs: program.item.durationMs,
-                isLive: false,
-            };
-
-            this._currentStreamDescriptor = descriptor;
-            await this._videoPlayer.loadStream(descriptor);
-            await this._videoPlayer.play();
-            this._resetPlaybackFailureGuard();
-            return true;
-        } catch (error) {
-            console.error('[Orchestrator] Transcode fallback failed:', error);
-            return false;
-        } finally {
-            this._streamRecoveryInProgress = false;
-        }
-    }
-
-    /**
-     * Resolve stream URL for a scheduled program.
-     */
-    private async _resolveStreamForProgram(
-        program: ScheduledProgram
-    ): Promise<StreamDescriptor> {
-        if (!this._plexStreamResolver) {
-            throw new Error('Stream resolver not initialized');
-        }
-
-        // Defensive: clamp elapsed time to valid bounds
-        const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
-
-        const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
-            itemKey: program.item.ratingKey,
-            startOffsetMs: clampedOffset,
-            directPlay: true,
-        });
-        this._currentStreamDecision = decision;
-
-        // Build mediaMetadata carefully for exactOptionalPropertyTypes
-        const metadata: StreamDescriptor['mediaMetadata'] = {
-            title: program.item.title,
-            durationMs: program.item.durationMs,
-        };
-        if (program.item.type === 'episode' && program.item.fullTitle) {
-            metadata.subtitle = program.item.fullTitle;
-        }
-        if (program.item.thumb) {
-            const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
-            if (thumbUrl) {
-                metadata.thumb = thumbUrl;
-            }
-        }
-        if (program.item.year !== undefined) {
-            metadata.year = program.item.year;
-        }
-
-        return {
-            url: decision.playbackUrl,
-            protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-            mimeType: this._getMimeType(decision),
-            startPositionMs: clampedOffset,
-            mediaMetadata: metadata,
-            subtitleTracks: [],
-            audioTracks: [],
-            durationMs: program.item.durationMs,
-            isLive: false,
-        };
-    }
-
     private _buildPlexResourceUrl(pathOrUrl: string): string | null {
         try {
             // If already absolute http(s), return as-is.
@@ -3283,95 +2742,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
         // Fallback
         return 'video/mp4';
-    }
-
-    /**
-     * Handle key press from navigation.
-     */
-    private _handleKeyPress(event: KeyEvent): void {
-        const isNowPlayingModalOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
-        if (isNowPlayingModalOpen) {
-            this._nowPlayingInfo?.resetAutoHideTimer();
-        }
-        if (isNowPlayingModalOpen && event.button === 'back') {
-            return;
-        }
-
-        if (this._epg?.isVisible()) {
-            switch (event.button) {
-                case 'up':
-                case 'down':
-                case 'left':
-                case 'right':
-                    if (this._epg.handleNavigation(event.button)) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                case 'ok':
-                    if (this._epg.handleSelect()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                case 'back':
-                    if (this._epg.handleBack()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        switch (event.button) {
-            case 'red':
-                if (event.isRepeat) {
-                    break;
-                }
-                this._toggleNowPlayingInfoOverlay();
-                break;
-            case 'channelUp':
-                this._lastChannelChangeSource = 'remote';
-                // Treat channel-up as decrement (reverse wrap) to match user expectation.
-                this._switchToPreviousChannel();
-                break;
-            case 'channelDown':
-                this._lastChannelChangeSource = 'remote';
-                // Treat channel-down as increment (forward wrap) to match user expectation.
-                this._switchToNextChannel();
-                break;
-            case 'info':
-            case 'blue':
-                if (this._navigation) {
-                    if (this._plexAuth && !this._plexAuth.isAuthenticated()) {
-                        this._navigation.goTo('auth');
-                    } else {
-                        this._navigation.goTo('server-select');
-                    }
-                }
-                break;
-            case 'play':
-                if (this._videoPlayer) {
-                    this._videoPlayer.play().catch(console.error);
-                }
-                break;
-            case 'pause':
-                if (this._videoPlayer) {
-                    this._videoPlayer.pause();
-                }
-                break;
-            case 'stop':
-                if (this._videoPlayer) {
-                    this._videoPlayer.stop();
-                }
-                break;
-            // Other keys handled by active screen
-        }
     }
 
     /**

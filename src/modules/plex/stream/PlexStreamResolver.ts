@@ -473,11 +473,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             const timelineUrl = new URL('/:/timeline', baseUri);
             timelineUrl.search = params.toString();
 
-            await this._fetchWithTimeout(
+            const response = await this._fetchWithTimeout(
                 timelineUrl.toString(),
                 { method: 'POST', headers: this._config.getAuthHeaders() },
                 PROGRESS_TIMEOUT_MS
             );
+            this._throwIfAuthFailure(response);
 
             // Update local session tracking
             if (session) {
@@ -518,20 +519,22 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             try {
                 const timelineUrl = new URL('/:/timeline', baseUri);
                 timelineUrl.search = params.toString();
-                await this._fetchWithTimeout(
+                const response = await this._fetchWithTimeout(
                     timelineUrl.toString(),
                     { method: 'POST', headers: this._config.getAuthHeaders() },
                     2000
                 );
+                this._throwIfAuthFailure(response);
 
                 // If transcoding, stop the transcode session per spec: DELETE /transcode/sessions/{key}
                 if (session && session.isTranscoding) {
                     const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(sessionId)}`, baseUri);
-                    await this._fetchWithTimeout(
+                    const stopResponse = await this._fetchWithTimeout(
                         stopUrl.toString(),
                         { method: 'DELETE', headers: this._config.getAuthHeaders() },
                         5000
                     );
+                    this._throwIfAuthFailure(stopResponse);
                 }
             } catch (error) {
                 console.warn('Error ending session:', error);
@@ -988,6 +991,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 profileName: debugUrl.searchParams.get('X-Plex-Client-Profile-Name'),
                 profileVersion: debugUrl.searchParams.get('X-Plex-Client-Profile-Version'),
                 preset: preset,
+                detectedPlatformVersion: this._detectPlatformVersion(),
+                chromeMajor: this._getChromeMajor(),
+                overrides: {
+                    platform: overridePlatform,
+                    platformVersion: overridePlatformVersion,
+                    device: overrideDevice,
+                    deviceName: overrideDeviceName,
+                    model: overrideModel,
+                    product: overrideProduct,
+                    version: overrideVersion,
+                    profileName: forcedProfileName,
+                    profileVersion: forcedProfileVersion,
+                },
             };
             console.warn(
                 `[PlexStreamResolver] Transcode URL (compat=${compatMode ? '1' : '0'}):`,
@@ -1025,6 +1041,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             { method: 'GET', headers: this._config.getAuthHeaders() },
             4000
         );
+        this._throwIfAuthFailure(response);
         if (!response.ok) {
             throw new Error(`PMS decision request failed: ${response.status}`);
         }
@@ -1115,6 +1132,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         // Type assertion to handler union - EventEmitter accepts this via index signature
         type HandlerUnion = (payload: StreamResolverEventMap[keyof StreamResolverEventMap]) => void;
         this._emitter.on(event, handler as HandlerUnion);
+    }
+
+    /**
+     * Remove event handler.
+     * @param event - Event name
+     * @param handler - Handler function
+     */
+    off<K extends keyof StreamResolverEventMap>(
+        event: K,
+        handler: (payload: StreamResolverEventMap[K]) => void
+    ): void {
+        type HandlerUnion = (payload: StreamResolverEventMap[keyof StreamResolverEventMap]) => void;
+        this._emitter.off(event, handler as HandlerUnion);
     }
 
     // ========================================
@@ -1237,6 +1267,23 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             return await fetch(url, { ...options, signal: controller.signal });
         } finally {
             clearTimeout(timeoutId);
+        }
+    }
+
+    private _throwIfAuthFailure(response: Response): void {
+        if (response.status === 401) {
+            throw this._createError(
+                PlexStreamErrorCode.AUTH_EXPIRED,
+                'Authentication expired',
+                false
+            );
+        }
+        if (response.status === 403) {
+            throw this._createError(
+                PlexStreamErrorCode.AUTH_INVALID,
+                'Authentication invalid',
+                false
+            );
         }
     }
 
