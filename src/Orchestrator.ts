@@ -103,9 +103,10 @@ import {
     InitializationCoordinator,
     type IInitializationCoordinator,
 } from './core';
+import { NowPlayingDebugManager } from './modules/debug/NowPlayingDebugManager';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
-import { isStoredTrue, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 
 // ============================================
@@ -314,8 +315,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
     private _nowPlayingInfoFetchToken = 0;
     private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
-    private _nowPlayingStreamDecisionFetchToken = 0;
-    private _nowPlayingStreamDecisionFetchedForSessionId: string | null = null;
+    private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
@@ -469,6 +469,17 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Now Playing Info overlay - no constructor args, initialize later
         this._nowPlayingInfo = new NowPlayingInfoOverlay();
+
+        this._nowPlayingDebugManager = new NowPlayingDebugManager({
+            nowPlayingModalId: NOW_PLAYING_INFO_MODAL_ID,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
+            getCurrentProgram: (): ScheduledProgram | null =>
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
+            getCurrentStreamDecision: (): StreamDecision | null => this._currentStreamDecision,
+            requestNowPlayingOverlayRefresh: (): void =>
+                this._refreshNowPlayingInfoOverlayIfOpen(),
+        });
 
         // Create InitializationCoordinator with dependencies and callbacks
         this._initCoordinator = new InitializationCoordinator(
@@ -727,36 +738,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             return this.getPlaybackInfoSnapshot();
         }
 
-        if (decision.isTranscoding && decision.transcodeRequest) {
-            const sessionId = decision.transcodeRequest.sessionId;
-            if (
-                decision.serverDecision &&
-                this._nowPlayingStreamDecisionFetchedForSessionId === sessionId
-            ) {
-                return this.getPlaybackInfoSnapshot();
-            }
-            try {
-                const req = decision.transcodeRequest;
-                const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                    sessionId: req.sessionId,
-                    maxBitrate: req.maxBitrate,
-                };
-                if (typeof req.audioStreamId === 'string') {
-                    opts.audioStreamId = req.audioStreamId;
-                }
-                const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
-                    program.item.ratingKey,
-                    opts
-                );
-                if (decision !== this._currentStreamDecision) {
-                    return this.getPlaybackInfoSnapshot();
-                }
-                decision.serverDecision = serverDecision;
-                this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-            } catch (error) {
-                console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
-            }
-        }
+        await this._nowPlayingDebugManager?.ensureServerDecisionForPlaybackInfoSnapshot();
 
         return this.getPlaybackInfoSnapshot();
     }
@@ -2792,8 +2774,8 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
             // and fetch PMS transcode decision in the background to explain why video/audio transcodes.
-            this._maybeAutoShowNowPlayingStreamDebugHud();
-            void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+            this._nowPlayingDebugManager?.maybeAutoShowNowPlayingStreamDebugHud();
+            void this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud();
 
             await this._videoPlayer.loadStream(stream);
             await this._videoPlayer.play();
@@ -2884,7 +2866,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._nowPlayingInfo.show(viewModel);
         this._startNowPlayingInfoLiveUpdates();
         void this._fetchNowPlayingInfoDetails(program, channel);
-        void this._maybeFetchNowPlayingStreamDecisionForDebugHud();
+        void this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud();
     }
 
     private _hideNowPlayingInfoOverlay(): void {
@@ -2917,6 +2899,23 @@ export class AppOrchestrator implements IAppOrchestrator {
                 // Best-effort; never throw from a UI refresh timer.
             }
         }, 1000);
+    }
+
+    private _refreshNowPlayingInfoOverlayIfOpen(): void {
+        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
+            return;
+        }
+        try {
+            const freshProgram =
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
+            const channel = this._channelManager?.getCurrentChannel() ?? null;
+            if (freshProgram) {
+                const viewModel = this._buildNowPlayingInfoViewModel(freshProgram, channel, null);
+                this._nowPlayingInfo.update(viewModel);
+            }
+        } catch {
+            // ignore
+        }
     }
 
     private _stopNowPlayingInfoLiveUpdates(): void {
@@ -3018,9 +3017,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         }
 
-        const debugText = this._isNowPlayingStreamDebugEnabled()
-            ? this._buildNowPlayingStreamDebugText()
-            : null;
+        const debugText = this._nowPlayingDebugManager?.buildNowPlayingStreamDebugText() ?? null;
 
         const baseViewModel: NowPlayingInfoViewModel = {
             title,
@@ -3091,154 +3088,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         }
         return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
-    }
-
-    private _isNowPlayingStreamDebugEnabled(): boolean {
-        try {
-            return isStoredTrue(
-                safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG)
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    private _isNowPlayingStreamDebugAutoShowEnabled(): boolean {
-        try {
-            return (
-                this._isNowPlayingStreamDebugEnabled() &&
-                isStoredTrue(
-                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW)
-                )
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    private _maybeAutoShowNowPlayingStreamDebugHud(): void {
-        if (!this._navigation || !this._nowPlayingInfo) return;
-        if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
-
-        const currentScreen = this._navigation.getCurrentScreen();
-        if (currentScreen !== 'player') return;
-
-        // Avoid stacking over other modals.
-        if (this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) return;
-        if (this._navigation.isModalOpen()) return;
-
-        this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
-    }
-
-    private _formatKbps(kbps: number): string {
-        if (!Number.isFinite(kbps)) return 'unknown';
-        if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
-        return `${kbps} kbps`;
-    }
-
-    private _buildNowPlayingStreamDebugText(): string | null {
-        if (!this._isNowPlayingStreamDebugEnabled()) return null;
-        const decision = this._currentStreamDecision;
-        if (!decision) return null;
-
-        const lines: string[] = [];
-        lines.push(decision.isDirectPlay ? 'DIRECT PLAY' : 'HLS REQUESTED (Plex decides copy vs transcode)');
-
-        const w = typeof decision.width === 'number' ? decision.width : 0;
-        const h = typeof decision.height === 'number' ? decision.height : 0;
-        lines.push(
-            `Target: ${decision.container} v=${decision.videoCodec} a=${decision.audioCodec} ${w}x${h} ${this._formatKbps(
-                decision.bitrate
-            )}`
-        );
-
-        if (decision.serverDecision) {
-            const sd = decision.serverDecision;
-            const parts = [
-                sd.videoDecision ? `v=${sd.videoDecision}` : null,
-                sd.audioDecision ? `a=${sd.audioDecision}` : null,
-                sd.subtitleDecision ? `sub=${sd.subtitleDecision}` : null,
-            ].filter(Boolean);
-            if (parts.length > 0) lines.push(`PMS: ${parts.join(' ')}`);
-            if (sd.decisionText) lines.push(`PMS: ${sd.decisionText}`);
-        } else if (decision.isTranscoding) {
-            lines.push('PMS: (decision pending)');
-        }
-
-        if (decision.directPlay?.reasons?.length) {
-            lines.push(`Blocked: ${decision.directPlay.reasons.join(', ')}`);
-        }
-        if (decision.audioFallback) {
-            lines.push(
-                `Fallback: ${decision.audioFallback.fromCodec} -> ${decision.audioFallback.toCodec}`
-            );
-        }
-        if (decision.source) {
-            lines.push(
-                `Src: ${decision.source.container} v=${decision.source.videoCodec} a=${decision.source.audioCodec}`
-            );
-        }
-
-        // Keep short for TVs (CSS also clamps, but avoid generating huge strings).
-        return lines.slice(0, 6).join('\n');
-    }
-
-    private async _maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
-        if (!this._isNowPlayingStreamDebugEnabled()) return;
-        if (!this._plexStreamResolver) return;
-
-        const program = this._currentProgramForPlayback;
-        const decision = this._currentStreamDecision;
-        if (!program || !decision || !decision.isTranscoding || !decision.transcodeRequest) {
-            return;
-        }
-
-        const sessionId = decision.transcodeRequest.sessionId;
-        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
-            return;
-        }
-
-        const token = ++this._nowPlayingStreamDecisionFetchToken;
-        try {
-            const req = decision.transcodeRequest;
-            const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                sessionId: req.sessionId,
-                maxBitrate: req.maxBitrate,
-            };
-            if (typeof req.audioStreamId === 'string') {
-                opts.audioStreamId = req.audioStreamId;
-            }
-
-            const serverDecision = await this._plexStreamResolver.fetchUniversalTranscodeDecision(
-                program.item.ratingKey,
-                opts
-            );
-            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
-            if (this._currentStreamDecision !== decision) return;
-
-            decision.serverDecision = serverDecision;
-            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-
-            if (this._nowPlayingInfo && this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-                try {
-                    const freshProgram =
-                        this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
-                    const channel = this._channelManager?.getCurrentChannel() ?? null;
-                    if (freshProgram) {
-                        const viewModel = this._buildNowPlayingInfoViewModel(
-                            freshProgram,
-                            channel,
-                            null
-                        );
-                        this._nowPlayingInfo.update(viewModel);
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-        } catch {
-            // Debug-only; ignore failures.
-        }
     }
 
     private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
