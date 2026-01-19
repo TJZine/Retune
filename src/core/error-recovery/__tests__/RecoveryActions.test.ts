@@ -107,13 +107,13 @@ describe('getRecoveryActions', () => {
         expect(deps.skipToNext).toHaveBeenCalledTimes(1);
     });
 
-    it('returns Clear Data and Retry for STORAGE_CORRUPTED', () => {
+    it('returns Open Settings and Retry for STORAGE_CORRUPTED', () => {
         const deps = createDeps();
         const actions = getRecoveryActions(AppErrorCode.STORAGE_CORRUPTED, deps);
 
         expect(actions).toHaveLength(2);
         expect(actions[0]).toMatchObject({
-            label: 'Clear Data',
+            label: 'Open Settings',
             isPrimary: true,
             requiresNetwork: false,
         });

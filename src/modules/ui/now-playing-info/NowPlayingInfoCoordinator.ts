@@ -115,7 +115,7 @@ export class NowPlayingInfoCoordinator {
                 overlay.update(viewModel);
             }
         } catch {
-            // ignore
+            // Silently ignore errors during UI refresh to prevent timer crashes.
         }
     }
 

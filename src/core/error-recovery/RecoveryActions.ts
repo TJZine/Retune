@@ -109,7 +109,7 @@ export function getRecoveryActions(
         case AppErrorCode.STORAGE_CORRUPTED:
         case AppErrorCode.DATA_CORRUPTION:
             actions.push({
-                label: 'Clear Data',
+                label: 'Open Settings',
                 action: (): void => {
                     deps.goToSettings();
                 },
