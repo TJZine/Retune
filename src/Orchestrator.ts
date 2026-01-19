@@ -74,8 +74,6 @@ import {
     type IChannelScheduler,
     type ScheduledProgram,
     type ScheduleConfig,
-    ShuffleGenerator,
-    ScheduleCalculator,
 } from './modules/scheduler/scheduler';
 import {
     VideoPlayer,
@@ -90,6 +88,7 @@ import {
     type IEPGComponent,
     type EPGConfig,
 } from './modules/ui/epg';
+import { EPGCoordinator, type EpgUiStatus } from './modules/ui/epg/EPGCoordinator';
 import {
     NowPlayingInfoOverlay,
     type INowPlayingInfoOverlay,
@@ -311,7 +310,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _scheduler: IChannelScheduler | null = null;
     private _videoPlayer: IVideoPlayer | null = null;
     private _epg: IEPGComponent | null = null;
-    private _epgScheduleLoadToken = 0;
+    private _epgCoordinator: EPGCoordinator | null = null;
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
     private _nowPlayingInfoFetchToken = 0;
     private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
@@ -469,6 +468,27 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Now Playing Info overlay - no constructor args, initialize later
         this._nowPlayingInfo = new NowPlayingInfoOverlay();
+
+        this._epgCoordinator = new EPGCoordinator({
+            getEpg: (): IEPGComponent | null => this._epg,
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getEpgUiStatus: (): EpgUiStatus => this._moduleStatus.get('epg-ui')?.status as EpgUiStatus,
+            ensureEpgInitialized: (): Promise<void> =>
+                this._initCoordinator?.ensureEPGInitialized() ?? Promise.resolve(),
+            getEpgConfig: (): EPGConfig | null => this._config?.epgConfig ?? null,
+            getLocalMidnightMs: (t: number): number => this._getLocalMidnightMs(t),
+            buildDailyScheduleConfig: (
+                channel: ChannelConfig,
+                items: ResolvedChannelContent['items'],
+                referenceTimeMs: number
+            ): ScheduleConfig => this._buildDailyScheduleConfig(channel, items, referenceTimeMs),
+            getPreserveFocusOnOpen: (): boolean => this._lastChannelChangeSource === 'guide',
+            setLastChannelChangeSourceToGuide: (): void => {
+                this._lastChannelChangeSource = 'guide';
+            },
+            switchToChannel: (channelId: string): Promise<void> => this.switchToChannel(channelId),
+        });
 
         this._nowPlayingDebugManager = new NowPlayingDebugManager({
             nowPlayingModalId: NOW_PLAYING_INFO_MODAL_ID,
@@ -1295,9 +1315,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             applyChannelsMs += Date.now() - applyStart;
 
             reportProgress('refresh_epg', 'Refreshing guide...', 'Loading schedules', 0, null);
-            this._primeEpgChannels();
+            this._epgCoordinator?.primeEpgChannels();
             const refreshStart = Date.now();
-            await this._refreshEpgSchedules();
+            await this._epgCoordinator?.refreshEpgSchedules();
             refreshEpgMs += Date.now() - refreshStart;
 
         } catch (e) {
@@ -1470,67 +1490,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Open the EPG overlay.
      */
     openEPG(): void {
-        if (!this._epg) {
-            return;
-        }
-
-        // Prime data when EPG is already initialized.
-        if (this._moduleStatus.get('epg-ui')?.status === 'ready') {
-            this._primeEpgChannels();
-            void this._refreshEpgSchedules();
-        }
-
-        const show = (): void => {
-            const preserveFocus = this._lastChannelChangeSource === 'guide';
-            this._epg?.show({ preserveFocus });
-            if (!preserveFocus) {
-                this._focusEpgOnCurrentChannel();
-                this._epg?.focusNow();
-            }
-        };
-
-        // Allow EPG to be opened even before full app initialization completes
-        // (e.g., during auth/server-select flows in the simulator).
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            // Best-effort attempt immediately (helps in tests/mocks and if already initialized).
-            show();
-            if (this._initCoordinator) {
-                void this._initCoordinator.ensureEPGInitialized()
-                    .then(() => {
-                        this._primeEpgChannels();
-                        void this._refreshEpgSchedules();
-                        show();
-                    })
-                    .catch((error: unknown) => console.error('[Orchestrator] Failed to init EPG:', error));
-            }
-            return;
-        }
-
-        show();
-    }
-
-    private _focusEpgOnCurrentChannel(): void {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        const current = this._channelManager.getCurrentChannel();
-        if (!current) {
-            return;
-        }
-        const channels = this._channelManager.getAllChannels();
-        const index = channels.findIndex((channel) => channel.id === current.id);
-        if (index >= 0) {
-            this._epg.focusChannel(index);
-        }
+        this._epgCoordinator?.openEPG();
     }
 
     /**
      * Close the EPG overlay.
      */
     closeEPG(): void {
-        if (this._epg) {
-            this._epg.hide();
-        }
+        this._epgCoordinator?.closeEPG();
     }
 
     /**
@@ -1566,154 +1533,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Toggle EPG visibility.
      */
     toggleEPG(): void {
-        if (this._epg) {
-            if (this._epg.isVisible()) {
-                this.closeEPG();
-            } else {
-                this.openEPG();
-            }
-        }
-    }
-
-    private _primeEpgChannels(): void {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-        this._epg.loadChannels(this._channelManager.getAllChannels());
-    }
-
-    private _getEpgScheduleRangeMs(): { startTime: number; endTime: number } | null {
-        if (!this._config) {
-            return null;
-        }
-        const totalHours = this._config.epgConfig.totalHours;
-        const slotMinutes = this._config.epgConfig.timeSlotMinutes;
-        const slotMs = slotMinutes * 60_000;
-        const PAST_WINDOW_MINUTES = 30;
-        const now = Date.now();
-        const dayStart = this._getLocalMidnightMs(now);
-        const startTime = Math.max(
-            Math.floor((now - (PAST_WINDOW_MINUTES * 60_000)) / slotMs) * slotMs,
-            dayStart
-        );
-        const endTime = startTime + totalHours * 60 * 60 * 1000;
-
-        return { startTime, endTime };
-    }
-
-    private async _refreshEpgSchedules(): Promise<void> {
-        if (!this._epg || !this._channelManager) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-
-        const range = this._getEpgScheduleRangeMs();
-        if (!range) {
-            return;
-        }
-
-        const { startTime, endTime } = range;
-        this._epg.setGridAnchorTime(startTime);
-        const channels = this._channelManager.getAllChannels();
-        if (channels.length === 0) {
-            return;
-        }
-
-        const loadToken = ++this._epgScheduleLoadToken;
-        const shuffler = new ShuffleGenerator();
-
-        // Safety limit to avoid long blocking loops on TV hardware.
-        const MAX_CHANNELS_TO_PRELOAD = 100;
-        const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
-        const liveChannelId = this._channelManager.getCurrentChannel()?.id ?? null;
-
-        for (const channel of channelsToLoad) {
-            if (loadToken !== this._epgScheduleLoadToken) {
-                return;
-            }
-            try {
-                // If the scheduler has been manually shifted (e.g., auto-skip on playback failures),
-                // the "daily schedule" will no longer match live playback for the active channel.
-                // Use the scheduler's own window for the currently playing channel.
-                if (liveChannelId && channel.id === liveChannelId && this._scheduler) {
-                    const state = this._scheduler.getState();
-                    if (state.isActive && state.channelId === channel.id) {
-                        const window = this._scheduler.getScheduleWindow(startTime, endTime);
-                        this._epg.loadScheduleForChannel(channel.id, {
-                            ...window,
-                            programs: [...window.programs],
-                        });
-                        continue;
-                    }
-                }
-
-                const resolved = await this._channelManager.resolveChannelContent(channel.id);
-
-                const scheduleConfig = this._buildDailyScheduleConfig(channel, resolved.items, startTime);
-
-                const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
-                const programs = ScheduleCalculator.generateScheduleWindow(
-                    startTime,
-                    endTime,
-                    index,
-                    scheduleConfig.anchorTime
-                );
-
-                this._epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
-            } catch (error) {
-                console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
-            }
-        }
-
-        if (
-            loadToken === this._epgScheduleLoadToken &&
-            this._epg.isVisible() &&
-            !this._epg.getFocusedProgram()
-        ) {
-            this._epg.focusNow();
-        }
-    }
-
-    private _refreshEpgScheduleForLiveChannel(): void {
-        if (!this._epg || !this._channelManager || !this._scheduler) {
-            return;
-        }
-        if (this._moduleStatus.get('epg-ui')?.status !== 'ready') {
-            return;
-        }
-        if (!this._epg.isVisible()) {
-            return;
-        }
-
-        const range = this._getEpgScheduleRangeMs();
-        if (!range) {
-            return;
-        }
-
-        const current = this._channelManager.getCurrentChannel();
-        if (!current) {
-            return;
-        }
-
-        const state = this._scheduler.getState();
-        if (!state.isActive || state.channelId !== current.id) {
-            return;
-        }
-
-        try {
-            const window = this._scheduler.getScheduleWindow(range.startTime, range.endTime);
-            this._epg.loadScheduleForChannel(current.id, {
-                ...window,
-                programs: [...window.programs],
-            });
-        } catch (error) {
-            console.warn('[Orchestrator] Failed to refresh live EPG schedule:', error);
-        }
+        this._epgCoordinator?.toggleEPG();
     }
 
     /**
@@ -2288,7 +2108,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._scheduler.loadChannel(this._buildDailyScheduleConfig(current, content.items, now));
         this._scheduler.syncToCurrentTime();
 
-        await this._refreshEpgSchedules();
+        await this._epgCoordinator?.refreshEpgSchedules();
         this._activeScheduleDayKey = dayKey;
         this._pendingDayRolloverDayKey = null;
     }
@@ -2668,7 +2488,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 const preserveFocus = this._lastChannelChangeSource === 'guide';
                 this._epg.show({ preserveFocus });
                 if (!preserveFocus) {
-                    this._focusEpgOnCurrentChannel();
+                    this._epgCoordinator?.focusEpgOnCurrentChannel();
                     this._epg.focusNow();
                 }
             }
@@ -2693,31 +2513,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Wire EPG channel selection events.
      */
     private _wireEpgEvents(): void {
-        if (!this._epg) return;
-
-        const handler = (payload: { channel: ChannelConfig; program: ScheduledProgram }): void => {
-            this._lastChannelChangeSource = 'guide';
-            const now = Date.now();
-            if (
-                payload.program.scheduleIndex === -1 ||
-                payload.program.item.ratingKey.includes('-placeholder-')
-            ) {
-                // Placeholder program (e.g., "Loading..." / "No Program"): never trigger playback.
-                return;
-            }
-            if (now < payload.program.scheduledStartTime) {
-                // Future program: keep guide open; info panel already shows details on focus.
-                return;
-            }
-            this.closeEPG();
-            this.switchToChannel(payload.channel.id).catch(console.error);
-        };
-        this._epg.on('channelSelected', handler);
-        this._eventUnsubscribers.push(() => {
-            if (this._epg) {
-                this._epg.off('channelSelected', handler);
-            }
-        });
+        this._eventUnsubscribers.push(...(this._epgCoordinator?.wireEpgEvents() ?? []));
     }
 
     /**
@@ -2763,7 +2559,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         const programAtStart = program;
         this._notifyNowPlaying(program);
         this._updateNowPlayingInfoForProgram(program);
-        this._refreshEpgScheduleForLiveChannel();
+        this._epgCoordinator?.refreshEpgScheduleForLiveChannel();
 
         try {
             const stream = await this._resolveStreamForProgram(programAtStart);
