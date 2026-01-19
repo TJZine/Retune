@@ -1488,7 +1488,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * @param number - Channel number
      */
     async switchToChannelByNumber(number: number): Promise<void> {
-        return this._channelTuning?.switchToChannelByNumber(number) ?? Promise.resolve();
+        if (!this._channelTuning) {
+            if (!this._channelManager || !this._scheduler || !this._videoPlayer) {
+                console.error('Modules not initialized');
+            }
+            return;
+        }
+
+        return this._channelTuning.switchToChannelByNumber(number);
     }
 
     /**

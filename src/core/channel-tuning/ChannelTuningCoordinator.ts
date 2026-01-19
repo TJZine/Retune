@@ -95,11 +95,13 @@ export class ChannelTuningCoordinator {
                     return;
                 }
                 if (
-                    (error instanceof DOMException && error.name === 'AbortError') ||
-                    (error &&
-                        typeof error === 'object' &&
-                        'name' in error &&
-                        (error as { name?: unknown }).name === 'AbortError')
+                    ((typeof DOMException !== 'undefined' &&
+                        error instanceof DOMException &&
+                        error.name === 'AbortError') ||
+                        (error &&
+                            typeof error === 'object' &&
+                            'name' in error &&
+                            (error as { name?: unknown }).name === 'AbortError'))
                 ) {
                     return;
                 }

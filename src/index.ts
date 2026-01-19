@@ -22,6 +22,7 @@ import './styles/shell.css';
  */
 function handleGlobalError(event: ErrorEvent): void {
     console.error('Uncaught error:', event.error || event.message);
+    showGlobalErrorOverlay(event.error instanceof Error ? event.error.message : String(event.message));
     event.preventDefault();
 }
 
@@ -30,7 +31,61 @@ function handleGlobalError(event: ErrorEvent): void {
  */
 function handleUnhandledRejection(event: PromiseRejectionEvent): void {
     console.error('Unhandled promise rejection:', event.reason);
+    const message =
+        event.reason instanceof Error
+            ? event.reason.message
+            : typeof event.reason === 'string'
+                ? event.reason
+                : 'An unexpected error occurred.';
+    showGlobalErrorOverlay(message);
     event.preventDefault();
+}
+
+function showGlobalErrorOverlay(message: string): void {
+    if (typeof document === 'undefined') return;
+    const existing = document.getElementById('global-error-overlay');
+    if (existing) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'global-error-overlay';
+    overlay.setAttribute('role', 'alert');
+    overlay.setAttribute('aria-live', 'assertive');
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.background = 'rgba(0, 0, 0, 0.85)';
+    overlay.style.color = '#fff';
+    overlay.style.zIndex = '99999';
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.fontFamily = 'sans-serif';
+    overlay.style.padding = '24px';
+    overlay.style.textAlign = 'center';
+
+    const title = document.createElement('div');
+    title.textContent = 'Something went wrong';
+    title.style.fontSize = '28px';
+    title.style.marginBottom = '12px';
+    title.style.fontWeight = '600';
+
+    const detail = document.createElement('div');
+    detail.textContent = message || 'An unexpected error occurred.';
+    detail.style.fontSize = '18px';
+    detail.style.opacity = '0.9';
+    detail.style.maxWidth = '80%';
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Please restart the app or try again.';
+    hint.style.fontSize = '16px';
+    hint.style.marginTop = '16px';
+    hint.style.opacity = '0.75';
+
+    overlay.append(title, detail, hint);
+    document.body.appendChild(overlay);
 }
 
 // Register global error handlers

@@ -161,7 +161,7 @@ export class StateManager implements IStateManager {
      * Check if error is a quota exceeded error.
      */
     private _isQuotaError(error: unknown): boolean {
-        if (error instanceof DOMException) {
+        if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
             // Different browsers use different error codes
             return (
                 error.code === 22 || // Legacy
