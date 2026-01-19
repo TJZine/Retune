@@ -55,7 +55,11 @@ export class NowPlayingInfoCoordinator {
                 if (scheduler) {
                     return scheduler.getCurrentProgram();
                 }
-            } catch {
+            } catch (error) {
+                console.warn(
+                    '[NowPlayingInfoCoordinator] Scheduler unavailable, using fallback:',
+                    error
+                );
                 // Fallback to last-known snapshot if scheduler is unavailable.
             }
             return this.deps.getCurrentProgramForPlayback();
@@ -180,7 +184,10 @@ export class NowPlayingInfoCoordinator {
             const viewModel = this.buildNowPlayingInfoViewModel(program, channel, item);
             overlay.update(viewModel);
         } catch (error) {
-            console.warn('[Orchestrator] Failed to load Now Playing details:', error);
+            console.warn(
+                '[NowPlayingInfoCoordinator] Failed to load Now Playing details:',
+                error
+            );
         }
     }
 

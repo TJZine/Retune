@@ -87,6 +87,26 @@ describe('getRecoveryActions', () => {
         expect(deps.skipToNext).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+        AppErrorCode.CODEC_UNSUPPORTED,
+        AppErrorCode.TRACK_NOT_FOUND,
+        AppErrorCode.TRACK_SWITCH_FAILED,
+        AppErrorCode.TRACK_SWITCH_TIMEOUT,
+    ])('returns Skip for %s', (errorCode) => {
+        const deps = createDeps();
+        const actions = getRecoveryActions(errorCode, deps);
+
+        expect(actions).toHaveLength(1);
+        expect(actions[0]).toMatchObject({
+            label: 'Skip',
+            isPrimary: true,
+            requiresNetwork: false,
+        });
+
+        actions[0]!.action();
+        expect(deps.skipToNext).toHaveBeenCalledTimes(1);
+    });
+
     it('returns Clear Data and Retry for STORAGE_CORRUPTED', () => {
         const deps = createDeps();
         const actions = getRecoveryActions(AppErrorCode.STORAGE_CORRUPTED, deps);

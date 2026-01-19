@@ -10,8 +10,11 @@ import {
     NowPlayingInfoCoordinator,
     getNowPlayingInfoAutoHideMs,
 } from '../modules/ui/now-playing-info/NowPlayingInfoCoordinator';
+import type { INavigationManager } from '../modules/navigation';
 import type { IPlexLibrary } from '../modules/plex/library';
-import type { NowPlayingInfoConfig } from '../modules/ui/now-playing-info';
+import type { ChannelConfig, IChannelManager } from '../modules/scheduler/channel-manager';
+import type { ScheduledProgram } from '../modules/scheduler/scheduler';
+import type { INowPlayingInfoOverlay, NowPlayingInfoConfig } from '../modules/ui/now-playing-info';
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -522,16 +525,25 @@ describe('AppOrchestrator', () => {
                     thumb: '/thumb',
                 },
             };
-            const channel = { id: 'ch1', name: 'Test Channel', number: 1 };
-            const details = { type: 'movie', title: 'Test Movie', year: 2024, durationMs: 60_000, thumb: '/thumb' };
-
+            const channel = mockChannel as unknown as ChannelConfig;
             const coordinator = new NowPlayingInfoCoordinator({
                 nowPlayingModalId: 'now-playing-info',
-                getNavigation: (): null => null,
+                getNavigation: (): INavigationManager =>
+                    ({
+                        isModalOpen: (): boolean => true,
+                    }) as INavigationManager,
                 getScheduler: (): null => null,
-                getChannelManager: (): null => null,
+                getChannelManager: (): IChannelManager =>
+                    ({
+                        getCurrentChannel: (): ChannelConfig => channel,
+                    }) as unknown as IChannelManager,
                 getPlexLibrary: (): IPlexLibrary => mockPlexLibrary as unknown as IPlexLibrary,
-                getNowPlayingInfo: (): null => null,
+                getNowPlayingInfo: (): INowPlayingInfoOverlay =>
+                    ({
+                        setAutoHideMs: jest.fn(),
+                        update: jest.fn(),
+                        isVisible: (): boolean => false,
+                    }) as unknown as INowPlayingInfoOverlay,
                 getNowPlayingInfoConfig: (): NowPlayingInfoConfig | null => configWithPosterSizes.nowPlayingInfoConfig,
                 buildPlexResourceUrl: (): null => null,
                 buildDebugText: (): string | null => null,
@@ -539,8 +551,7 @@ describe('AppOrchestrator', () => {
                 getAutoHideMs: (): number => 0,
                 getCurrentProgramForPlayback: (): null => null,
             });
-            (coordinator as unknown as { buildNowPlayingInfoViewModel: (a: unknown, b: unknown, c: unknown) => unknown })
-                .buildNowPlayingInfoViewModel(program as unknown, channel as unknown, details as unknown);
+            coordinator.onProgramStart(program as unknown as ScheduledProgram);
 
             expect(mockPlexLibrary.getImageUrl).toHaveBeenCalledWith('/thumb', 111, 222);
         });

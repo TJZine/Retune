@@ -223,10 +223,13 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
     }
 }
 
+const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+});
+
 function formatLocalTime(ms: number): string {
-    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
-        new Date(ms)
-    );
+    return TIME_FORMATTER.format(new Date(ms));
 }
 
 function formatTimecode(ms: number): string {

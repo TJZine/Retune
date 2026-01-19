@@ -75,6 +75,10 @@ export function getRecoveryActions(
         case AppErrorCode.PLAYBACK_FAILED:
         case AppErrorCode.PLAYBACK_DECODE_ERROR:
         case AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED:
+        case AppErrorCode.CODEC_UNSUPPORTED:
+        case AppErrorCode.TRACK_NOT_FOUND:
+        case AppErrorCode.TRACK_SWITCH_FAILED:
+        case AppErrorCode.TRACK_SWITCH_TIMEOUT:
             actions.push({
                 label: 'Skip',
                 action: (): void => {
