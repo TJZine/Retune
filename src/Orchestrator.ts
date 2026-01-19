@@ -26,8 +26,8 @@ import {
     type INavigationManager,
     type NavigationConfig,
     type Screen,
-    type KeyEvent,
 } from './modules/navigation';
+import { NavigationCoordinator } from './modules/navigation/NavigationCoordinator';
 import {
     PlexAuth,
     type IPlexAuth,
@@ -317,6 +317,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
     private _playbackRecovery: PlaybackRecoveryManager | null = null;
+    private _navigationCoordinator: NavigationCoordinator | null = null;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
@@ -510,6 +511,34 @@ export class AppOrchestrator implements IAppOrchestrator {
             getMimeType: (decision: StreamDecision): string => this._getMimeType(decision),
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
+        });
+
+        this._navigationCoordinator = new NavigationCoordinator({
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getEpg: (): IEPGComponent | null => this._epg,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getPlexAuth: (): IPlexAuth | null => this._plexAuth,
+            isNowPlayingModalOpen: (): boolean => {
+                const isOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
+                if (isOpen) {
+                    this._nowPlayingInfo?.resetAutoHideTimer();
+                }
+                return isOpen;
+            },
+            toggleNowPlayingInfoOverlay: (): void => this._toggleNowPlayingInfoOverlay(),
+            showNowPlayingInfoOverlay: (): void => this._showNowPlayingInfoOverlay(),
+            hideNowPlayingInfoOverlay: (): void => this._hideNowPlayingInfoOverlay(),
+            setLastChannelChangeSourceRemote: (): void => {
+                this._lastChannelChangeSource = 'remote';
+            },
+            setLastChannelChangeSourceNumber: (): void => {
+                this._lastChannelChangeSource = 'number';
+            },
+            switchToNextChannel: (): void => this._switchToNextChannel(),
+            switchToPreviousChannel: (): void => this._switchToPreviousChannel(),
+            switchToChannelByNumber: (n: number): Promise<void> => this.switchToChannelByNumber(n),
+            toggleEpg: (): void => this.toggleEPG(),
+            shouldRunChannelSetup: (): boolean => this._shouldRunChannelSetup(),
         });
 
         // Create InitializationCoordinator with dependencies and callbacks
@@ -2289,144 +2318,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Wire navigation key events and screen changes.
      */
     private _wireNavigationEvents(): void {
-        if (!this._navigation) return;
-
-        // Key press handler
-        const keyHandler = (event: KeyEvent): void => {
-            this._handleKeyPress(event);
-        };
-        this._navigation.on('keyPress', keyHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('keyPress', keyHandler);
-            }
-        });
-
-        // Channel number entry handler
-        const channelNumberHandler = (payload: { channelNumber: number }): void => {
-            if (!Number.isFinite(payload.channelNumber)) {
-                return;
-            }
-            this._lastChannelChangeSource = 'number';
-            this.switchToChannelByNumber(payload.channelNumber).catch(console.error);
-        };
-        this._navigation.on('channelNumberEntered', channelNumberHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('channelNumberEntered', channelNumberHandler);
-            }
-        });
-
-        // Guide/EPG Toggle Handler
-        const guideHandler = (): void => {
-            // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
-            this.toggleEPG();
-        };
-        this._navigation.on('guide', guideHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('guide', guideHandler);
-            }
-        });
-
-        // Settings Toggle Handler
-        const settingsHandler = (): void => {
-            const currentScreen = this._navigation?.getCurrentScreen();
-            if (currentScreen === 'player' || currentScreen === 'guide') {
-                this._navigation?.goTo('settings');
-            }
-        };
-        this._navigation.on('settings', settingsHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('settings', settingsHandler);
-            }
-        });
-
-        // Screen change handler - show/hide screens
-        const screenHandler = (payload: { from: string; to: string }): void => {
-            this._handleScreenChange(payload.from, payload.to);
-        };
-        this._navigation.on('screenChange', screenHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('screenChange', screenHandler);
-            }
-        });
-
-        // Modal open/close handler (Now Playing Info overlay)
-        const modalOpenHandler = (payload: { modalId: string }): void => {
-            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
-                this._showNowPlayingInfoOverlay();
-            }
-        };
-        const modalCloseHandler = (payload: { modalId: string }): void => {
-            if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
-                this._hideNowPlayingInfoOverlay();
-            }
-        };
-        this._navigation.on('modalOpen', modalOpenHandler);
-        this._navigation.on('modalClose', modalCloseHandler);
-        this._eventUnsubscribers.push(() => {
-            if (this._navigation) {
-                this._navigation.off('modalOpen', modalOpenHandler);
-                this._navigation.off('modalClose', modalCloseHandler);
-            }
-        });
-    }
-
-    /**
-     * Handle screen transitions.
-     * @param from - Previous screen
-     * @param to - New screen
-     */
-    private _handleScreenChange(from: string, to: string): void {
-        if (to === 'player' && this._shouldRunChannelSetup()) {
-            if (this._navigation) {
-                this._navigation.replaceScreen('channel-setup');
-            }
-            return;
-        }
-
-        // Hide EPG when leaving guide
-        if (from === 'guide' && to !== 'guide') {
-            if (this._epg) {
-                this._epg.hide();
-            }
-        }
-
-        // Close Now Playing Info overlay when leaving player
-        if (from === 'player' && to !== 'player') {
-            if (this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-                this._navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-            }
-        }
-
-        // Show EPG when entering guide
-        if (to === 'guide') {
-            if (this._epg) {
-                const preserveFocus = this._lastChannelChangeSource === 'guide';
-                this._epg.show({ preserveFocus });
-                if (!preserveFocus) {
-                    this._epgCoordinator?.focusEpgOnCurrentChannel();
-                    this._epg.focusNow();
-                }
-            }
-        }
-
-        // Pause playback when leaving player for settings/channel-edit
-        if (from === 'player' && (to === 'settings' || to === 'channel-edit')) {
-            if (this._videoPlayer) {
-                this._videoPlayer.pause();
-            }
-        }
-
-        // Resume playback when returning to player
-        if (to === 'player' && from !== 'player') {
-            if (this._videoPlayer) {
-                this._videoPlayer.play().catch(console.error);
-            }
-        }
+        this._eventUnsubscribers.push(...(this._navigationCoordinator?.wireNavigationEvents() ?? []));
     }
 
     /**
@@ -2849,95 +2741,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
         // Fallback
         return 'video/mp4';
-    }
-
-    /**
-     * Handle key press from navigation.
-     */
-    private _handleKeyPress(event: KeyEvent): void {
-        const isNowPlayingModalOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
-        if (isNowPlayingModalOpen) {
-            this._nowPlayingInfo?.resetAutoHideTimer();
-        }
-        if (isNowPlayingModalOpen && event.button === 'back') {
-            return;
-        }
-
-        if (this._epg?.isVisible()) {
-            switch (event.button) {
-                case 'up':
-                case 'down':
-                case 'left':
-                case 'right':
-                    if (this._epg.handleNavigation(event.button)) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                case 'ok':
-                    if (this._epg.handleSelect()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                case 'back':
-                    if (this._epg.handleBack()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        switch (event.button) {
-            case 'red':
-                if (event.isRepeat) {
-                    break;
-                }
-                this._toggleNowPlayingInfoOverlay();
-                break;
-            case 'channelUp':
-                this._lastChannelChangeSource = 'remote';
-                // Treat channel-up as decrement (reverse wrap) to match user expectation.
-                this._switchToPreviousChannel();
-                break;
-            case 'channelDown':
-                this._lastChannelChangeSource = 'remote';
-                // Treat channel-down as increment (forward wrap) to match user expectation.
-                this._switchToNextChannel();
-                break;
-            case 'info':
-            case 'blue':
-                if (this._navigation) {
-                    if (this._plexAuth && !this._plexAuth.isAuthenticated()) {
-                        this._navigation.goTo('auth');
-                    } else {
-                        this._navigation.goTo('server-select');
-                    }
-                }
-                break;
-            case 'play':
-                if (this._videoPlayer) {
-                    this._videoPlayer.play().catch(console.error);
-                }
-                break;
-            case 'pause':
-                if (this._videoPlayer) {
-                    this._videoPlayer.pause();
-                }
-                break;
-            case 'stop':
-                if (this._videoPlayer) {
-                    this._videoPlayer.stop();
-                }
-                break;
-            // Other keys handled by active screen
-        }
     }
 
     /**
