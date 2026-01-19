@@ -19,6 +19,7 @@ export const NOW_PLAYING_INFO_CLASSES = {
     PROGRESS_BAR: 'now-playing-info-progress-bar',
     PROGRESS_FILL: 'now-playing-info-progress-fill',
     PROGRESS_META: 'now-playing-info-progress-meta',
+    UP_NEXT: 'now-playing-info-up-next',
 } as const;
 
 export const NOW_PLAYING_INFO_DEFAULTS = {

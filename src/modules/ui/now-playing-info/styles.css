@@ -121,6 +121,15 @@
   color: var(--color-text-secondary);
 }
 
+.now-playing-info-up-next {
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 900px) {
   .now-playing-info-panel {
     max-width: 90%;

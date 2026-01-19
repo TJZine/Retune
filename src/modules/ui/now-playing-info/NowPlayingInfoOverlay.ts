@@ -49,6 +49,7 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
             </div>
             <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS_META}"></div>
           </div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.UP_NEXT}"></div>
         </div>
       </div>
     `;
@@ -205,7 +206,30 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         } else if (progress) {
             progress.style.display = 'none';
         }
+
+        const upNext = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.UP_NEXT}`
+        ) as HTMLElement | null;
+        if (upNext) {
+            const next = viewModel.upNext;
+            if (next) {
+                upNext.textContent = `Up next • ${formatLocalTime(next.startsAtMs)} — ${next.title}`;
+                upNext.style.display = 'block';
+            } else {
+                upNext.textContent = '';
+                upNext.style.display = 'none';
+            }
+        }
     }
+}
+
+const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+});
+
+function formatLocalTime(ms: number): string {
+    return TIME_FORMATTER.format(new Date(ms));
 }
 
 function formatTimecode(ms: number): string {
