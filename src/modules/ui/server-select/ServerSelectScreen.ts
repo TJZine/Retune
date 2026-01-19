@@ -235,7 +235,7 @@ export class ServerSelectScreen {
 
     private _renderServers(servers: PlexServer[]): void {
         const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
-        let healthMap: Record<string, { status: string; type: string; latencyMs: number } | undefined> = {};
+        let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined> = {};
         try {
             healthMap = rawHealth ? JSON.parse(rawHealth) : {};
         } catch (e) {

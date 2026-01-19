@@ -12,6 +12,7 @@ import { safeLocalStorageGet } from '../../../utils/storage';
 import { DEFAULT_CHANNEL_SETUP_MAX, MAX_CHANNELS } from '../../scheduler/channel-manager/constants';
 
 const CHANNEL_LIMIT_PRESETS = [50, 100, 150, 200, 300, 400, 500];
+const DEFAULT_MIN_ITEMS = 10;
 
 interface SetupStrategyState {
     collections: boolean;
@@ -46,7 +47,7 @@ export class ChannelSetupScreen {
         runtimeRanges: false,
     };
     private _maxChannels: number = DEFAULT_CHANNEL_SETUP_MAX;
-    private _minItems: number = 10;
+    private _minItems: number = DEFAULT_MIN_ITEMS;
     private _channelLimitOptions: number[] = CHANNEL_LIMIT_PRESETS.filter((value) => value <= MAX_CHANNELS);
     private _minItemsOptions: number[] = [1, 5, 10, 20, 50];
     private _buildAbortController: AbortController | null = null;
@@ -137,7 +138,7 @@ export class ChannelSetupScreen {
         this._isLoading = false;
         this._isBuilding = false;
         this._maxChannels = DEFAULT_CHANNEL_SETUP_MAX;
-        this._minItems = 10;
+        this._minItems = DEFAULT_MIN_ITEMS;
         this._errorEl.textContent = '';
     }
 
@@ -382,11 +383,11 @@ export class ChannelSetupScreen {
         minItemsButton.addEventListener('click', () => {
             this._preferredFocusId = minItemsButton.id;
             const currentIndex = this._minItemsOptions.indexOf(this._minItems);
-            const defaultIndex = Math.max(0, this._minItemsOptions.indexOf(10));
+            const defaultIndex = Math.max(0, this._minItemsOptions.indexOf(DEFAULT_MIN_ITEMS));
             const nextIndex = currentIndex >= 0
                 ? (currentIndex + 1) % this._minItemsOptions.length
                 : defaultIndex; // Default to 10 if present, else first option
-            this._minItems = this._minItemsOptions[nextIndex] ?? 10;
+            this._minItems = this._minItemsOptions[nextIndex] ?? DEFAULT_MIN_ITEMS;
             this._renderStep();
         });
 
@@ -515,15 +516,22 @@ export class ChannelSetupScreen {
         const token = this._visibilityToken;
         if (this._isBuilding) return;
 
-        this._isBuilding = true;
-        this._buildAbortController = new AbortController();
-
         const serverId = this._getSelectedServerId();
         if (!serverId) {
             this._errorEl.textContent = 'No server selected.';
-            this._isBuilding = false;
+            this._statusEl.textContent = 'Error';
+            taskLabel.textContent = 'Select a server';
+            detailLabel.textContent = '';
+            barFill.style.width = '0%';
+            barFill.classList.remove('indeterminate');
+            cancelButton.disabled = false;
+            cancelButton.textContent = 'Back';
+            doneButton.disabled = true;
             return;
         }
+
+        this._isBuilding = true;
+        this._buildAbortController = new AbortController();
 
         const config: ChannelSetupConfig = {
             serverId,
@@ -600,6 +608,10 @@ export class ChannelSetupScreen {
             const message = error instanceof Error ? error.message : 'Build failed.';
             this._errorEl.textContent = message;
             this._statusEl.textContent = 'Error';
+            taskLabel.textContent = 'Error';
+            detailLabel.textContent = '';
+            barFill.style.width = '0%';
+            barFill.classList.remove('indeterminate');
             cancelButton.disabled = false;
             cancelButton.textContent = 'Back';
         } finally {

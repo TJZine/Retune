@@ -297,7 +297,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
      */
     public async findFastestConnection(
         server: PlexServer
-    ): Promise<{ connection: PlexConnection | null; authRequired: boolean; selectedAuthRequired: boolean }> {
+    ): Promise<{ connection: PlexConnection | null; authRequired: boolean }> {
         const config = this._mixedContentConfig;
         let authRequired = false;
 
@@ -318,7 +318,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
 
@@ -327,7 +327,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
 
@@ -336,7 +336,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
         }
@@ -358,7 +358,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 if (latency === 'auth_required') {
                     authRequired = true;
                 } else if (latency !== null) {
-                    return { connection: this._createConnectionWithLatency(upgradedConn, latency), authRequired, selectedAuthRequired: false };
+                    return { connection: this._createConnectionWithLatency(upgradedConn, latency), authRequired };
                 }
             }
         }
@@ -375,12 +375,12 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                     if (config.logWarnings) {
                         console.warn('[Discovery] Using HTTP connection - HTTPS unavailable');
                     }
-                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired, selectedAuthRequired: false };
+                    return { connection: this._createConnectionWithLatency(conn, latency), authRequired };
                 }
             }
         }
 
-        return { connection: null, authRequired, selectedAuthRequired: false };
+        return { connection: null, authRequired };
     }
 
     /**
@@ -823,6 +823,14 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 'Server error: ' + String(response.status),
                 response.status,
                 true
+            );
+        }
+        if (response.status >= 400 && response.status < 500) {
+            throw new PlexApiError(
+                AppErrorCode.SERVER_UNREACHABLE,
+                'Client error during server discovery: ' + String(response.status),
+                response.status,
+                false
             );
         }
         throw new PlexApiError(

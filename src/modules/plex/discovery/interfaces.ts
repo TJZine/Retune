@@ -54,12 +54,10 @@ export interface IPlexServerDiscovery {
      * @param server - Server to test connections for
      * @returns Promise resolving to best connection info.
      * authRequired indicates whether any tested connection required auth.
-     * selectedAuthRequired indicates whether the returned connection required auth.
      */
     findFastestConnection(server: PlexServer): Promise<{
         connection: PlexConnection | null;
         authRequired: boolean;
-        selectedAuthRequired: boolean;
     }>;
 
     // Server Selection
