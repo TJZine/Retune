@@ -866,6 +866,14 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         const signal = options?.signal;
+        const buildStartMs = Date.now();
+        let libraryFetchMs = 0;
+        let playlistMs = 0;
+        let collectionsMs = 0;
+        let libraryQueryMs = 0;
+        let createChannelsMs = 0;
+        let applyChannelsMs = 0;
+        let refreshEpgMs = 0;
         const reportProgress = (
             task: ChannelBuildProgress['task'],
             label: string,
@@ -886,7 +894,9 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         reportProgress('fetch_playlists', 'Preparing...', 'Loading libraries', 0, null);
 
+        const librariesStart = Date.now();
         const libraries = await this.getLibrariesForSetup(signal ?? null);
+        libraryFetchMs += Date.now() - librariesStart;
         const selectedLibraries = libraries
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
@@ -925,7 +935,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (config.enabledStrategies.playlists) {
             reportProgress('fetch_playlists', 'Fetching playlists...', 'Scanning server', 0, null);
             try {
+                const playlistsStart = Date.now();
                 const playlists = await this._plexLibrary.getPlaylists({ signal: signal ?? null });
+                playlistMs += Date.now() - playlistsStart;
                 for (const pl of playlists) {
                     if (checkCanceled()) {
                         return { created: createdItems, skipped: skippedCount, reachedMaxChannels: reachedMax, errorCount: errorsTotal, canceled: true, lastTask: 'fetch_playlists' };
@@ -963,7 +975,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (config.enabledStrategies.collections) {
                 reportProgress('fetch_collections', 'Fetching collections...', library.title, libIndex, selectedLibraries.length);
                 try {
+                    const collectionsStart = Date.now();
                     const collections = await this._plexLibrary.getCollections(library.id, { signal: signal ?? null });
+                    collectionsMs += Date.now() - collectionsStart;
                     for (const collection of collections) {
                         if (collection.childCount >= minItems) {
                             pending.push({
@@ -995,7 +1009,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                         if (library.type === 'show') {
                             countOptions.filter = { type: PLEX_MEDIA_TYPES.EPISODE };
                         }
+                        const countStart = Date.now();
                         libraryCount = await this._plexLibrary.getLibraryItemCount(library.id, countOptions);
+                        libraryQueryMs += Date.now() - countStart;
                     } catch (e) {
                         console.warn(`Failed to fetch item count for ${library.title}:`, e);
                         errorsTotal++;
@@ -1050,7 +1066,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 limit: CHANNEL_SETUP_SCAN_LIMIT,
                                 filter: { type: PLEX_MEDIA_TYPES.SHOW },
                             };
+                            const tagStart = Date.now();
                             tagItems = await this._plexLibrary.getLibraryItems(library.id, tagOptions);
+                            libraryQueryMs += Date.now() - tagStart;
                         } else {
                             tagItems = [];
                         }
@@ -1061,12 +1079,16 @@ export class AppOrchestrator implements IAppOrchestrator {
                                 limit: CHANNEL_SETUP_SCAN_LIMIT,
                                 filter: { type: PLEX_MEDIA_TYPES.EPISODE },
                             };
+                            const scanStart = Date.now();
                             scanItems = await this._plexLibrary.getLibraryItems(library.id, episodeOptions);
+                            libraryQueryMs += Date.now() - scanStart;
                         } else {
                             scanItems = [];
                         }
                     } else {
+                        const scanStart = Date.now();
                         tagItems = await this._plexLibrary.getLibraryItems(library.id, scanOptions);
+                        libraryQueryMs += Date.now() - scanStart;
                         scanItems = tagItems;
                     }
 
@@ -1235,6 +1257,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         };
 
         try {
+            const createStart = Date.now();
             let pIndex = 0;
             for (const p of pending) {
                 pIndex++;
@@ -1272,6 +1295,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                     finalSummary.errorCount++;
                 }
             }
+            createChannelsMs += Date.now() - createStart;
 
             if (checkCanceled()) {
                 finalSummary.canceled = true;
@@ -1280,16 +1304,31 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
 
             reportProgress('apply_channels', 'Saving...', 'Saving library', finalSummary.created, finalSummary.created);
+            const applyStart = Date.now();
             await this._channelManager.replaceAllChannels(builder.getAllChannels());
+            applyChannelsMs += Date.now() - applyStart;
 
             reportProgress('refresh_epg', 'Refreshing guide...', 'Loading schedules', 0, null);
             this._primeEpgChannels();
+            const refreshStart = Date.now();
             await this._refreshEpgSchedules();
+            refreshEpgMs += Date.now() - refreshStart;
 
         } catch (e) {
             console.error('[Orchestrator] Channel build failed:', e);
             throw e;
         } finally {
+            const totalMs = Date.now() - buildStartMs;
+            console.warn('[ChannelSetup] Timing:', {
+                totalMs,
+                libraryFetchMs,
+                playlistMs,
+                collectionsMs,
+                libraryQueryMs,
+                createChannelsMs,
+                applyChannelsMs,
+                refreshEpgMs,
+            });
             safeLocalStorageRemove(tempKey);
             safeLocalStorageRemove(tempCurrentKey);
         }
@@ -2660,12 +2699,16 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         this._currentProgramForPlayback = program;
+        const programAtStart = program;
         this._notifyNowPlaying(program);
         this._updateNowPlayingInfoForProgram(program);
         this._refreshEpgScheduleForLiveChannel();
 
         try {
-            const stream = await this._resolveStreamForProgram(program);
+            const stream = await this._resolveStreamForProgram(programAtStart);
+            if (this._currentProgramForPlayback !== programAtStart) {
+                return;
+            }
             this._currentStreamDescriptor = stream;
 
             // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
@@ -3124,6 +3167,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!program || !this._videoPlayer || !this._plexStreamResolver) {
             return false;
         }
+        const programAtStart = program;
         const currentProtocol = this._currentStreamDescriptor?.protocol ?? null;
         if (currentProtocol !== 'direct') {
             return false;
@@ -3148,6 +3192,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                 startOffsetMs: clampedOffset,
                 directPlay: false,
             });
+            if (this._currentProgramForPlayback !== programAtStart) {
+                return false;
+            }
             this._currentStreamDecision = decision;
 
             const metadata: StreamDescriptor['mediaMetadata'] = {

@@ -10,6 +10,8 @@
 export interface AudioSettings {
     /** Enable DTS passthrough for external receivers (requires webOS 23+) */
     dtsPassthrough: boolean;
+    /** Allow Direct Play by selecting a compatible fallback audio track */
+    directPlayAudioFallback: boolean;
 }
 
 /**

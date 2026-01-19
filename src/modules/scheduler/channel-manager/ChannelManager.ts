@@ -22,7 +22,6 @@ import type {
 import {
     STORAGE_KEY,
     CURRENT_CHANNEL_KEY,
-    STORAGE_VERSION,
     CACHE_TTL_MS,
     MAX_CHANNELS,
     MIN_CHANNEL_NUMBER,
@@ -245,7 +244,6 @@ export class ChannelManager implements IChannelManager {
         if (config.currentChannelKey) {
             this._currentChannelKey = config.currentChannelKey;
         } else if (this._storageKey === STORAGE_KEY) {
-            // Back-compat: legacy/default store uses the global current-channel key.
             this._currentChannelKey = CURRENT_CHANNEL_KEY;
         } else {
             // Namespaced to avoid demo/real and multi-server clobbering.
@@ -758,7 +756,6 @@ export class ChannelManager implements IChannelManager {
      */
     async saveChannels(): Promise<void> {
         const data: StoredChannelData = {
-            version: STORAGE_VERSION,
             channels: Array.from(this._state.channels.values()),
             channelOrder: this._state.channelOrder,
             currentChannelId: this._state.currentChannelId,
@@ -784,7 +781,6 @@ export class ChannelManager implements IChannelManager {
                         this._logger.warn(`Removed ${removedCount} oldest channels due to quota`);
                         // Retry with compacted data
                         const compactedData: StoredChannelData = {
-                            version: STORAGE_VERSION,
                             channels: Array.from(this._state.channels.values()),
                             channelOrder: this._state.channelOrder,
                             currentChannelId: this._state.currentChannelId,
@@ -813,13 +809,13 @@ export class ChannelManager implements IChannelManager {
             }
 
             const parsed = JSON.parse(json) as Partial<StoredChannelData>;
-            const migrated = this._migrateStoredChannelData(parsed);
-            if (!migrated) {
+            const normalized = this._normalizeStoredChannelData(parsed);
+            if (!normalized) {
                 this._logger.warn('[ChannelManager] Invalid stored channel data, skipping load');
                 return;
             }
-            const { data, didMutate: didMutateFromMigration } = migrated;
-            let didMutate = didMutateFromMigration;
+            const { data, didMutate: didMutateFromNormalization } = normalized;
+            let didMutate = didMutateFromNormalization;
 
             // Restore state
             this._state.channels.clear();
@@ -868,7 +864,7 @@ export class ChannelManager implements IChannelManager {
         }
     }
 
-    private _migrateStoredChannelData(
+    private _normalizeStoredChannelData(
         data: Partial<StoredChannelData>
     ): { data: StoredChannelData; didMutate: boolean } | null {
         if (!Array.isArray(data.channels)) {
@@ -884,16 +880,7 @@ export class ChannelManager implements IChannelManager {
         const currentChannelId =
             typeof data.currentChannelId === 'string' ? data.currentChannelId : null;
 
-        const version =
-            typeof data.version === 'number' && Number.isFinite(data.version) ? data.version : 0;
-
         let didMutate = false;
-
-        if (version !== STORAGE_VERSION) {
-            this._logger.warn(`[ChannelManager] Storage version mismatch (got ${version}, expected ${STORAGE_VERSION}), normalizing to current schema`);
-            // TODO: Implement explicit schema transformations when STORAGE_VERSION increments.
-            didMutate = true;
-        }
 
         const normalizedChannels: ChannelConfig[] = [];
         for (const raw of data.channels) {
@@ -918,7 +905,6 @@ export class ChannelManager implements IChannelManager {
 
         return {
             data: {
-                version: STORAGE_VERSION,
                 channels: normalizedChannels,
                 channelOrder: data.channelOrder,
                 currentChannelId,

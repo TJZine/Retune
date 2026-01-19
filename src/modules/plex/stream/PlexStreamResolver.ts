@@ -988,6 +988,19 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 profileName: debugUrl.searchParams.get('X-Plex-Client-Profile-Name'),
                 profileVersion: debugUrl.searchParams.get('X-Plex-Client-Profile-Version'),
                 preset: preset,
+                detectedPlatformVersion: this._detectPlatformVersion(),
+                chromeMajor: this._getChromeMajor(),
+                overrides: {
+                    platform: overridePlatform,
+                    platformVersion: overridePlatformVersion,
+                    device: overrideDevice,
+                    deviceName: overrideDeviceName,
+                    model: overrideModel,
+                    product: overrideProduct,
+                    version: overrideVersion,
+                    profileName: forcedProfileName,
+                    profileVersion: forcedProfileVersion,
+                },
             };
             console.warn(
                 `[PlexStreamResolver] Transcode URL (compat=${compatMode ? '1' : '0'}):`,
