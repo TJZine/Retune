@@ -203,4 +203,14 @@ export interface IPlexStreamResolver {
         event: K,
         handler: (payload: StreamResolverEventMap[K]) => void
     ): void;
+
+    /**
+     * Remove event handler.
+     * @param event - Event name
+     * @param handler - Handler function
+     */
+    off<K extends keyof StreamResolverEventMap>(
+        event: K,
+        handler: (payload: StreamResolverEventMap[K]) => void
+    ): void;
 }

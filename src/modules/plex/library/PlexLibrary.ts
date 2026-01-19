@@ -546,6 +546,18 @@ export class PlexLibrary implements IPlexLibrary {
         return this._emitter.on(event, handler);
     }
 
+    /**
+     * Remove an event handler.
+     * @param event - Event name
+     * @param handler - Handler function
+     */
+    off<K extends keyof PlexLibraryEvents>(
+        event: K,
+        handler: (payload: PlexLibraryEvents[K]) => void
+    ): void {
+        this._emitter.off(event, handler);
+    }
+
     // ============================================
     // Private Methods
     // ============================================

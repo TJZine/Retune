@@ -53,6 +53,8 @@ import {
     type IPlexStreamResolver,
     type PlexStreamResolverConfig,
     type StreamDecision,
+    type StreamResolverError,
+    mapPlexStreamErrorCodeToAppErrorCode,
 } from './modules/plex/stream';
 import { MIME_TYPES } from './modules/plex/stream/constants'; // Fix Direct Play MIME types
 import {
@@ -405,7 +407,8 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return null;
             },
         };
-        this._plexLibrary = new PlexLibrary(plexLibraryConfig);
+        const plexLibrary = new PlexLibrary(plexLibraryConfig);
+        this._plexLibrary = plexLibrary;
 
         // PlexStreamResolver needs config with accessors
         const streamResolverConfig: PlexStreamResolverConfig = {
@@ -444,11 +447,12 @@ export class AppOrchestrator implements IAppOrchestrator {
             },
             clientIdentifier: config.plexConfig.clientIdentifier,
         };
-        this._plexStreamResolver = new PlexStreamResolver(streamResolverConfig);
+        const plexStreamResolver = new PlexStreamResolver(streamResolverConfig);
+        this._plexStreamResolver = plexStreamResolver;
 
         // ChannelManager needs config
         const channelManagerConfig: ChannelManagerConfig = {
-            plexLibrary: this._plexLibrary,
+            plexLibrary: plexLibrary,
             storageKey: STORAGE_KEYS.CHANNELS_REAL,
             currentChannelKey: STORAGE_KEYS.CURRENT_CHANNEL,
         };
@@ -2324,6 +2328,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         this._wireSchedulerEvents();
         this._wirePlayerEvents();
+        this._wirePlexEvents();
         this._wireNavigationEvents();
         this._wireEpgEvents();
         this._wireLifecycleEvents();
@@ -2418,6 +2423,80 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._videoPlayer.off('error', errorHandler);
             }
         });
+    }
+
+    private _wirePlexEvents(): void {
+        if (this._plexLibrary) {
+            const authExpiredHandler = (): void => {
+                this.handleGlobalError(
+                    {
+                        code: AppErrorCode.AUTH_EXPIRED,
+                        message: 'Authentication expired',
+                        recoverable: true,
+                    },
+                    'plex-library'
+                );
+            };
+            this._plexLibrary.on('authExpired', authExpiredHandler);
+            this._eventUnsubscribers.push(() => {
+                if (this._plexLibrary && typeof this._plexLibrary.off === 'function') {
+                    this._plexLibrary.off('authExpired', authExpiredHandler);
+                }
+            });
+        }
+
+        if (this._plexStreamResolver) {
+            const errorHandler = (error: StreamResolverError): void => {
+                const mapped = mapPlexStreamErrorCodeToAppErrorCode(error.code);
+                if (
+                    mapped === AppErrorCode.AUTH_REQUIRED ||
+                    mapped === AppErrorCode.AUTH_EXPIRED ||
+                    mapped === AppErrorCode.AUTH_INVALID
+                ) {
+                    this.handleGlobalError(
+                        {
+                            code: mapped,
+                            message: error.message,
+                            recoverable: error.recoverable,
+                        },
+                        'plex-stream'
+                    );
+                }
+            };
+            this._plexStreamResolver.on('error', errorHandler);
+            this._eventUnsubscribers.push(() => {
+                if (this._plexStreamResolver && typeof this._plexStreamResolver.off === 'function') {
+                    this._plexStreamResolver.off('error', errorHandler);
+                }
+            });
+        }
+    }
+
+    private _tryHandleStreamResolverAuthError(error: unknown): boolean {
+        if (!error || typeof error !== 'object') {
+            return false;
+        }
+        const maybe = error as Partial<StreamResolverError>;
+        if (typeof maybe.code !== 'string' || typeof maybe.message !== 'string') {
+            return false;
+        }
+        const mapped = mapPlexStreamErrorCodeToAppErrorCode(maybe.code as StreamResolverError['code']);
+        if (
+            mapped === AppErrorCode.AUTH_REQUIRED ||
+            mapped === AppErrorCode.AUTH_EXPIRED ||
+            mapped === AppErrorCode.AUTH_INVALID
+        ) {
+            this.handleGlobalError(
+                {
+                    code: mapped,
+                    message: maybe.message,
+                    recoverable: Boolean(maybe.recoverable),
+                },
+                'plex-stream'
+            );
+            return true;
+        }
+        return false;
     }
 
     private _resetPlaybackFailureGuard(): void {
@@ -2720,6 +2799,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             await this._videoPlayer.play();
             this._resetPlaybackFailureGuard();
         } catch (error) {
+            if (this._tryHandleStreamResolverAuthError(error)) {
+                return;
+            }
             console.error('Failed to load stream:', error);
             this._handlePlaybackFailure('programStart', error);
         }
