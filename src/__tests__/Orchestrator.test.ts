@@ -1015,7 +1015,9 @@ describe('AppOrchestrator', () => {
 
         it('should find channel by number and switch', async () => {
             mockChannelManager.getChannelByNumber.mockReturnValue(mockChannel);
-            const switchSpy = jest.spyOn(orchestrator, 'switchToChannel');
+            const channelTuning = (orchestrator as unknown as { _channelTuning: { switchToChannel: (id: string) => Promise<void> } })
+                ._channelTuning;
+            const switchSpy = jest.spyOn(channelTuning, 'switchToChannel');
 
             await orchestrator.switchToChannelByNumber(5);
 

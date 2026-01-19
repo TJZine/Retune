@@ -98,6 +98,7 @@ import {
 } from './modules/ui/now-playing-info';
 import {
     InitializationCoordinator,
+    ChannelTuningCoordinator,
     type IInitializationCoordinator,
 } from './core';
 import { NowPlayingDebugManager } from './modules/debug/NowPlayingDebugManager';
@@ -312,6 +313,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _nowPlayingInfoCoordinator: NowPlayingInfoCoordinator | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
     private _playbackRecovery: PlaybackRecoveryManager | null = null;
+    private _channelTuning: ChannelTuningCoordinator | null = null;
     private _navigationCoordinator: NavigationCoordinator | null = null;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
@@ -326,7 +328,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _eventUnsubscribers: Array<() => void> = [];
     private _eventsWired: boolean = false;
     private _ready: boolean = false;
-    private _isChannelSwitching: boolean = false;
     private _channelSetupRerunRequested: boolean = false;
     private _initCoordinator: IInitializationCoordinator | null = null;
 
@@ -529,6 +530,39 @@ export class AppOrchestrator implements IAppOrchestrator {
             getMimeType: (decision: StreamDecision): string => this._getMimeType(decision),
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
+        });
+
+        this._channelTuning = new ChannelTuningCoordinator({
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            buildDailyScheduleConfig: (
+                channel: ChannelConfig,
+                items: ResolvedChannelContent['items'],
+                referenceTimeMs: number
+            ): ScheduleConfig => this._buildDailyScheduleConfig(channel, items, referenceTimeMs),
+            getLocalDayKey: (timeMs: number): number => this._getLocalDayKey(timeMs),
+            setActiveScheduleDayKey: (dayKey: number): void => {
+                this._activeScheduleDayKey = dayKey;
+            },
+            setPendingNowPlayingChannelId: (channelId: string | null): void => {
+                this._pendingNowPlayingChannelId = channelId;
+            },
+            getPendingNowPlayingChannelId: (): string | null => this._pendingNowPlayingChannelId,
+            notifyNowPlaying: (program: ScheduledProgram): void => {
+                this._notifyNowPlaying(program);
+            },
+            resetPlaybackGuardsForNewChannel: (): void => {
+                this._playbackRecovery?.resetPlaybackFailureGuard();
+                this._playbackRecovery?.resetDirectFallbackAttempts();
+            },
+            handleGlobalError: (error: AppError, context: string): void =>
+                this.handleGlobalError(error, context),
+            saveLifecycleState: async (): Promise<void> => {
+                if (this._lifecycle) {
+                    await this._lifecycle.saveState();
+                }
+            },
         });
 
         this._navigationCoordinator = new NavigationCoordinator({
@@ -1439,85 +1473,14 @@ export class AppOrchestrator implements IAppOrchestrator {
      * @param channelId - ID of channel to switch to
      */
     async switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void> {
-        if (!this._channelManager || !this._scheduler || !this._videoPlayer) {
-            console.error('Modules not initialized');
+        if (!this._channelTuning) {
+            if (!this._channelManager || !this._scheduler || !this._videoPlayer) {
+                console.error('Modules not initialized');
+            }
             return;
         }
 
-        // New channel = new playback attempt; unblock any prior fast-fail guard.
-        this._playbackRecovery?.resetPlaybackFailureGuard();
-        this._playbackRecovery?.resetDirectFallbackAttempts();
-
-        // Prevent concurrent channel switches from causing state corruption
-        if (this._isChannelSwitching) {
-            console.warn('Channel switch already in progress, ignoring request');
-            return;
-        }
-
-        this._isChannelSwitching = true;
-
-        try {
-            const channel = this._channelManager.getChannel(channelId);
-            if (!channel) {
-                console.error('Channel not found:', channelId);
-                return;
-            }
-
-            // Resolve channel content BEFORE stopping player
-            // This prevents blank screen if resolution fails
-            let content: ResolvedChannelContent;
-            try {
-                content = await this._channelManager.resolveChannelContent(channelId);
-            } catch (error) {
-                console.error('Failed to resolve channel content:', error);
-                // Report error but keep current playback running
-                this.handleGlobalError(
-                    {
-                        code: AppErrorCode.CONTENT_UNAVAILABLE,
-                        message: `Failed to switch to channel: ${channel.name}`,
-                        recoverable: true,
-                    },
-                    'switchToChannel'
-                );
-                return;
-            }
-
-            if (options?.signal?.aborted) {
-                console.warn('Channel switch aborted after content resolution.');
-                return;
-            }
-
-            // Only stop player after successful content resolution
-            this._videoPlayer.stop();
-
-            // Configure scheduler
-            const scheduleConfig = this._buildDailyScheduleConfig(channel, content.items, Date.now());
-            this._pendingNowPlayingChannelId = channelId;
-            this._scheduler.loadChannel(scheduleConfig);
-            this._activeScheduleDayKey = this._getLocalDayKey(Date.now());
-
-            const currentProgram = this._scheduler.getCurrentProgram?.();
-            if (currentProgram) {
-                this._notifyNowPlaying(currentProgram);
-            }
-            this._pendingNowPlayingChannelId = null;
-
-            // Sync to current time (this will emit programStart)
-            this._scheduler.syncToCurrentTime();
-
-            // Update current channel
-            this._channelManager.setCurrentChannel(channelId);
-
-            // Save state
-            if (this._lifecycle) {
-                await this._lifecycle.saveState();
-            }
-        } finally {
-            this._isChannelSwitching = false;
-            if (this._pendingNowPlayingChannelId === channelId) {
-                this._pendingNowPlayingChannelId = null;
-            }
-        }
+        return this._channelTuning.switchToChannel(channelId, options);
     }
 
     /**
@@ -1525,25 +1488,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * @param number - Channel number
      */
     async switchToChannelByNumber(number: number): Promise<void> {
-        if (!this._channelManager) {
-            console.error('Channel manager not initialized');
-            return;
-        }
-
-        const channel = this._channelManager.getChannelByNumber(number);
-        if (!channel) {
-            this.handleGlobalError(
-                {
-                    code: AppErrorCode.CHANNEL_NOT_FOUND,
-                    message: `Channel ${number} not found`,
-                    recoverable: true,
-                },
-                'switchToChannelByNumber'
-            );
-            return;
-        }
-
-        await this.switchToChannel(channel.id);
+        return this._channelTuning?.switchToChannelByNumber(number) ?? Promise.resolve();
     }
 
     /**
