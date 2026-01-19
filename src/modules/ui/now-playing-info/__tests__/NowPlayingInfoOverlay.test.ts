@@ -61,6 +61,24 @@ describe('NowPlayingInfoOverlay', () => {
         expect(container.querySelector('.now-playing-info-context')?.textContent).toBe('12 Test Channel');
     });
 
+    it('should show up next when provided', () => {
+        const viewModel: NowPlayingInfoViewModel = {
+            ...baseViewModel,
+            upNext: { title: 'Next Thing', startsAtMs: Date.now() + 60_000 },
+        };
+        overlay.show(viewModel);
+        const upNext = container.querySelector('.now-playing-info-up-next') as HTMLElement;
+        expect(upNext.style.display).toBe('block');
+        expect(upNext.textContent).toContain('Up next');
+        expect(upNext.textContent).toContain('Next Thing');
+    });
+
+    it('should hide up next when missing', () => {
+        overlay.show(baseViewModel);
+        const upNext = container.querySelector('.now-playing-info-up-next') as HTMLElement;
+        expect(upNext.style.display).toBe('none');
+    });
+
     it('should hide poster when no URL is provided', () => {
         overlay.show({ ...baseViewModel, posterUrl: null });
         const poster = container.querySelector('.now-playing-info-poster') as HTMLImageElement;

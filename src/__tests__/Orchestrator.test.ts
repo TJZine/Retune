@@ -6,6 +6,12 @@
 
 
 import { AppOrchestrator, type OrchestratorConfig, AppErrorCode } from '../Orchestrator';
+import {
+    NowPlayingInfoCoordinator,
+    getNowPlayingInfoAutoHideMs,
+} from '../modules/ui/now-playing-info/NowPlayingInfoCoordinator';
+import type { IPlexLibrary } from '../modules/plex/library';
+import type { NowPlayingInfoConfig } from '../modules/ui/now-playing-info';
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -486,8 +492,7 @@ describe('AppOrchestrator', () => {
             mockLocalStorage.getItem.mockReturnValue(null);
             await orchestrator.initialize(configWithAutoHide);
 
-            const autoHideMs = (orchestrator as unknown as { _getNowPlayingInfoAutoHideMs: () => number })
-                ._getNowPlayingInfoAutoHideMs();
+            const autoHideMs = getNowPlayingInfoAutoHideMs(configWithAutoHide.nowPlayingInfoConfig);
 
             expect(autoHideMs).toBe(15_000);
         });
@@ -520,8 +525,22 @@ describe('AppOrchestrator', () => {
             const channel = { id: 'ch1', name: 'Test Channel', number: 1 };
             const details = { type: 'movie', title: 'Test Movie', year: 2024, durationMs: 60_000, thumb: '/thumb' };
 
-            (orchestrator as unknown as { _buildNowPlayingInfoViewModel: (a: unknown, b: unknown, c: unknown) => unknown })
-                ._buildNowPlayingInfoViewModel(program as unknown, channel as unknown, details as unknown);
+            const coordinator = new NowPlayingInfoCoordinator({
+                nowPlayingModalId: 'now-playing-info',
+                getNavigation: (): null => null,
+                getScheduler: (): null => null,
+                getChannelManager: (): null => null,
+                getPlexLibrary: (): IPlexLibrary => mockPlexLibrary as unknown as IPlexLibrary,
+                getNowPlayingInfo: (): null => null,
+                getNowPlayingInfoConfig: (): NowPlayingInfoConfig | null => configWithPosterSizes.nowPlayingInfoConfig,
+                buildPlexResourceUrl: (): null => null,
+                buildDebugText: (): string | null => null,
+                maybeFetchStreamDecisionForDebugHud: (): Promise<void> => Promise.resolve(),
+                getAutoHideMs: (): number => 0,
+                getCurrentProgramForPlayback: (): null => null,
+            });
+            (coordinator as unknown as { buildNowPlayingInfoViewModel: (a: unknown, b: unknown, c: unknown) => unknown })
+                .buildNowPlayingInfoViewModel(program as unknown, channel as unknown, details as unknown);
 
             expect(mockPlexLibrary.getImageUrl).toHaveBeenCalledWith('/thumb', 111, 222);
         });

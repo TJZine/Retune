@@ -94,16 +94,17 @@ import {
     NowPlayingInfoOverlay,
     type INowPlayingInfoOverlay,
     type NowPlayingInfoConfig,
-    type NowPlayingInfoViewModel,
     NOW_PLAYING_INFO_MODAL_ID,
-    NOW_PLAYING_INFO_DEFAULTS,
-    NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS,
 } from './modules/ui/now-playing-info';
 import {
     InitializationCoordinator,
     type IInitializationCoordinator,
 } from './core';
 import { NowPlayingDebugManager } from './modules/debug/NowPlayingDebugManager';
+import {
+    NowPlayingInfoCoordinator,
+    getNowPlayingInfoAutoHideMs,
+} from './modules/ui/now-playing-info/NowPlayingInfoCoordinator';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
@@ -308,8 +309,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _epg: IEPGComponent | null = null;
     private _epgCoordinator: EPGCoordinator | null = null;
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
-    private _nowPlayingInfoFetchToken = 0;
-    private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+    private _nowPlayingInfoCoordinator: NowPlayingInfoCoordinator | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
     private _playbackRecovery: PlaybackRecoveryManager | null = null;
     private _navigationCoordinator: NavigationCoordinator | null = null;
@@ -487,7 +487,29 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
             getCurrentStreamDecision: (): StreamDecision | null => this._currentStreamDecision,
             requestNowPlayingOverlayRefresh: (): void =>
-                this._refreshNowPlayingInfoOverlayIfOpen(),
+                this._nowPlayingInfoCoordinator?.refreshIfOpen(),
+        });
+
+        this._nowPlayingInfoCoordinator = new NowPlayingInfoCoordinator({
+            nowPlayingModalId: NOW_PLAYING_INFO_MODAL_ID,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getPlexLibrary: (): IPlexLibrary | null => this._plexLibrary,
+            getNowPlayingInfo: (): INowPlayingInfoOverlay | null => this._nowPlayingInfo,
+            getNowPlayingInfoConfig: (): NowPlayingInfoConfig | null =>
+                this._config?.nowPlayingInfoConfig ?? null,
+            buildPlexResourceUrl: (pathOrUrl: string): string | null =>
+                this._buildPlexResourceUrl(pathOrUrl),
+            buildDebugText: (): string | null =>
+                this._nowPlayingDebugManager?.buildNowPlayingStreamDebugText() ?? null,
+            maybeFetchStreamDecisionForDebugHud: (): Promise<void> =>
+                this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud() ??
+                Promise.resolve(),
+            getAutoHideMs: (): number =>
+                getNowPlayingInfoAutoHideMs(this._config?.nowPlayingInfoConfig),
+            getCurrentProgramForPlayback: (): ScheduledProgram | null =>
+                this._currentProgramForPlayback,
         });
 
         this._playbackRecovery = new PlaybackRecoveryManager({
@@ -522,8 +544,10 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return isOpen;
             },
             toggleNowPlayingInfoOverlay: (): void => this._toggleNowPlayingInfoOverlay(),
-            showNowPlayingInfoOverlay: (): void => this._showNowPlayingInfoOverlay(),
-            hideNowPlayingInfoOverlay: (): void => this._hideNowPlayingInfoOverlay(),
+            showNowPlayingInfoOverlay: (): void =>
+                this._nowPlayingInfoCoordinator?.handleModalOpen(NOW_PLAYING_INFO_MODAL_ID),
+            hideNowPlayingInfoOverlay: (): void =>
+                this._nowPlayingInfoCoordinator?.handleModalClose(NOW_PLAYING_INFO_MODAL_ID),
             setLastChannelChangeSourceRemote: (): void => {
                 this._lastChannelChangeSource = 'remote';
             },
@@ -645,7 +669,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._epg) {
             this._epg.destroy();
         }
-        this._stopNowPlayingInfoLiveUpdates();
+        this._nowPlayingInfoCoordinator?.dispose();
         if (this._nowPlayingInfo) {
             this._nowPlayingInfo.destroy();
         }
@@ -2221,7 +2245,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._currentProgramForPlayback = program;
         const programAtStart = program;
         this._notifyNowPlaying(program);
-        this._updateNowPlayingInfoForProgram(program);
+        this._nowPlayingInfoCoordinator?.onProgramStart(program);
         this._epgCoordinator?.refreshEpgScheduleForLiveChannel();
 
         try {
@@ -2300,256 +2324,6 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         this._navigation.openModal(NOW_PLAYING_INFO_MODAL_ID);
-    }
-
-    private _showNowPlayingInfoOverlay(): void {
-        if (!this._nowPlayingInfo || !this._channelManager) {
-            return;
-        }
-        const program = ((): ScheduledProgram | null => {
-            // Prefer a fresh schedule query so elapsed/remaining are correct even if the
-            // overlay is opened some time after the channel was tuned.
-            try {
-                if (this._scheduler) {
-                    return this._scheduler.getCurrentProgram();
-                }
-            } catch {
-                // Fallback to last-known snapshot if scheduler is unavailable.
-            }
-            return this._currentProgramForPlayback;
-        })();
-        if (!program) {
-            this._navigation?.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-            return;
-        }
-        const channel = this._channelManager.getCurrentChannel();
-        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
-        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
-        this._nowPlayingInfo.show(viewModel);
-        this._startNowPlayingInfoLiveUpdates();
-        void this._fetchNowPlayingInfoDetails(program, channel);
-        void this._nowPlayingDebugManager?.maybeFetchNowPlayingStreamDecisionForDebugHud();
-    }
-
-    private _hideNowPlayingInfoOverlay(): void {
-        if (!this._nowPlayingInfo) {
-            return;
-        }
-        this._stopNowPlayingInfoLiveUpdates();
-        this._nowPlayingInfo.hide();
-    }
-
-    private _startNowPlayingInfoLiveUpdates(): void {
-        if (this._nowPlayingInfoLiveUpdateTimer !== null) {
-            return;
-        }
-        // Only update while the modal is open; do not reset auto-hide timer.
-        this._nowPlayingInfoLiveUpdateTimer = setInterval(() => {
-            if (!this._nowPlayingInfo || !this._navigation || !this._scheduler) {
-                return;
-            }
-            if (!this._navigation.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-                return;
-            }
-            try {
-                const program = this._scheduler.getCurrentProgram();
-                if (!program) return;
-                const channel = this._channelManager?.getCurrentChannel() ?? null;
-                const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
-                this._nowPlayingInfo.update(viewModel);
-            } catch {
-                // Best-effort; never throw from a UI refresh timer.
-            }
-        }, 1000);
-    }
-
-    private _refreshNowPlayingInfoOverlayIfOpen(): void {
-        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-            return;
-        }
-        try {
-            const freshProgram =
-                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback;
-            const channel = this._channelManager?.getCurrentChannel() ?? null;
-            if (freshProgram) {
-                const viewModel = this._buildNowPlayingInfoViewModel(freshProgram, channel, null);
-                this._nowPlayingInfo.update(viewModel);
-            }
-        } catch {
-            // ignore
-        }
-    }
-
-    private _stopNowPlayingInfoLiveUpdates(): void {
-        if (this._nowPlayingInfoLiveUpdateTimer === null) {
-            return;
-        }
-        clearInterval(this._nowPlayingInfoLiveUpdateTimer);
-        this._nowPlayingInfoLiveUpdateTimer = null;
-    }
-
-    private _updateNowPlayingInfoForProgram(program: ScheduledProgram): void {
-        if (!this._nowPlayingInfo || !this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
-            return;
-        }
-        const channel = this._channelManager?.getCurrentChannel() ?? null;
-        const viewModel = this._buildNowPlayingInfoViewModel(program, channel, null);
-        this._nowPlayingInfo.setAutoHideMs(this._getNowPlayingInfoAutoHideMs());
-        this._nowPlayingInfo.update(viewModel);
-        void this._fetchNowPlayingInfoDetails(program, channel);
-    }
-
-    private async _fetchNowPlayingInfoDetails(
-        program: ScheduledProgram,
-        channel: ChannelConfig | null
-    ): Promise<void> {
-        if (!this._plexLibrary || !this._nowPlayingInfo) {
-            return;
-        }
-        const fetchToken = ++this._nowPlayingInfoFetchToken;
-        try {
-            const item = await this._plexLibrary.getItem(program.item.ratingKey);
-            if (fetchToken !== this._nowPlayingInfoFetchToken) {
-                return;
-            }
-            if (!item || !this._nowPlayingInfo.isVisible()) {
-                return;
-            }
-            const viewModel = this._buildNowPlayingInfoViewModel(program, channel, item);
-            this._nowPlayingInfo.update(viewModel);
-        } catch (error) {
-            console.warn('[Orchestrator] Failed to load Now Playing details:', error);
-        }
-    }
-
-    private _buildNowPlayingInfoViewModel(
-        program: ScheduledProgram,
-        channel: ChannelConfig | null,
-        details: PlexMediaItem | null
-    ): NowPlayingInfoViewModel {
-        const item = program.item;
-        const channelName = channel?.name;
-        const channelNumber = channel?.number;
-
-        let title = item.title;
-        let subtitle = '';
-
-        if (item.type === 'episode') {
-            const showTitle =
-                details?.grandparentTitle ??
-                this._extractShowTitle(item.fullTitle) ??
-                item.title;
-            title = showTitle || item.title;
-            const episodeTitle = details?.title ?? item.title;
-            const seasonNum = details?.seasonNumber ?? item.seasonNumber;
-            const epNum = details?.episodeNumber ?? item.episodeNumber;
-            const episodeCode = this._formatEpisodeCode(seasonNum, epNum);
-            subtitle = episodeCode ? `${episodeCode} • ${episodeTitle}` : episodeTitle;
-        } else {
-            const year = details?.year ?? item.year;
-            title = year > 0 ? `${item.title} (${year})` : item.title;
-            const contentRating = details?.contentRating ?? item.contentRating ?? '';
-            const runtimeMs = details?.durationMs ?? item.durationMs;
-            const runtime = runtimeMs > 0 ? this._formatDuration(runtimeMs) : '';
-            if (contentRating && runtime) {
-                subtitle = `${contentRating} • ${runtime}`;
-            } else if (contentRating) {
-                subtitle = contentRating;
-            } else if (runtime) {
-                subtitle = runtime;
-            }
-        }
-
-        const summary = details?.summary ?? '';
-        const posterPath = details?.thumb ?? item.thumb ?? null;
-        let posterUrl: string | null = null;
-        if (posterPath) {
-            if (this._plexLibrary) {
-                const posterWidth = this._config?.nowPlayingInfoConfig.posterWidth ?? NOW_PLAYING_INFO_DEFAULTS.posterWidth;
-                const posterHeight = this._config?.nowPlayingInfoConfig.posterHeight ?? NOW_PLAYING_INFO_DEFAULTS.posterHeight;
-                const resized = this._plexLibrary.getImageUrl(
-                    posterPath,
-                    posterWidth,
-                    posterHeight
-                );
-                posterUrl = resized || null;
-            }
-            if (!posterUrl) {
-                posterUrl = this._buildPlexResourceUrl(posterPath);
-            }
-        }
-
-        const debugText = this._nowPlayingDebugManager?.buildNowPlayingStreamDebugText() ?? null;
-
-        const baseViewModel: NowPlayingInfoViewModel = {
-            title,
-            subtitle,
-            elapsedMs: program.elapsedMs,
-            durationMs: program.item.durationMs,
-            posterUrl,
-            ...(channelName ? { channelName } : {}),
-            ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
-            ...(debugText ? { debugText } : {}),
-        };
-
-        if (summary) {
-            return {
-                ...baseViewModel,
-                description: summary,
-            };
-        }
-
-        return baseViewModel;
-    }
-
-    private _formatEpisodeCode(seasonNumber?: number, episodeNumber?: number): string {
-        const season =
-            typeof seasonNumber === 'number' ? `S${String(seasonNumber).padStart(2, '0')}` : '';
-        const episode =
-            typeof episodeNumber === 'number' ? `E${String(episodeNumber).padStart(2, '0')}` : '';
-        return season && episode ? `${season}${episode}` : '';
-    }
-
-    private _extractShowTitle(fullTitle: string | null | undefined): string | null {
-        if (!fullTitle) return null;
-        const parts = fullTitle.split(' - ');
-        if (parts.length >= 2) {
-            const first = parts[0] ?? '';
-            return first.trim() || null;
-        }
-        return null;
-    }
-
-    private _formatDuration(durationMs: number): string {
-        const totalMinutes = Math.floor(durationMs / 60000);
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-        if (hours === 0) {
-            return `${minutes}m`;
-        }
-        if (minutes === 0) {
-            return `${hours}h`;
-        }
-        return `${hours}h ${minutes}m`;
-    }
-
-    private _getNowPlayingInfoAutoHideMs(): number {
-        const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS);
-        const parsed = raw ? Number(raw) : NaN;
-        const configured = this._config?.nowPlayingInfoConfig.autoHideMs;
-        const candidates = [
-            ...(Number.isFinite(parsed) ? [parsed] : []),
-            ...(typeof configured === 'number' && Number.isFinite(configured) ? [configured] : []),
-        ];
-        for (const candidate of candidates) {
-            if (candidate > 0) {
-                const normalized = Math.max(1000, Math.floor(candidate));
-                if (NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS.includes(normalized as (typeof NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS)[number])) {
-                    return normalized;
-                }
-            }
-        }
-        return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
     }
 
     private _buildPlexResourceUrl(pathOrUrl: string): string | null {
