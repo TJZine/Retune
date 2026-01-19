@@ -137,6 +137,7 @@ export class ChannelSetupScreen {
         this._isLoading = false;
         this._isBuilding = false;
         this._maxChannels = DEFAULT_CHANNEL_SETUP_MAX;
+        this._minItems = 10;
         this._errorEl.textContent = '';
     }
 
@@ -381,9 +382,10 @@ export class ChannelSetupScreen {
         minItemsButton.addEventListener('click', () => {
             this._preferredFocusId = minItemsButton.id;
             const currentIndex = this._minItemsOptions.indexOf(this._minItems);
+            const defaultIndex = Math.max(0, this._minItemsOptions.indexOf(10));
             const nextIndex = currentIndex >= 0
                 ? (currentIndex + 1) % this._minItemsOptions.length
-                : 2; // Default to 10 if not found
+                : defaultIndex; // Default to 10 if present, else first option
             this._minItems = this._minItemsOptions[nextIndex] ?? 10;
             this._renderStep();
         });
@@ -561,6 +563,7 @@ export class ChannelSetupScreen {
                 taskLabel.textContent = 'Canceled';
                 detailLabel.textContent = '';
                 barFill.style.width = '0%';
+                barFill.classList.remove('indeterminate');
 
                 cancelButton.disabled = false;
                 cancelButton.textContent = 'Back';

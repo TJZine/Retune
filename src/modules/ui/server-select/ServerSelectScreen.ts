@@ -11,6 +11,7 @@ import type { FocusableElement } from '../../navigation';
 import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
 import { safeLocalStorageGet } from '../../../utils/storage';
 
+const FOCUS_RESTORE_DELAY_MS = 50;
 
 export class ServerSelectScreen {
     private _container: HTMLElement;
@@ -178,7 +179,7 @@ export class ServerSelectScreen {
                 this._restoreFocusTimeoutId = null;
                 if (!this._container.classList.contains('visible')) return;
                 nav.setFocus('btn-server-refresh');
-            }, 50);
+            }, FOCUS_RESTORE_DELAY_MS);
         }
     }
 
@@ -382,13 +383,16 @@ export class ServerSelectScreen {
             ? `${health.latencyMs}ms`
             : null;
 
-        const lastInfo = health?.status === 'auth_required'
-            ? 'Auth required'
-            : typeLabel && latencyLabel
-                ? `Last: ${typeLabel} ${latencyLabel}`
-                : typeLabel
-                    ? `Last: ${typeLabel}`
-                    : 'Last: —';
+        let lastInfo: string;
+        if (health?.status === 'auth_required') {
+            lastInfo = 'Auth required';
+        } else if (typeLabel && latencyLabel) {
+            lastInfo = `Last: ${typeLabel} ${latencyLabel}`;
+        } else if (typeLabel) {
+            lastInfo = `Last: ${typeLabel}`;
+        } else {
+            lastInfo = 'Last: —';
+        }
 
         return `${ownership} • ${lastInfo}`;
     }

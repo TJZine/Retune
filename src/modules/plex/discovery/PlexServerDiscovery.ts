@@ -822,7 +822,7 @@ export class PlexServerDiscovery implements IPlexServerDiscovery {
                 AppErrorCode.SERVER_UNREACHABLE,
                 'Server error: ' + String(response.status),
                 response.status,
-                false
+                true
             );
         }
         throw new PlexApiError(
