@@ -35,6 +35,8 @@ export interface NowPlayingInfoCoordinatorDeps {
 export class NowPlayingInfoCoordinator {
     private nowPlayingInfoFetchToken = 0;
     private nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+    private nowPlayingInfoDetails: PlexMediaItem | null = null;
+    private nowPlayingInfoDetailsRatingKey: string | null = null;
 
     constructor(private readonly deps: NowPlayingInfoCoordinatorDeps) {}
 
@@ -80,6 +82,7 @@ export class NowPlayingInfoCoordinator {
     }
 
     onProgramStart(program: ScheduledProgram): void {
+        this.clearNowPlayingInfoDetails();
         const overlay = this.deps.getNowPlayingInfo();
         const navigation = this.deps.getNavigation();
         if (!overlay || !navigation?.isModalOpen(this.deps.nowPlayingModalId)) {
@@ -115,6 +118,7 @@ export class NowPlayingInfoCoordinator {
     dispose(): void {
         this.stopLiveUpdates();
         this.nowPlayingInfoFetchToken += 1;
+        this.clearNowPlayingInfoDetails();
     }
 
     private startLiveUpdates(): void {
@@ -136,7 +140,8 @@ export class NowPlayingInfoCoordinator {
                 const program = scheduler.getCurrentProgram();
                 if (!program) return;
                 const channel = this.deps.getChannelManager()?.getCurrentChannel() ?? null;
-                const viewModel = this.buildNowPlayingInfoViewModel(program, channel, null);
+                const details = this.getCachedDetailsForProgram(program);
+                const viewModel = this.buildNowPlayingInfoViewModel(program, channel, details);
                 overlay.update(viewModel);
             } catch {
                 // Best-effort; never throw from a UI refresh timer.
@@ -170,6 +175,8 @@ export class NowPlayingInfoCoordinator {
             if (!item || !overlay.isVisible()) {
                 return;
             }
+            this.nowPlayingInfoDetails = item;
+            this.nowPlayingInfoDetailsRatingKey = program.item.ratingKey;
             const viewModel = this.buildNowPlayingInfoViewModel(program, channel, item);
             overlay.update(viewModel);
         } catch (error) {
@@ -314,6 +321,21 @@ export class NowPlayingInfoCoordinator {
             return `${hours}h`;
         }
         return `${hours}h ${minutes}m`;
+    }
+
+    private clearNowPlayingInfoDetails(): void {
+        this.nowPlayingInfoDetails = null;
+        this.nowPlayingInfoDetailsRatingKey = null;
+    }
+
+    private getCachedDetailsForProgram(program: ScheduledProgram): PlexMediaItem | null {
+        if (!this.nowPlayingInfoDetails || !this.nowPlayingInfoDetailsRatingKey) {
+            return null;
+        }
+        if (program.item.ratingKey !== this.nowPlayingInfoDetailsRatingKey) {
+            return null;
+        }
+        return this.nowPlayingInfoDetails;
     }
 }
 

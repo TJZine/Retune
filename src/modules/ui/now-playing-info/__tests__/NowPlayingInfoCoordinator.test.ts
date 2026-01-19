@@ -213,6 +213,38 @@ describe('NowPlayingInfoCoordinator', () => {
         jest.useRealTimers();
     });
 
+    it('live updates preserve description after details are fetched', async () => {
+        jest.useFakeTimers();
+        const plexLibrary = makePlexLibrary({
+            getItem: jest.fn().mockResolvedValue({
+                ratingKey: 'rk1',
+                title: 'Detail Title',
+                type: 'movie',
+                summary: 'Detail summary',
+            } as PlexMediaItem),
+        });
+        const { coordinator, overlay } = setup({
+            getPlexLibrary: () => plexLibrary,
+        });
+
+        coordinator.handleModalOpen(modalId);
+        await Promise.resolve();
+
+        const updates = (overlay.update as jest.Mock).mock.calls;
+        expect(updates.length).toBeGreaterThan(0);
+        const lastUpdate = updates[updates.length - 1]?.[0] as { description?: string };
+        expect(lastUpdate.description).toBe('Detail summary');
+
+        jest.advanceTimersByTime(1100);
+        const nextUpdate = (overlay.update as jest.Mock).mock.calls[
+            (overlay.update as jest.Mock).mock.calls.length - 1
+        ]?.[0] as { description?: string };
+        expect(nextUpdate.description).toBe('Detail summary');
+
+        coordinator.handleModalClose(modalId);
+        jest.useRealTimers();
+    });
+
     it('handleModalClose stops live updates', () => {
         jest.useFakeTimers();
         const { coordinator, overlay } = setup();
