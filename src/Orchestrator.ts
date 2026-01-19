@@ -83,6 +83,7 @@ import {
     type PlaybackError,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
+import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
 import {
     EPGComponent,
     type IEPGComponent,
@@ -315,6 +316,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _nowPlayingInfoFetchToken = 0;
     private _nowPlayingInfoLiveUpdateTimer: ReturnType<typeof setInterval> | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
+    private _playbackRecovery: PlaybackRecoveryManager | null = null;
     private _nowPlayingHandler: ((message: string) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
@@ -332,19 +334,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _channelSetupRerunRequested: boolean = false;
     private _initCoordinator: IInitializationCoordinator | null = null;
 
-    // Playback fast-fail guard: prevents tight skip loops when all items fail to play.
-    private _playbackFailureWindowStartMs: number = 0;
-    private _playbackFailureCount: number = 0;
-    private _playbackFailureTripped: boolean = false;
-    private _playbackFailureWindowMs: number = 2000;
-    private _playbackFailureTripCount: number = 3;
-
-    // Playback fallback: when a Direct stream fails due to container/codec support, retry via HLS Direct Stream.
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
-    private _directFallbackAttemptedForItemKey: Set<string> = new Set();
-    private _streamRecoveryInProgress: boolean = false;
 
     constructor() {
         this._initializeModuleStatus();
@@ -501,6 +493,25 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._refreshNowPlayingInfoOverlayIfOpen(),
         });
 
+        this._playbackRecovery = new PlaybackRecoveryManager({
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            getCurrentProgramForPlayback: (): ScheduledProgram | null => this._currentProgramForPlayback,
+            getCurrentStreamDescriptor: (): StreamDescriptor | null => this._currentStreamDescriptor,
+            setCurrentStreamDecision: (decision: StreamDecision): void => {
+                this._currentStreamDecision = decision;
+            },
+            setCurrentStreamDescriptor: (descriptor: StreamDescriptor): void => {
+                this._currentStreamDescriptor = descriptor;
+            },
+            buildPlexResourceUrl: (pathOrUrl: string): string | null =>
+                this._buildPlexResourceUrl(pathOrUrl),
+            getMimeType: (decision: StreamDecision): string => this._getMimeType(decision),
+            handleGlobalError: (error: AppError, context: string): void =>
+                this.handleGlobalError(error, context),
+        });
+
         // Create InitializationCoordinator with dependencies and callbacks
         this._initCoordinator = new InitializationCoordinator(
             config,
@@ -545,7 +556,7 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Follows 5-phase initialization order per spec.
      */
     async start(): Promise<void> {
-        this._resetPlaybackFailureGuard();
+        this._playbackRecovery?.resetPlaybackFailureGuard();
         if (!this._initCoordinator) {
             throw new Error('Orchestrator must be initialized before starting');
         }
@@ -1385,8 +1396,8 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
 
         // New channel = new playback attempt; unblock any prior fast-fail guard.
-        this._resetPlaybackFailureGuard();
-        this._directFallbackAttemptedForItemKey.clear();
+        this._playbackRecovery?.resetPlaybackFailureGuard();
+        this._playbackRecovery?.resetDirectFallbackAttempts();
 
         // Prevent concurrent channel switches from causing state corruption
         if (this._isChannelSwitching) {
@@ -2204,19 +2215,19 @@ export class AppOrchestrator implements IAppOrchestrator {
                 if (error.code === 'PLAYBACK_FORMAT_UNSUPPORTED') {
                     void (async (): Promise<void> => {
                         try {
-                            const ok = await this._attemptTranscodeFallbackForCurrentProgram(
+                            const ok = await this._playbackRecovery?.attemptTranscodeFallbackForCurrentProgram(
                                 'PLAYBACK_FORMAT_UNSUPPORTED'
                             );
                             if (!ok) {
-                                this._handlePlaybackFailure('video-player', error);
+                                this._playbackRecovery?.handlePlaybackFailure('video-player', error);
                             }
                         } catch (fallbackError) {
-                            this._handlePlaybackFailure('video-player', fallbackError);
+                            this._playbackRecovery?.handlePlaybackFailure('video-player', fallbackError);
                         }
                     })();
                     return;
                 }
-                this._handlePlaybackFailure('video-player', error);
+                this._playbackRecovery?.handlePlaybackFailure('video-player', error);
             }
         };
         this._videoPlayer.on('error', errorHandler);
@@ -2271,97 +2282,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                     this._plexStreamResolver.off('error', errorHandler);
                 }
             });
-        }
-    }
-
-    private _tryHandleStreamResolverAuthError(error: unknown): boolean {
-        if (!error || typeof error !== 'object') {
-            return false;
-        }
-        const maybe = error as Partial<StreamResolverError>;
-        if (typeof maybe.code !== 'string' || typeof maybe.message !== 'string') {
-            return false;
-        }
-        const mapped = mapPlexStreamErrorCodeToAppErrorCode(maybe.code as StreamResolverError['code']);
-        if (
-            mapped === AppErrorCode.AUTH_REQUIRED ||
-            mapped === AppErrorCode.AUTH_EXPIRED ||
-            mapped === AppErrorCode.AUTH_INVALID
-        ) {
-            this.handleGlobalError(
-                {
-                    code: mapped,
-                    message: maybe.message,
-                    recoverable: Boolean(maybe.recoverable),
-                },
-                'plex-stream'
-            );
-            return true;
-        }
-        return false;
-    }
-
-    private _resetPlaybackFailureGuard(): void {
-        this._playbackFailureWindowStartMs = 0;
-        this._playbackFailureCount = 0;
-        this._playbackFailureTripped = false;
-        if (this._scheduler) {
-            this._scheduler.resumeSyncTimer();
-        }
-    }
-
-    private _handlePlaybackFailure(context: string, error: unknown): void {
-        if (this._playbackFailureTripped) {
-            return;
-        }
-
-        const now = Date.now();
-
-        // Reset window if stale
-        if (
-            this._playbackFailureWindowStartMs === 0 ||
-            now - this._playbackFailureWindowStartMs > this._playbackFailureWindowMs
-        ) {
-            this._playbackFailureWindowStartMs = now;
-            this._playbackFailureCount = 0;
-        }
-
-        this._playbackFailureCount++;
-
-        // Trip guard: stop auto-skipping and surface the error to the user
-        if (this._playbackFailureCount >= this._playbackFailureTripCount) {
-            this._playbackFailureTripped = true;
-            if (this._scheduler) {
-                this._scheduler.pauseSyncTimer();
-            }
-            const message = ((): string => {
-                if (error instanceof Error) {
-                    return error.message;
-                }
-                if (
-                    error &&
-                    typeof error === 'object' &&
-                    'message' in error &&
-                    typeof (error as { message?: unknown }).message === 'string'
-                ) {
-                    return (error as { message: string }).message;
-                }
-                return String(error);
-            })();
-            this.handleGlobalError(
-                {
-                    code: AppErrorCode.PLAYBACK_FAILED,
-                    message: `Playback failed repeatedly (${context}): ${message}`,
-                    recoverable: true,
-                },
-                'playback'
-            );
-            return;
-        }
-
-        // Single/rare failure: skip as before
-        if (this._scheduler) {
-            this._scheduler.skipToNext();
         }
     }
 
@@ -2562,8 +2482,11 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._epgCoordinator?.refreshEpgScheduleForLiveChannel();
 
         try {
-            const stream = await this._resolveStreamForProgram(programAtStart);
+            const stream = await this._playbackRecovery?.resolveStreamForProgram(programAtStart);
             if (this._currentProgramForPlayback !== programAtStart) {
+                return;
+            }
+            if (!stream) {
                 return;
             }
             this._currentStreamDescriptor = stream;
@@ -2575,13 +2498,13 @@ export class AppOrchestrator implements IAppOrchestrator {
 
             await this._videoPlayer.loadStream(stream);
             await this._videoPlayer.play();
-            this._resetPlaybackFailureGuard();
+            this._playbackRecovery?.resetPlaybackFailureGuard();
         } catch (error) {
-            if (this._tryHandleStreamResolverAuthError(error)) {
+            if (this._playbackRecovery?.tryHandleStreamResolverAuthError(error)) {
                 return;
             }
             console.error('Failed to load stream:', error);
-            this._handlePlaybackFailure('programStart', error);
+            this._playbackRecovery?.handlePlaybackFailure('programStart', error);
         }
     }
 
@@ -2884,137 +2807,6 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         }
         return NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
-    }
-
-    private async _attemptTranscodeFallbackForCurrentProgram(reason: string): Promise<boolean> {
-        if (this._streamRecoveryInProgress) {
-            return false;
-        }
-        const program = this._currentProgramForPlayback;
-        if (!program || !this._videoPlayer || !this._plexStreamResolver) {
-            return false;
-        }
-        const programAtStart = program;
-        const currentProtocol = this._currentStreamDescriptor?.protocol ?? null;
-        if (currentProtocol !== 'direct') {
-            return false;
-        }
-        const itemKey = program.item.ratingKey;
-        if (this._directFallbackAttemptedForItemKey.has(itemKey)) {
-            return false;
-        }
-
-        this._directFallbackAttemptedForItemKey.add(itemKey);
-        this._streamRecoveryInProgress = true;
-
-        try {
-            console.warn('[Orchestrator] Direct playback failed, retrying via HLS Direct Stream:', {
-                reason,
-                itemKey,
-            });
-
-            const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
-            const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
-                itemKey: itemKey,
-                startOffsetMs: clampedOffset,
-                directPlay: false,
-            });
-            if (this._currentProgramForPlayback !== programAtStart) {
-                return false;
-            }
-            this._currentStreamDecision = decision;
-
-            const metadata: StreamDescriptor['mediaMetadata'] = {
-                title: program.item.title,
-                durationMs: program.item.durationMs,
-            };
-            if (program.item.type === 'episode' && program.item.fullTitle) {
-                metadata.subtitle = program.item.fullTitle;
-            }
-            if (program.item.thumb) {
-                const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
-                if (thumbUrl) {
-                    metadata.thumb = thumbUrl;
-                }
-            }
-            if (program.item.year !== undefined) {
-                metadata.year = program.item.year;
-            }
-
-            const descriptor: StreamDescriptor = {
-                url: decision.playbackUrl,
-                protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-                mimeType: this._getMimeType(decision),
-                startPositionMs: clampedOffset,
-                mediaMetadata: metadata,
-                subtitleTracks: [],
-                audioTracks: [],
-                durationMs: program.item.durationMs,
-                isLive: false,
-            };
-
-            this._currentStreamDescriptor = descriptor;
-            await this._videoPlayer.loadStream(descriptor);
-            await this._videoPlayer.play();
-            this._resetPlaybackFailureGuard();
-            return true;
-        } catch (error) {
-            console.error('[Orchestrator] Transcode fallback failed:', error);
-            return false;
-        } finally {
-            this._streamRecoveryInProgress = false;
-        }
-    }
-
-    /**
-     * Resolve stream URL for a scheduled program.
-     */
-    private async _resolveStreamForProgram(
-        program: ScheduledProgram
-    ): Promise<StreamDescriptor> {
-        if (!this._plexStreamResolver) {
-            throw new Error('Stream resolver not initialized');
-        }
-
-        // Defensive: clamp elapsed time to valid bounds
-        const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
-
-        const decision: StreamDecision = await this._plexStreamResolver.resolveStream({
-            itemKey: program.item.ratingKey,
-            startOffsetMs: clampedOffset,
-            directPlay: true,
-        });
-        this._currentStreamDecision = decision;
-
-        // Build mediaMetadata carefully for exactOptionalPropertyTypes
-        const metadata: StreamDescriptor['mediaMetadata'] = {
-            title: program.item.title,
-            durationMs: program.item.durationMs,
-        };
-        if (program.item.type === 'episode' && program.item.fullTitle) {
-            metadata.subtitle = program.item.fullTitle;
-        }
-        if (program.item.thumb) {
-            const thumbUrl = this._buildPlexResourceUrl(program.item.thumb);
-            if (thumbUrl) {
-                metadata.thumb = thumbUrl;
-            }
-        }
-        if (program.item.year !== undefined) {
-            metadata.year = program.item.year;
-        }
-
-        return {
-            url: decision.playbackUrl,
-            protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-            mimeType: this._getMimeType(decision),
-            startPositionMs: clampedOffset,
-            mediaMetadata: metadata,
-            subtitleTracks: [],
-            audioTracks: [],
-            durationMs: program.item.durationMs,
-            isLive: false,
-        };
     }
 
     private _buildPlexResourceUrl(pathOrUrl: string): string | null {
