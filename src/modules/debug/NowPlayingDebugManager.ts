@@ -3,11 +3,13 @@ import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
 import type { INavigationManager } from '../navigation';
 import type { IPlexStreamResolver, StreamDecision } from '../plex/stream';
 import type { ScheduledProgram } from '../scheduler/scheduler';
+import type { INowPlayingInfoOverlay } from '../ui/now-playing-info';
 
 export interface NowPlayingDebugManagerDeps {
     nowPlayingModalId: string;
     getNavigation: () => INavigationManager | null;
     getStreamResolver: () => IPlexStreamResolver | null;
+    getNowPlayingInfo: () => INowPlayingInfoOverlay | null;
 
     getCurrentProgram: () => ScheduledProgram | null;
     getCurrentStreamDecision: () => StreamDecision | null;
@@ -19,6 +21,8 @@ export interface NowPlayingDebugManagerDeps {
 export class NowPlayingDebugManager {
     private _nowPlayingStreamDecisionFetchToken = 0;
     private _nowPlayingStreamDecisionFetchedForSessionId: string | null = null;
+    private _nowPlayingStreamDecisionFetchPromise: Promise<StreamDecision['serverDecision']> | null = null;
+    private _nowPlayingStreamDecisionFetchSessionId: string | null = null;
 
     constructor(private readonly deps: NowPlayingDebugManagerDeps) {}
 
@@ -26,6 +30,7 @@ export class NowPlayingDebugManager {
     maybeAutoShowNowPlayingStreamDebugHud(): void {
         const navigation = this.deps.getNavigation();
         if (!navigation) return;
+        if (!this.deps.getNowPlayingInfo()) return;
         if (!this._isNowPlayingStreamDebugAutoShowEnabled()) return;
 
         const currentScreen = navigation.getCurrentScreen();
@@ -91,87 +96,101 @@ export class NowPlayingDebugManager {
 
     async maybeFetchNowPlayingStreamDecisionForDebugHud(): Promise<void> {
         if (!this._isNowPlayingStreamDebugEnabled()) return;
-        const resolver = this.deps.getStreamResolver();
-        if (!resolver) return;
-
         const program = this.deps.getCurrentProgram();
         const decision = this.deps.getCurrentStreamDecision();
         if (!program || !decision || !decision.isTranscoding || !decision.transcodeRequest) {
             return;
         }
-
-        const sessionId = decision.transcodeRequest.sessionId;
-        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
-            return;
-        }
-
-        const token = ++this._nowPlayingStreamDecisionFetchToken;
-        try {
-            const req = decision.transcodeRequest;
-            const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                sessionId: req.sessionId,
-                maxBitrate: req.maxBitrate,
-            };
-            if (typeof req.audioStreamId === 'string') {
-                opts.audioStreamId = req.audioStreamId;
-            }
-
-            const serverDecision = await resolver.fetchUniversalTranscodeDecision(
-                program.item.ratingKey,
-                opts
-            );
-            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
-            if (this.deps.getCurrentStreamDecision() !== decision) return;
-
-            decision.serverDecision = serverDecision;
-            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-
-            const navigation = this.deps.getNavigation();
-            if (navigation?.isModalOpen(this.deps.nowPlayingModalId)) {
-                this.deps.requestNowPlayingOverlayRefresh();
-            }
-        } catch {
-            // Debug-only; ignore failures.
-        }
+        await this._ensureServerDecision(program, decision, {
+            logErrors: false,
+            onApplied: (): void => {
+                const navigation = this.deps.getNavigation();
+                if (navigation?.isModalOpen(this.deps.nowPlayingModalId)) {
+                    this.deps.requestNowPlayingOverlayRefresh();
+                }
+            },
+        });
     }
 
     // Snapshot behavior (must NOT require debug enabled)
     async ensureServerDecisionForPlaybackInfoSnapshot(): Promise<void> {
         const program = this.deps.getCurrentProgram();
         const decision = this.deps.getCurrentStreamDecision();
+        if (!program || !decision) {
+            return;
+        }
+        await this._ensureServerDecision(program, decision, { logErrors: true });
+    }
+
+    private async _ensureServerDecision(
+        program: ScheduledProgram,
+        decision: StreamDecision,
+        options: { logErrors: boolean; onApplied?: () => void }
+    ): Promise<void> {
         const resolver = this.deps.getStreamResolver();
-        if (!program || !decision || !resolver) {
+        if (!resolver) return;
+        if (!decision.isTranscoding || !decision.transcodeRequest) return;
+
+        const sessionId = decision.transcodeRequest.sessionId;
+        if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
             return;
         }
 
-        if (decision.isTranscoding && decision.transcodeRequest) {
-            const sessionId = decision.transcodeRequest.sessionId;
-            if (
-                decision.serverDecision &&
-                this._nowPlayingStreamDecisionFetchedForSessionId === sessionId
-            ) {
+        if (
+            this._nowPlayingStreamDecisionFetchPromise &&
+            this._nowPlayingStreamDecisionFetchSessionId === sessionId
+        ) {
+            try {
+                await this._nowPlayingStreamDecisionFetchPromise;
+            } catch (error) {
+                if (options.logErrors) {
+                    console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
+                }
                 return;
             }
-            try {
-                const req = decision.transcodeRequest;
-                const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
-                    sessionId: req.sessionId,
-                    maxBitrate: req.maxBitrate,
-                };
-                if (typeof req.audioStreamId === 'string') {
-                    opts.audioStreamId = req.audioStreamId;
-                }
-                const serverDecision = await resolver.fetchUniversalTranscodeDecision(
-                    program.item.ratingKey,
-                    opts
-                );
-                if (decision !== this.deps.getCurrentStreamDecision()) {
-                    return;
-                }
-                decision.serverDecision = serverDecision;
-                this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
-            } catch (error) {
+            if (this.deps.getCurrentStreamDecision() !== decision) return;
+            if (decision.serverDecision && this._nowPlayingStreamDecisionFetchedForSessionId === sessionId) {
+                options.onApplied?.();
+            }
+            return;
+        }
+
+        const token = ++this._nowPlayingStreamDecisionFetchToken;
+        this._nowPlayingStreamDecisionFetchSessionId = sessionId;
+        const req = decision.transcodeRequest;
+        const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
+            sessionId: req.sessionId,
+            maxBitrate: req.maxBitrate,
+        };
+        if (typeof req.audioStreamId === 'string') {
+            opts.audioStreamId = req.audioStreamId;
+        }
+
+        const fetchPromise = resolver.fetchUniversalTranscodeDecision(
+            program.item.ratingKey,
+            opts
+        );
+        this._nowPlayingStreamDecisionFetchPromise = fetchPromise;
+
+        try {
+            const serverDecision = await fetchPromise;
+            if (token !== this._nowPlayingStreamDecisionFetchToken) return;
+            if (this.deps.getCurrentStreamDecision() !== decision) return;
+
+            decision.serverDecision = serverDecision;
+            this._nowPlayingStreamDecisionFetchedForSessionId = sessionId;
+            options.onApplied?.();
+        } catch (error) {
+            if (options.logErrors) {
                 console.warn('[Orchestrator] Failed to fetch transcode decision:', error);
+            }
+        } finally {
+            if (
+                token === this._nowPlayingStreamDecisionFetchToken &&
+                this._nowPlayingStreamDecisionFetchPromise === fetchPromise
+            ) {
+                this._nowPlayingStreamDecisionFetchPromise = null;
+                this._nowPlayingStreamDecisionFetchSessionId = null;
             }
         }
     }

@@ -3,6 +3,7 @@ import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 import type { INavigationManager } from '../../navigation';
 import type { IPlexStreamResolver, StreamDecision } from '../../plex/stream';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
+import type { INowPlayingInfoOverlay } from '../../ui/now-playing-info';
 
 const modalId = 'now-playing';
 
@@ -67,6 +68,7 @@ const setup = (overrides: Partial<NowPlayingDebugManagerDeps> = {}): {
     const navigation = makeNavigation();
     const decision = makeDecision();
     const program = makeProgram();
+    const nowPlayingInfo = {} as INowPlayingInfoOverlay;
     const resolver: IPlexStreamResolver = {
         fetchUniversalTranscodeDecision: jest.fn().mockResolvedValue({ videoDecision: 'copy' }),
     } as unknown as IPlexStreamResolver;
@@ -75,6 +77,7 @@ const setup = (overrides: Partial<NowPlayingDebugManagerDeps> = {}): {
         nowPlayingModalId: modalId,
         getNavigation: () => navigation,
         getStreamResolver: () => resolver,
+        getNowPlayingInfo: () => nowPlayingInfo,
         getCurrentProgram: () => program,
         getCurrentStreamDecision: () => decision,
         requestNowPlayingOverlayRefresh: jest.fn(),
@@ -125,6 +128,16 @@ describe('NowPlayingDebugManager', () => {
         manager.maybeAutoShowNowPlayingStreamDebugHud();
 
         expect(navigation.openModal).toHaveBeenCalledWith(modalId);
+    });
+
+    it('auto-show does nothing when now playing overlay is unavailable', () => {
+        enableDebug();
+        enableAutoShow();
+        const { manager, navigation } = setup({ getNowPlayingInfo: () => null });
+
+        manager.maybeAutoShowNowPlayingStreamDebugHud();
+
+        expect(navigation.openModal).not.toHaveBeenCalled();
     });
 
     it('auto-show does nothing when screen not player or any modal open', () => {
@@ -200,6 +213,7 @@ describe('NowPlayingDebugManager', () => {
             nowPlayingModalId: modalId,
             getNavigation: () => navigationOpen,
             getStreamResolver: () => openResolver,
+            getNowPlayingInfo: () => ({} as INowPlayingInfoOverlay),
             getCurrentProgram: () => makeProgram(),
             getCurrentStreamDecision: () => openDecision,
             requestNowPlayingOverlayRefresh: jest.fn(),
@@ -207,5 +221,43 @@ describe('NowPlayingDebugManager', () => {
         const managerOpen = new NowPlayingDebugManager(openDeps);
         await managerOpen.maybeFetchNowPlayingStreamDecisionForDebugHud();
         expect(openDeps.requestNowPlayingOverlayRefresh).toHaveBeenCalled();
+    });
+
+    it('shares in-flight server decision fetch between snapshot and debug fetch', async () => {
+        enableDebug();
+        const resolver: IPlexStreamResolver = {
+            fetchUniversalTranscodeDecision: jest.fn(),
+        } as unknown as IPlexStreamResolver;
+        let resolveDecision: (value: StreamDecision['serverDecision']) => void = () => {
+            throw new Error('resolve not set');
+        };
+        const fetchPromise = new Promise<StreamDecision['serverDecision']>((resolve) => {
+            resolveDecision = resolve;
+        });
+        (resolver.fetchUniversalTranscodeDecision as jest.Mock).mockReturnValue(fetchPromise);
+
+        const navigationOpen = makeNavigation({
+            isModalOpen: jest.fn().mockReturnValue(true),
+        } as Partial<INavigationManager> as INavigationManager);
+        const decision = makeDecision();
+        const deps: NowPlayingDebugManagerDeps = {
+            nowPlayingModalId: modalId,
+            getNavigation: () => navigationOpen,
+            getStreamResolver: () => resolver,
+            getNowPlayingInfo: () => ({} as INowPlayingInfoOverlay),
+            getCurrentProgram: () => makeProgram(),
+            getCurrentStreamDecision: () => decision,
+            requestNowPlayingOverlayRefresh: jest.fn(),
+        };
+        const manager = new NowPlayingDebugManager(deps);
+
+        const snapshotPromise = manager.ensureServerDecisionForPlaybackInfoSnapshot();
+        const debugPromise = manager.maybeFetchNowPlayingStreamDecisionForDebugHud();
+
+        resolveDecision({ fetchedAt: 123, videoDecision: 'copy' });
+        await Promise.all([snapshotPromise, debugPromise]);
+
+        expect(resolver.fetchUniversalTranscodeDecision).toHaveBeenCalledTimes(1);
+        expect(deps.requestNowPlayingOverlayRefresh).toHaveBeenCalled();
     });
 });

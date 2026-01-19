@@ -487,6 +487,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             nowPlayingModalId: NOW_PLAYING_INFO_MODAL_ID,
             getNavigation: (): INavigationManager | null => this._navigation,
             getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
+            getNowPlayingInfo: (): INowPlayingInfoOverlay | null => this._nowPlayingInfo,
             getCurrentProgram: (): ScheduledProgram | null =>
                 this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
             getCurrentStreamDecision: (): StreamDecision | null => this._currentStreamDecision,
