@@ -135,16 +135,21 @@ export class ServerSelectScreen {
         try {
             const servers = await this._orchestrator.discoverServers(false);
             const savedId = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+            let autoSelectError: unknown | null = null;
 
             if (savedId && servers.some(s => s.id === savedId)) {
-                const success = await this._orchestrator.selectServer(savedId);
-                if (success) {
-                    this._setStatus('Connected…', 'Continuing startup…');
-                    this._isLoading = false;
-                    this._refreshButton.disabled = false;
-                    this._setupButton.disabled = false;
-                    this._clearButton.disabled = false;
-                    return;
+                try {
+                    const success = await this._orchestrator.selectServer(savedId);
+                    if (success) {
+                        this._setStatus('Connected…', 'Continuing startup…');
+                        this._isLoading = false;
+                        this._refreshButton.disabled = false;
+                        this._setupButton.disabled = false;
+                        this._clearButton.disabled = false;
+                        return;
+                    }
+                } catch (error) {
+                    autoSelectError = error;
                 }
             }
 
@@ -152,6 +157,9 @@ export class ServerSelectScreen {
             this._renderServers(servers);
             if (servers.length === 0) {
                 this._setStatus('No servers found.', 'Ensure your Plex server is reachable.');
+            } else if (autoSelectError) {
+                this._handleError(autoSelectError, 'Unable to use the saved server.');
+                this._setStatus('Saved server unavailable.', 'Select a server from the list.');
             } else {
                 this._setStatus('Select a server from the list.', '');
             }
@@ -236,10 +244,19 @@ export class ServerSelectScreen {
     private _renderServers(servers: PlexServer[]): void {
         const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
         let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined> = {};
-        try {
-            healthMap = rawHealth ? JSON.parse(rawHealth) : {};
-        } catch (e) {
-            console.warn('[ServerSelect] Failed to parse health data:', e);
+        let parsedHealth: unknown = {};
+        if (rawHealth) {
+            try {
+                parsedHealth = JSON.parse(rawHealth);
+            } catch (e) {
+                console.warn('[ServerSelect] Failed to parse health data:', e);
+                parsedHealth = null;
+            }
+        }
+
+        if (parsedHealth && typeof parsedHealth === 'object' && !Array.isArray(parsedHealth)) {
+            healthMap = parsedHealth as Record<string, { status?: string; type?: string; latencyMs?: number } | undefined>;
+        } else if (rawHealth) {
             try {
                 localStorage.removeItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
             } catch {

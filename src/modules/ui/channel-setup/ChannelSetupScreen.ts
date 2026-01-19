@@ -134,6 +134,8 @@ export class ChannelSetupScreen {
     }
 
     private _resetState(): void {
+        this._buildAbortController?.abort();
+        this._buildAbortController = null;
         this._step = 1;
         this._isLoading = false;
         this._isBuilding = false;
