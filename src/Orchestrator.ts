@@ -108,6 +108,9 @@ import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
+import { getRecoveryActions as getRecoveryActionsHelper } from './core/error-recovery/RecoveryActions';
+import { toLifecycleAppError as toLifecycleAppErrorHelper } from './core/error-recovery/LifecycleErrorAdapter';
+import type { ErrorRecoveryAction } from './core/error-recovery/types';
 
 // ============================================
 // Types
@@ -232,15 +235,7 @@ export interface OrchestratorConfig {
     nowPlayingInfoConfig: NowPlayingInfoConfig;
 }
 
-/**
- * Recovery action definition for error handling UI
- */
-export interface ErrorRecoveryAction {
-    label: string;
-    action: () => void;
-    isPrimary: boolean;
-    requiresNetwork: boolean;
-}
+export type { ErrorRecoveryAction } from './core/error-recovery/types';
 
 /**
  * Application Orchestrator Interface
@@ -1623,195 +1618,50 @@ export class AppOrchestrator implements IAppOrchestrator {
      * @param errorCode - Error code to get actions for
      */
     getRecoveryActions(errorCode: AppErrorCode): ErrorRecoveryAction[] {
-        const actions: ErrorRecoveryAction[] = [];
-
-        switch (errorCode) {
-            // Auth errors -> Sign In
-            case AppErrorCode.AUTH_REQUIRED:
-            case AppErrorCode.AUTH_EXPIRED:
-            case AppErrorCode.AUTH_INVALID:
-            case AppErrorCode.AUTH_FAILED:
-                actions.push({
-                    label: 'Sign In',
-                    action: (): void => {
-                        if (this._navigation) {
-                            this._navigation.goTo('auth');
-                        }
-                    },
-                    isPrimary: true,
-                    requiresNetwork: true,
-                });
-                break;
-
-            // Network errors -> Retry + Exit
-            case AppErrorCode.AUTH_RATE_LIMITED:
-            case AppErrorCode.NETWORK_TIMEOUT:
-            case AppErrorCode.NETWORK_OFFLINE:
-            case AppErrorCode.NETWORK_UNAVAILABLE:
-            case AppErrorCode.RATE_LIMITED:
-                actions.push({
-                    label: 'Retry',
-                    action: (): void => {
-                        this.start().catch(console.error);
-                    },
-                    isPrimary: true,
-                    requiresNetwork: true,
-                });
-                actions.push({
-                    label: 'Exit',
-                    action: (): void => {
-                        this.shutdown().catch(console.error);
-                    },
-                    isPrimary: false,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Server errors -> Select Server + Retry
-            case AppErrorCode.SERVER_UNREACHABLE:
-            case AppErrorCode.SERVER_SSL_ERROR:
-            case AppErrorCode.MIXED_CONTENT_BLOCKED:
-            case AppErrorCode.SERVER_ERROR:
-            case AppErrorCode.PLEX_UNREACHABLE:
-                actions.push({
-                    label: 'Select Server',
-                    action: (): void => {
-                        if (this._navigation) {
-                            this._navigation.goTo('server-select');
-                        }
-                    },
-                    isPrimary: true,
-                    requiresNetwork: true,
-                });
-                actions.push({
-                    label: 'Retry',
-                    action: (): void => {
-                        this.start().catch(console.error);
-                    },
-                    isPrimary: false,
-                    requiresNetwork: true,
-                });
-                break;
-
-            // Playback errors -> Skip
-            case AppErrorCode.PLAYBACK_FAILED:
-            case AppErrorCode.PLAYBACK_DECODE_ERROR:
-            case AppErrorCode.PLAYBACK_FORMAT_UNSUPPORTED:
-                actions.push({
-                    label: 'Skip',
-                    action: (): void => {
-                        if (this._scheduler) {
-                            this._scheduler.skipToNext();
-                        }
-                    },
-                    isPrimary: true,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Channel/content errors -> Edit Channels
-            case AppErrorCode.CHANNEL_NOT_FOUND:
-            case AppErrorCode.SCHEDULER_EMPTY_CHANNEL:
-            case AppErrorCode.CONTENT_UNAVAILABLE:
-            case AppErrorCode.RESOURCE_NOT_FOUND:
-                actions.push({
-                    label: 'Edit Channels',
-                    action: (): void => {
-                        if (this._navigation) {
-                            this._navigation.goTo('channel-edit');
-                        }
-                    },
-                    isPrimary: true,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Storage errors -> Settings (clear cache)
-            case AppErrorCode.STORAGE_QUOTA_EXCEEDED:
-            case AppErrorCode.STORAGE_CORRUPTED:
-            case AppErrorCode.DATA_CORRUPTION:
-                actions.push({
-                    label: 'Clear Data',
-                    action: (): void => {
-                        if (this._navigation) {
-                            this._navigation.goTo('settings');
-                        }
-                    },
-                    isPrimary: true,
-                    requiresNetwork: false,
-                });
-                actions.push({
-                    label: 'Retry',
-                    action: (): void => {
-                        this.start().catch(console.error);
-                    },
-                    isPrimary: false,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Initialization errors -> Retry + Exit
-            case AppErrorCode.INITIALIZATION_FAILED:
-            case AppErrorCode.MODULE_INIT_FAILED:
-            case AppErrorCode.OUT_OF_MEMORY:
-                actions.push({
-                    label: 'Retry',
-                    action: (): void => {
-                        this.start().catch(console.error);
-                    },
-                    isPrimary: true,
-                    requiresNetwork: true,
-                });
-                actions.push({
-                    label: 'Exit',
-                    action: (): void => {
-                        this.shutdown().catch(console.error);
-                    },
-                    isPrimary: false,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Unrecoverable errors -> Exit only
-            case AppErrorCode.UNRECOVERABLE:
-                actions.push({
-                    label: 'Exit',
-                    action: (): void => {
-                        this.shutdown().catch(console.error);
-                    },
-                    isPrimary: true,
-                    requiresNetwork: false,
-                });
-                break;
-
-            // Unknown/default -> Dismiss
-            case AppErrorCode.UNKNOWN:
-            default:
-                actions.push({
-                    label: 'Dismiss',
-                    action: (): void => {
-                        // No-op - just dismiss
-                    },
-                    isPrimary: true,
-                    requiresNetwork: false,
-                });
-        }
-
-        return actions;
+        return getRecoveryActionsHelper(errorCode, {
+            goToAuth: (): void => {
+                if (this._navigation) {
+                    this._navigation.goTo('auth');
+                }
+            },
+            goToServerSelect: (): void => {
+                if (this._navigation) {
+                    this._navigation.goTo('server-select');
+                }
+            },
+            goToChannelEdit: (): void => {
+                if (this._navigation) {
+                    this._navigation.goTo('channel-edit');
+                }
+            },
+            goToSettings: (): void => {
+                if (this._navigation) {
+                    this._navigation.goTo('settings');
+                }
+            },
+            retryStart: (): void => {
+                this.start().catch(console.error);
+            },
+            exitApp: (): void => {
+                this.shutdown().catch(console.error);
+            },
+            skipToNext: (): void => {
+                if (this._scheduler) {
+                    this._scheduler.skipToNext();
+                }
+            },
+        });
     }
 
     public toLifecycleAppError(error: AppError): LifecycleAppError {
-        const phase: AppPhase = this._lifecycle ? this._lifecycle.getPhase() : 'error';
-        const userMessage = this._lifecycle
-            ? this._lifecycle.getErrorRecovery().getUserMessage(error.code)
-            : error.message;
-        return {
-            ...error,
-            phase,
-            timestamp: Date.now(),
-            userMessage,
-            actions: this.getRecoveryActions(error.code),
-        };
+        return toLifecycleAppErrorHelper(error, {
+            getPhase: (): AppPhase => (this._lifecycle ? this._lifecycle.getPhase() : 'error'),
+            getUserMessage: (code: AppErrorCode): string =>
+                this._lifecycle ? this._lifecycle.getErrorRecovery().getUserMessage(code) : error.message,
+            getRecoveryActions: (code: AppErrorCode): ErrorRecoveryAction[] =>
+                this.getRecoveryActions(code),
+            nowMs: (): number => Date.now(),
+        });
     }
 
     public onLifecycleEvent<K extends keyof LifecycleEventMap>(
