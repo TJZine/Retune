@@ -152,6 +152,17 @@ export class SettingsScreen {
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DEBUG_LOGGING, value),
                     },
+                    {
+                        id: 'settings-subtitle-debug-logging',
+                        label: 'Subtitle Debug Logging',
+                        description: 'Log subtitle tracks and native textTracks state (tokens redacted)',
+                        value: this._loadBoolSetting(
+                            SETTINGS_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING,
+                            DEFAULT_SETTINGS.developer.subtitleDebugLogging
+                        ),
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING, value),
+                    },
                 ],
             },
         ];
@@ -344,6 +355,11 @@ export class SettingsScreen {
                 return {
                     storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
                     defaultValue: DEFAULT_SETTINGS.developer.debugLogging,
+                };
+            case 'settings-subtitle-debug-logging':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING,
+                    defaultValue: DEFAULT_SETTINGS.developer.subtitleDebugLogging,
                 };
             default:
                 // If we can't infer the key, don't attempt refresh.

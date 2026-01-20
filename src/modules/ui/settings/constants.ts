@@ -21,6 +21,8 @@ export const SETTINGS_STORAGE_KEYS = {
     SCANLINE_EFFECT: RETUNE_STORAGE_KEYS.SCANLINE_EFFECT,
     /** Debug logging enabled */
     DEBUG_LOGGING: RETUNE_STORAGE_KEYS.DEBUG_LOGGING,
+    /** Subtitle debug logging enabled */
+    SUBTITLE_DEBUG_LOGGING: RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING,
     /** FPS counter enabled */
     SHOW_FPS: RETUNE_STORAGE_KEYS.SHOW_FPS,
     /** Now Playing Info overlay auto-hide timeout (ms) */
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
     },
     developer: {
         debugLogging: false,
+        subtitleDebugLogging: false,
         showFps: false,
     },
 };

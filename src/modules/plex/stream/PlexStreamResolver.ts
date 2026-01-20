@@ -38,6 +38,7 @@ import {
 import { generateUUID } from './utils';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 import { isStoredTrue, safeLocalStorageGet } from '../../../utils/storage';
+import { redactSensitiveTokens } from '../../../utils/redact';
 
 // Re-export types for consumers
 export { PlexStreamErrorCode } from './types';
@@ -191,6 +192,38 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     (s) => s.streamType === 3 && s.id === request.subtitleStreamId
                 ) ?? null)
                 : null;
+
+        const subtitleDebugEnabled = ((): boolean => {
+            try {
+                return isStoredTrue(
+                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING)
+                );
+            } catch {
+                return false;
+            }
+        })();
+        if (subtitleDebugEnabled) {
+            const subtitleStreams = part.streams
+                .filter((s) => s.streamType === 3)
+                .map((s) => ({
+                    id: s.id,
+                    codec: s.codec,
+                    format: s.format,
+                    language: s.language,
+                    forced: s.forced,
+                    selected: subtitleStream?.id === s.id,
+                    key: typeof s.key === 'string' ? redactSensitiveTokens(s.key) : null,
+                }));
+            console.warn(`[SubtitleDebug] ${JSON.stringify({
+                ts: new Date().toISOString(),
+                module: 'PlexStreamResolver',
+                event: 'subtitle_streams_discovered',
+                itemKey: request.itemKey,
+                subtitlesCount: subtitleStreams.length,
+                subtitleStreams,
+            })}`);
+        }
+
         const shouldForceAudioStreamId = this._shouldForceTranscodeAudioStreamId(
             part.streams,
             request.audioStreamId
