@@ -1107,6 +1107,7 @@ export class ChannelManager implements IChannelManager {
 
     private _isQuotaExceeded(error: unknown): boolean {
         return (
+            typeof DOMException !== 'undefined' &&
             error instanceof DOMException &&
             (error.code === 22 ||
                 error.code === 1014 ||

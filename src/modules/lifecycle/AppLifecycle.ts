@@ -736,7 +736,7 @@ export class AppLifecycle implements IAppLifecycle {
     }
 
     private _isQuotaError(error: unknown): boolean {
-        if (error instanceof DOMException) {
+        if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
             return (
                 error.code === 22 ||
                 error.code === 1014 ||

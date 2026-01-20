@@ -1015,12 +1015,14 @@ describe('AppOrchestrator', () => {
 
         it('should find channel by number and switch', async () => {
             mockChannelManager.getChannelByNumber.mockReturnValue(mockChannel);
-            const switchSpy = jest.spyOn(orchestrator, 'switchToChannel');
 
             await orchestrator.switchToChannelByNumber(5);
 
             expect(mockChannelManager.getChannelByNumber).toHaveBeenCalledWith(5);
-            expect(switchSpy).toHaveBeenCalledWith(mockChannel.id);
+            expect(mockChannelManager.resolveChannelContent).toHaveBeenCalledWith(mockChannel.id, {
+                signal: null,
+            });
+            expect(mockVideoPlayer.stop).toHaveBeenCalled();
         });
 
         it('should handle invalid channel number', async () => {
