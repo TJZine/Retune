@@ -642,7 +642,7 @@ export class ChannelSetupScreen {
         this._detailEl.textContent = '';
         this._errorEl.textContent = this._reviewError ?? '';
 
-        if (!this._review && !this._isReviewLoading) {
+        if (!this._review && !this._isReviewLoading && !this._reviewError) {
             this._loadReview().catch(console.error);
         }
 
@@ -959,6 +959,9 @@ export class ChannelSetupScreen {
 
     private _schedulePreview(): void {
         if (this._step !== 2) {
+            return;
+        }
+        if (this._isPreviewLoading) {
             return;
         }
         const serverId = this._getSelectedServerId();
