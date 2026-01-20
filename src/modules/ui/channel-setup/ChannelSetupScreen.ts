@@ -1017,9 +1017,10 @@ export class ChannelSetupScreen {
             this._previewError = error instanceof Error ? error.message : 'Unable to estimate channels.';
             this._preview = null;
         } finally {
-            if (token !== this._visibilityToken) return;
-            this._isPreviewLoading = false;
-            this._renderStep();
+            if (token === this._visibilityToken) {
+                this._isPreviewLoading = false;
+                this._renderStep();
+            }
         }
     }
 
@@ -1053,9 +1054,10 @@ export class ChannelSetupScreen {
             this._reviewError = error instanceof Error ? error.message : 'Unable to load review.';
             this._review = null;
         } finally {
-            if (token !== this._visibilityToken) return;
             this._isReviewLoading = false;
-            this._renderStep();
+            if (token === this._visibilityToken) {
+                this._renderStep();
+            }
         }
     }
 
