@@ -9,6 +9,7 @@ import {
     parseSeasons,
     parseCollections,
     parsePlaylists,
+    parseDirectoryTags,
     mapLibraryType,
     mapMediaType,
 } from '../ResponseParser';
@@ -18,6 +19,7 @@ import type {
     RawSeason,
     RawCollection,
     RawPlaylist,
+    RawDirectoryTag,
 } from '../types';
 
 describe('ResponseParser', () => {
@@ -249,6 +251,33 @@ describe('ResponseParser', () => {
             expect(result[0]!.title).toBe('Favorites');
             expect(result[0]!.duration).toBe(36000000);
             expect(result[0]!.leafCount).toBe(10);
+        });
+    });
+
+    describe('parseDirectoryTags', () => {
+        it('should parse directory tag entries correctly', () => {
+            const raw: RawDirectoryTag[] = [
+                { key: 'k1', title: 'Studio A', count: 42, fastKey: '/library/sections/1/studio?type=1&studio=Studio%20A', thumb: '/thumb/a' },
+                { key: 'k2', title: 'Actor B' },
+            ];
+
+            const result = parseDirectoryTags(raw);
+
+            expect(result).toHaveLength(2);
+            expect(result[0]).toEqual({
+                key: 'k1',
+                title: 'Studio A',
+                count: 42,
+                fastKey: '/library/sections/1/studio?type=1&studio=Studio%20A',
+                thumb: '/thumb/a',
+            });
+            expect(result[1]).toEqual({
+                key: 'k2',
+                title: 'Actor B',
+                count: 0,
+                fastKey: undefined,
+                thumb: undefined,
+            });
         });
     });
 

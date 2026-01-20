@@ -43,6 +43,12 @@ export const PLEX_ENDPOINTS = {
     /** Library section collections (append /{id}/collections) */
     LIBRARY_SECTION_COLLECTIONS: (id: string) => `/library/sections/${id}/collections`,
 
+    /** Library section actors (append /{id}/actor) */
+    LIBRARY_SECTION_ACTORS: (id: string) => `/library/sections/${id}/actor`,
+
+    /** Library section studios (append /{id}/studio) */
+    LIBRARY_SECTION_STUDIOS: (id: string) => `/library/sections/${id}/studio`,
+
     /** Item metadata (append /{key}) */
     LIBRARY_METADATA: (key: string) => `/library/metadata/${key}`,
 

@@ -4,7 +4,14 @@
  * @version 1.0.0
  */
 
-import { AppOrchestrator, type ChannelSetupConfig, type ChannelBuildProgress } from '../../../Orchestrator';
+import {
+    AppOrchestrator,
+    type ChannelSetupConfig,
+    type ChannelBuildProgress,
+    type ChannelSetupPreview,
+    type ChannelSetupReview,
+    type ChannelSetupRecord,
+} from '../../../Orchestrator';
 import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
 import type { PlexLibraryType } from '../../plex/library';
 import type { FocusableElement } from '../../navigation';
@@ -21,7 +28,9 @@ interface SetupStrategyState {
     genres: boolean;
     directors: boolean;
     decades: boolean;
-    runtimeRanges: boolean;
+    recentlyAdded: boolean;
+    studios: boolean;
+    actors: boolean;
 }
 
 type SetupStep = 1 | 2 | 3;
@@ -44,19 +53,34 @@ export class ChannelSetupScreen {
         genres: false,
         directors: false,
         decades: false,
-        runtimeRanges: false,
+        recentlyAdded: false,
+        studios: false,
+        actors: false,
     };
+    private _buildMode: ChannelSetupConfig['buildMode'] = 'replace';
+    private _actorStudioCombineMode: ChannelSetupConfig['actorStudioCombineMode'] = 'separate';
     private _maxChannels: number = DEFAULT_CHANNEL_SETUP_MAX;
     private _minItems: number = DEFAULT_MIN_ITEMS;
     private _channelLimitOptions: number[] = CHANNEL_LIMIT_PRESETS.filter((value) => value <= MAX_CHANNELS);
     private _minItemsOptions: number[] = [1, 5, 10, 20, 50];
     private _buildAbortController: AbortController | null = null;
+    private _previewAbortController: AbortController | null = null;
+    private _reviewAbortController: AbortController | null = null;
+    private _previewTimeoutId: number | null = null;
     private _step: SetupStep = 1;
     private _focusableIds: string[] = [];
     private _preferredFocusId: string | null = null;
     private _isLoading: boolean = false;
     private _isBuilding: boolean = false;
+    private _isPreviewLoading: boolean = false;
+    private _isReviewLoading: boolean = false;
+    private _replaceConfirm: boolean = false;
     private _visibilityToken = 0;
+    private _preview: ChannelSetupPreview | null = null;
+    private _previewError: string | null = null;
+    private _review: ChannelSetupReview | null = null;
+    private _reviewError: string | null = null;
+    private _lastPreviewKey: string | null = null;
 
     private _toDomId(raw: string): string {
         return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -128,6 +152,13 @@ export class ChannelSetupScreen {
 
     hide(): void {
         this._visibilityToken += 1;
+        this._buildAbortController?.abort();
+        this._previewAbortController?.abort();
+        this._reviewAbortController?.abort();
+        if (this._previewTimeoutId !== null) {
+            window.clearTimeout(this._previewTimeoutId);
+            this._previewTimeoutId = null;
+        }
         this._unregisterFocusables();
         this._container.style.display = 'none';
         this._container.classList.remove('visible');
@@ -135,12 +166,30 @@ export class ChannelSetupScreen {
 
     private _resetState(): void {
         this._buildAbortController?.abort();
+        this._previewAbortController?.abort();
+        this._reviewAbortController?.abort();
+        if (this._previewTimeoutId !== null) {
+            window.clearTimeout(this._previewTimeoutId);
+            this._previewTimeoutId = null;
+        }
         this._buildAbortController = null;
+        this._previewAbortController = null;
+        this._reviewAbortController = null;
         this._step = 1;
         this._isLoading = false;
         this._isBuilding = false;
+        this._isPreviewLoading = false;
+        this._isReviewLoading = false;
+        this._replaceConfirm = false;
         this._maxChannels = DEFAULT_CHANNEL_SETUP_MAX;
         this._minItems = DEFAULT_MIN_ITEMS;
+        this._buildMode = 'replace';
+        this._actorStudioCombineMode = 'separate';
+        this._preview = null;
+        this._previewError = null;
+        this._review = null;
+        this._reviewError = null;
+        this._lastPreviewKey = null;
         this._errorEl.textContent = '';
     }
 
@@ -156,7 +205,13 @@ export class ChannelSetupScreen {
 
         try {
             this._libraries = await this._orchestrator.getLibrariesForSetup();
-            this._selectedLibraryIds = new Set(this._libraries.map((lib) => lib.id));
+            const serverId = this._getSelectedServerId();
+            const record = serverId ? this._orchestrator.getChannelSetupRecord(serverId) : null;
+            if (record) {
+                this._applySetupRecord(record);
+            } else {
+                this._selectedLibraryIds = new Set(this._libraries.map((lib) => lib.id));
+            }
             if (token !== this._visibilityToken) {
                 return;
             }
@@ -289,14 +344,82 @@ export class ChannelSetupScreen {
         const list = document.createElement('div');
         list.className = 'setup-list';
 
+        const buildModeButton = document.createElement('button');
+        buildModeButton.id = 'setup-build-mode';
+        buildModeButton.className = 'setup-toggle';
+
+        const buildModeLabel = document.createElement('span');
+        buildModeLabel.className = 'setup-toggle-label';
+        buildModeLabel.textContent = 'Build mode';
+
+        const buildModeMeta = document.createElement('span');
+        buildModeMeta.className = 'setup-toggle-meta';
+        buildModeMeta.textContent = 'Replace, append, or merge with your lineup.';
+
+        const buildModeState = document.createElement('span');
+        buildModeState.className = 'setup-toggle-state';
+        buildModeState.textContent = this._buildMode.charAt(0).toUpperCase() + this._buildMode.slice(1);
+
+        buildModeButton.appendChild(buildModeLabel);
+        buildModeButton.appendChild(buildModeMeta);
+        buildModeButton.appendChild(buildModeState);
+
+        buildModeButton.addEventListener('click', () => {
+            this._preferredFocusId = buildModeButton.id;
+            const modes: ChannelSetupConfig['buildMode'][] = ['replace', 'append', 'merge'];
+            const currentIndex = modes.indexOf(this._buildMode);
+            const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % modes.length : 0;
+            this._buildMode = modes[nextIndex] ?? 'replace';
+            this._replaceConfirm = false;
+            this._review = null;
+            this._reviewError = null;
+            this._schedulePreview();
+            this._renderStep();
+        });
+
+        list.appendChild(buildModeButton);
+
+        const combineButton = document.createElement('button');
+        combineButton.id = 'setup-combine-mode';
+        combineButton.className = 'setup-toggle';
+
+        const combineLabel = document.createElement('span');
+        combineLabel.className = 'setup-toggle-label';
+        combineLabel.textContent = 'Actor/Studio combine';
+
+        const combineMeta = document.createElement('span');
+        combineMeta.className = 'setup-toggle-meta';
+        combineMeta.textContent = 'Separate movies + TV or combine together.';
+
+        const combineState = document.createElement('span');
+        combineState.className = 'setup-toggle-state';
+        combineState.textContent = this._actorStudioCombineMode === 'combined' ? 'Combined' : 'Separate';
+
+        combineButton.appendChild(combineLabel);
+        combineButton.appendChild(combineMeta);
+        combineButton.appendChild(combineState);
+
+        combineButton.addEventListener('click', () => {
+            this._preferredFocusId = combineButton.id;
+            this._actorStudioCombineMode = this._actorStudioCombineMode === 'combined' ? 'separate' : 'combined';
+            this._review = null;
+            this._reviewError = null;
+            this._schedulePreview();
+            this._renderStep();
+        });
+
+        list.appendChild(combineButton);
+
         const strategyLabels: Array<{ key: keyof SetupStrategyState; label: string; detail: string }> = [
             { key: 'collections', label: 'Collections', detail: 'One channel per collection.' },
             { key: 'libraryFallback', label: 'Library fallback', detail: 'One channel per library if no collections.' },
+            { key: 'recentlyAdded', label: 'Recently added', detail: 'Per library, newest first.' },
             { key: 'playlists', label: 'Playlists', detail: 'Channels from Plex playlists.' },
-            { key: 'decades', label: 'Decades', detail: 'Channels by decade (1980s, 1990s...).' },
-            { key: 'runtimeRanges', label: 'Runtime', detail: 'Channels by duration (<30m, 30-60m...).' },
             { key: 'genres', label: 'Genres', detail: 'Filter channels by genre.' },
             { key: 'directors', label: 'Directors', detail: 'Filter channels by director.' },
+            { key: 'decades', label: 'Decades', detail: 'Channels by decade (1980s, 1990s...).' },
+            { key: 'studios', label: 'Studios', detail: 'Channels by studio (Movies/TV).' },
+            { key: 'actors', label: 'Actors', detail: 'Channels by actor (Movies/TV).' },
         ];
 
         for (const strategy of strategyLabels) {
@@ -324,6 +447,9 @@ export class ChannelSetupScreen {
             button.addEventListener('click', () => {
                 this._preferredFocusId = button.id;
                 this._strategies[strategy.key] = !this._strategies[strategy.key];
+                this._review = null;
+                this._reviewError = null;
+                this._schedulePreview();
                 this._renderStep();
             });
 
@@ -357,6 +483,9 @@ export class ChannelSetupScreen {
                 ? (currentIndex + 1) % this._channelLimitOptions.length
                 : 0;
             this._maxChannels = this._channelLimitOptions[nextIndex] ?? DEFAULT_CHANNEL_SETUP_MAX;
+            this._review = null;
+            this._reviewError = null;
+            this._schedulePreview();
             this._renderStep();
         });
 
@@ -390,12 +519,77 @@ export class ChannelSetupScreen {
                 ? (currentIndex + 1) % this._minItemsOptions.length
                 : defaultIndex; // Default to 10 if present, else first option
             this._minItems = this._minItemsOptions[nextIndex] ?? DEFAULT_MIN_ITEMS;
+            this._review = null;
+            this._reviewError = null;
+            this._schedulePreview();
             this._renderStep();
         });
 
         list.appendChild(minItemsButton);
 
         this._contentEl.appendChild(list);
+
+        const previewPanel = document.createElement('div');
+        previewPanel.className = 'setup-preview';
+
+        const previewTitle = document.createElement('div');
+        previewTitle.className = 'setup-preview-title';
+        previewTitle.textContent = 'Estimate';
+        previewPanel.appendChild(previewTitle);
+
+        if (this._previewError) {
+            const error = document.createElement('div');
+            error.className = 'setup-preview-warning';
+            error.textContent = this._previewError;
+            previewPanel.appendChild(error);
+        } else if (this._isPreviewLoading) {
+            const loading = document.createElement('div');
+            loading.className = 'setup-preview-loading';
+            loading.textContent = 'Estimating channels...';
+            previewPanel.appendChild(loading);
+        } else if (this._preview) {
+            const { estimates, warnings, reachedMaxChannels } = this._preview;
+
+            const rows = document.createElement('div');
+            rows.className = 'setup-preview-rows';
+            rows.appendChild(this._buildPreviewRow('Total planned', estimates.total));
+            rows.appendChild(this._buildPreviewRow('Collections', estimates.collections));
+            rows.appendChild(this._buildPreviewRow('Library fallback', estimates.libraryFallback));
+            rows.appendChild(this._buildPreviewRow('Recently added', estimates.recentlyAdded));
+            rows.appendChild(this._buildPreviewRow('Playlists', estimates.playlists));
+            rows.appendChild(this._buildPreviewRow('Genres', estimates.genres));
+            rows.appendChild(this._buildPreviewRow('Directors', estimates.directors));
+            rows.appendChild(this._buildPreviewRow('Decades', estimates.decades));
+            rows.appendChild(this._buildPreviewRow('Studios', estimates.studios));
+            rows.appendChild(this._buildPreviewRow('Actors', estimates.actors));
+            previewPanel.appendChild(rows);
+
+            if (reachedMaxChannels) {
+                const cap = document.createElement('div');
+                cap.className = 'setup-preview-warning';
+                cap.textContent = 'Reached max channel limit; extra channels will be skipped.';
+                previewPanel.appendChild(cap);
+            }
+
+            if (warnings.length > 0) {
+                const warningList = document.createElement('div');
+                warningList.className = 'setup-preview-warnings';
+                for (const warning of warnings) {
+                    const item = document.createElement('div');
+                    item.className = 'setup-preview-warning';
+                    item.textContent = warning;
+                    warningList.appendChild(item);
+                }
+                previewPanel.appendChild(warningList);
+            }
+        } else {
+            const empty = document.createElement('div');
+            empty.className = 'setup-preview-empty';
+            empty.textContent = 'Estimates will appear after a short pause.';
+            previewPanel.appendChild(empty);
+        }
+
+        this._contentEl.appendChild(previewPanel);
 
         const actions = document.createElement('div');
         actions.className = 'button-row';
@@ -413,7 +607,7 @@ export class ChannelSetupScreen {
         const nextButton = document.createElement('button');
         nextButton.id = 'setup-next';
         nextButton.className = 'screen-button';
-        nextButton.textContent = 'Build';
+        nextButton.textContent = 'Review';
         nextButton.addEventListener('click', () => {
             this._step = 3;
             this._renderStep();
@@ -430,9 +624,139 @@ export class ChannelSetupScreen {
         } else {
             this._detailEl.textContent = '';
         }
+
+        this._schedulePreview();
     }
 
     private _renderBuildStep(): void {
+        if (this._isBuilding) {
+            this._renderBuildProgress();
+        } else {
+            this._renderBuildReview();
+        }
+    }
+
+    private _renderBuildReview(): void {
+        this._stepEl.textContent = 'Step 3 of 3';
+        this._statusEl.textContent = 'Review changes before building.';
+        this._detailEl.textContent = '';
+        this._errorEl.textContent = this._reviewError ?? '';
+
+        if (!this._review && !this._isReviewLoading) {
+            this._loadReview().catch(console.error);
+        }
+
+        const reviewContainer = document.createElement('div');
+        reviewContainer.className = 'setup-review';
+
+        if (this._isReviewLoading) {
+            const loading = document.createElement('div');
+            loading.className = 'setup-preview-loading';
+            loading.textContent = 'Preparing your review...';
+            reviewContainer.appendChild(loading);
+        } else if (this._review) {
+            const modeLine = document.createElement('div');
+            modeLine.className = 'setup-summary';
+            modeLine.textContent = `Build mode: ${this._buildMode.charAt(0).toUpperCase()}${this._buildMode.slice(1)}`;
+            reviewContainer.appendChild(modeLine);
+
+            const diffSummary = document.createElement('div');
+            diffSummary.className = 'setup-summary';
+            diffSummary.textContent = `Create ${this._review.diff.summary.created}, remove ${this._review.diff.summary.removed}, unchanged ${this._review.diff.summary.unchanged}.`;
+            reviewContainer.appendChild(diffSummary);
+
+            const sampleList = document.createElement('div');
+            sampleList.className = 'setup-preview-rows';
+            sampleList.appendChild(this._buildPreviewRow('Sample creates', this._review.diff.samples.created.join(', ') || 'None'));
+            sampleList.appendChild(this._buildPreviewRow('Sample removes', this._review.diff.samples.removed.join(', ') || 'None'));
+            sampleList.appendChild(this._buildPreviewRow('Sample unchanged', this._review.diff.samples.unchanged.join(', ') || 'None'));
+            reviewContainer.appendChild(sampleList);
+
+            if (this._review.preview.warnings.length > 0) {
+                const warningList = document.createElement('div');
+                warningList.className = 'setup-preview-warnings';
+                for (const warning of this._review.preview.warnings) {
+                    const item = document.createElement('div');
+                    item.className = 'setup-preview-warning';
+                    item.textContent = warning;
+                    warningList.appendChild(item);
+                }
+                reviewContainer.appendChild(warningList);
+            }
+
+            if (this._buildMode === 'replace') {
+                const warning = document.createElement('div');
+                warning.className = 'setup-preview-warning';
+                warning.textContent = 'This will replace your current lineup.';
+                reviewContainer.appendChild(warning);
+
+                const confirmButton = document.createElement('button');
+                confirmButton.id = 'setup-replace-confirm';
+                confirmButton.className = `setup-toggle${this._replaceConfirm ? ' selected' : ''}`;
+                confirmButton.addEventListener('click', () => {
+                    this._preferredFocusId = confirmButton.id;
+                    this._replaceConfirm = !this._replaceConfirm;
+                    this._renderStep();
+                });
+
+                const confirmLabel = document.createElement('span');
+                confirmLabel.className = 'setup-toggle-label';
+                confirmLabel.textContent = 'Confirm replace';
+                const confirmMeta = document.createElement('span');
+                confirmMeta.className = 'setup-toggle-meta';
+                confirmMeta.textContent = 'Required before replacing channels.';
+                const confirmState = document.createElement('span');
+                confirmState.className = 'setup-toggle-state';
+                confirmState.textContent = this._replaceConfirm ? 'Confirmed' : 'Required';
+
+                confirmButton.appendChild(confirmLabel);
+                confirmButton.appendChild(confirmMeta);
+                confirmButton.appendChild(confirmState);
+
+                reviewContainer.appendChild(confirmButton);
+            }
+        }
+
+        this._contentEl.appendChild(reviewContainer);
+
+        const actions = document.createElement('div');
+        actions.className = 'button-row';
+
+        const backButton = document.createElement('button');
+        backButton.id = 'setup-back';
+        backButton.className = 'screen-button secondary';
+        backButton.textContent = 'Back';
+        backButton.addEventListener('click', () => {
+            this._reviewAbortController?.abort();
+            this._review = null;
+            this._reviewError = null;
+            this._replaceConfirm = false;
+            this._step = 2;
+            this._renderStep();
+        });
+        actions.appendChild(backButton);
+
+        const confirmButton = document.createElement('button');
+        confirmButton.id = 'setup-confirm';
+        confirmButton.className = 'screen-button';
+        confirmButton.textContent = this._buildMode === 'replace' ? 'Confirm & Replace' : 'Confirm & Build';
+        confirmButton.disabled = this._isReviewLoading || !this._review || (this._buildMode === 'replace' && !this._replaceConfirm);
+        confirmButton.addEventListener('click', () => {
+            if (confirmButton.disabled) {
+                return;
+            }
+            this._isBuilding = true;
+            this._renderStep();
+        });
+        actions.appendChild(confirmButton);
+
+        this._contentEl.appendChild(actions);
+
+        const listButtons = Array.from(reviewContainer.querySelectorAll<HTMLButtonElement>('button'));
+        this._registerFocusables([...listButtons, backButton, confirmButton]);
+    }
+
+    private _renderBuildProgress(): void {
         this._stepEl.textContent = 'Step 3 of 3';
         this._statusEl.textContent = 'Building channels...';
         this._detailEl.textContent = '';
@@ -516,7 +840,7 @@ export class ChannelSetupScreen {
         detailLabel: HTMLElement
     ): Promise<void> {
         const token = this._visibilityToken;
-        if (this._isBuilding) return;
+        if (this._buildAbortController) return;
 
         const serverId = this._getSelectedServerId();
         if (!serverId) {
@@ -535,13 +859,7 @@ export class ChannelSetupScreen {
         this._isBuilding = true;
         this._buildAbortController = new AbortController();
 
-        const config: ChannelSetupConfig = {
-            serverId,
-            selectedLibraryIds: Array.from(this._selectedLibraryIds),
-            maxChannels: this._maxChannels,
-            enabledStrategies: { ...this._strategies },
-            minItemsPerChannel: this._minItems,
-        };
+        const config = this._buildConfig(serverId);
 
         const updateUI = (p: ChannelBuildProgress): void => {
             if (token !== this._visibilityToken) return;
@@ -620,6 +938,164 @@ export class ChannelSetupScreen {
             this._isBuilding = false;
             this._buildAbortController = null;
         }
+    }
+
+    private _buildConfig(serverId: string): ChannelSetupConfig {
+        return {
+            serverId,
+            selectedLibraryIds: Array.from(this._selectedLibraryIds),
+            maxChannels: this._maxChannels,
+            buildMode: this._buildMode,
+            enabledStrategies: { ...this._strategies },
+            actorStudioCombineMode: this._actorStudioCombineMode,
+            minItemsPerChannel: this._minItems,
+        };
+    }
+
+    private _buildPreviewKey(config: ChannelSetupConfig): string {
+        const previewConfig = { ...config, buildMode: undefined };
+        return JSON.stringify(previewConfig);
+    }
+
+    private _schedulePreview(): void {
+        if (this._step !== 2) {
+            return;
+        }
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            this._previewError = 'No server selected.';
+            return;
+        }
+        const key = this._buildPreviewKey(this._buildConfig(serverId));
+        if (key === this._lastPreviewKey && this._preview && !this._isPreviewLoading) {
+            return;
+        }
+        if (this._previewTimeoutId !== null) {
+            window.clearTimeout(this._previewTimeoutId);
+        }
+        this._previewTimeoutId = window.setTimeout(() => {
+            this._refreshPreview().catch(console.error);
+        }, 400);
+    }
+
+    private async _refreshPreview(): Promise<void> {
+        if (this._step !== 2) return;
+        const token = this._visibilityToken;
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            this._previewError = 'No server selected.';
+            this._preview = null;
+            this._isPreviewLoading = false;
+            this._renderStep();
+            return;
+        }
+
+        const config = this._buildConfig(serverId);
+        const key = this._buildPreviewKey(config);
+        if (key === this._lastPreviewKey && this._preview && !this._isPreviewLoading) {
+            return;
+        }
+
+        this._previewAbortController?.abort();
+        this._previewAbortController = new AbortController();
+        this._isPreviewLoading = true;
+        this._previewError = null;
+        this._renderStep();
+
+        try {
+            const preview = await this._orchestrator.getSetupPreview(config, {
+                signal: this._previewAbortController.signal,
+            });
+            if (token !== this._visibilityToken) return;
+            this._preview = preview;
+            this._lastPreviewKey = key;
+        } catch (error) {
+            if (token !== this._visibilityToken) return;
+            if (error && typeof error === 'object' && 'name' in error && (error as { name?: unknown }).name === 'AbortError') {
+                return;
+            }
+            this._previewError = error instanceof Error ? error.message : 'Unable to estimate channels.';
+            this._preview = null;
+        } finally {
+            if (token !== this._visibilityToken) return;
+            this._isPreviewLoading = false;
+            this._renderStep();
+        }
+    }
+
+    private async _loadReview(): Promise<void> {
+        const token = this._visibilityToken;
+        const serverId = this._getSelectedServerId();
+        if (!serverId) {
+            this._reviewError = 'No server selected.';
+            this._renderStep();
+            return;
+        }
+        if (this._isReviewLoading) return;
+
+        this._reviewAbortController?.abort();
+        this._reviewAbortController = new AbortController();
+        this._isReviewLoading = true;
+        this._reviewError = null;
+        this._renderStep();
+
+        try {
+            const review = await this._orchestrator.getSetupReview(this._buildConfig(serverId), {
+                signal: this._reviewAbortController.signal,
+            });
+            if (token !== this._visibilityToken) return;
+            this._review = review;
+        } catch (error) {
+            if (token !== this._visibilityToken) return;
+            if (error && typeof error === 'object' && 'name' in error && (error as { name?: unknown }).name === 'AbortError') {
+                return;
+            }
+            this._reviewError = error instanceof Error ? error.message : 'Unable to load review.';
+            this._review = null;
+        } finally {
+            if (token !== this._visibilityToken) return;
+            this._isReviewLoading = false;
+            this._renderStep();
+        }
+    }
+
+    private _buildPreviewRow(label: string, value: number | string): HTMLElement {
+        const row = document.createElement('div');
+        row.className = 'setup-preview-row';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'setup-preview-label';
+        labelEl.textContent = label;
+        const valueEl = document.createElement('span');
+        valueEl.className = 'setup-preview-value';
+        valueEl.textContent = String(value);
+        row.appendChild(labelEl);
+        row.appendChild(valueEl);
+        return row;
+    }
+
+    private _applySetupRecord(record: ChannelSetupRecord): void {
+        const availableIds = new Set(this._libraries.map((lib) => lib.id));
+        const selected = record.selectedLibraryIds.filter((id) => availableIds.has(id));
+        this._selectedLibraryIds = new Set(selected.length > 0 ? selected : this._libraries.map((lib) => lib.id));
+
+        this._strategies = {
+            collections: record.enabledStrategies.collections,
+            libraryFallback: record.enabledStrategies.libraryFallback,
+            playlists: record.enabledStrategies.playlists,
+            genres: record.enabledStrategies.genres,
+            directors: record.enabledStrategies.directors,
+            decades: record.enabledStrategies.decades,
+            recentlyAdded: record.enabledStrategies.recentlyAdded,
+            studios: record.enabledStrategies.studios,
+            actors: record.enabledStrategies.actors,
+        };
+        this._maxChannels = Math.min(record.maxChannels, MAX_CHANNELS);
+        this._minItems = Math.max(1, Math.floor(record.minItemsPerChannel || DEFAULT_MIN_ITEMS));
+        this._buildMode = record.buildMode ?? 'replace';
+        this._actorStudioCombineMode = record.actorStudioCombineMode ?? 'separate';
+        this._preview = null;
+        this._previewError = null;
+        this._lastPreviewKey = null;
     }
 
     private _getSelectedServerId(): string | null {

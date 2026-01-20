@@ -18,6 +18,7 @@ export type {
     PlexSeason,
     PlexCollection,
     PlexPlaylist,
+    PlexTagDirectoryItem,
     LibraryQueryOptions,
     SearchOptions,
     PlexLibraryState,
@@ -31,4 +32,5 @@ export {
     parseSeasons,
     parseCollections,
     parsePlaylists,
+    parseDirectoryTags,
 } from './ResponseParser';

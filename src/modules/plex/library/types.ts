@@ -165,6 +165,17 @@ export interface PlexPlaylist {
 }
 
 /**
+ * Parsed Plex tag directory entry (actors/studios).
+ */
+export interface PlexTagDirectoryItem {
+    key: string;
+    title: string;
+    count: number;
+    fastKey?: string;
+    thumb?: string;
+}
+
+/**
  * Options for querying Plex library content
  */
 export interface LibraryQueryOptions {
@@ -431,4 +442,15 @@ export interface RawPlaylist {
     thumb?: string;
     duration: number;
     leafCount: number;
+}
+
+/**
+ * Raw directory tag entry from Plex tag endpoints (actors/studios).
+ */
+export interface RawDirectoryTag {
+    key: string;
+    title: string;
+    count?: number;
+    fastKey?: string;
+    thumb?: string;
 }

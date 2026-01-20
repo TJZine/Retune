@@ -27,6 +27,8 @@ import { PLEX_MEDIA_TYPES } from '../../plex/library/constants';
 // Content Resolver Class
 // ============================================
 
+const SHOW_CACHE_TTL_MS = 300000;
+
 /**
  * Resolves content from various Plex sources.
  */
@@ -35,6 +37,10 @@ export class ContentResolver {
     private readonly _logger: {
         warn: (message: string, ...args: unknown[]) => void;
     };
+    private readonly _showCacheByLibraryId = new Map<
+        string,
+        { items: PlexMediaItemMinimal[]; cachedAt: number }
+    >();
 
     /**
      * Create a ContentResolver instance.
@@ -258,7 +264,10 @@ export class ContentResolver {
     ): Promise<ResolvedContentItem[]> {
         // Issue 5: Let errors propagate for cached fallback handling
         if (source.libraryType !== 'show') {
-            const items = await this._library.getLibraryItems(source.libraryId, options);
+            const optionsWithFilter = source.libraryFilter
+                ? { ...options, filter: source.libraryFilter }
+                : options;
+            const items = await this._library.getLibraryItems(source.libraryId, optionsWithFilter);
             return items.map((item, index) => this._toResolvedItem(item, index));
         }
 
@@ -267,16 +276,39 @@ export class ContentResolver {
         // 1. Fetch episodes directly (Plex type=4)
         const episodeItems = await this._library.getLibraryItems(source.libraryId, {
             ...options,
-            filter: { type: PLEX_MEDIA_TYPES.EPISODE },
+            filter: { ...(source.libraryFilter ?? {}), type: PLEX_MEDIA_TYPES.EPISODE },
         });
 
         // 2. Fetch shows to get parent metadata (one request per library section)
         // This avoids N+1 queries during expansion and provides filtering context.
-        const shows = await this._library.getLibraryItems(source.libraryId, options);
+        const now = Date.now();
+        const cached = this._showCacheByLibraryId.get(source.libraryId);
+        let shows: PlexMediaItemMinimal[] | null = null;
+        if (cached && now - cached.cachedAt < SHOW_CACHE_TTL_MS) {
+            shows = cached.items;
+        } else {
+            try {
+                shows = await this._library.getLibraryItems(source.libraryId, options);
+                this._showCacheByLibraryId.set(source.libraryId, { items: shows, cachedAt: now });
+            } catch (error) {
+                if (isAbortLike(error, options?.signal ?? undefined)) {
+                    throw error;
+                }
+                if (cached) {
+                    this._logger.warn('Show list fetch failed, using cached show list', error);
+                    shows = cached.items;
+                } else {
+                    this._logger.warn('Show list fetch failed, continuing without decoration', error);
+                    shows = null;
+                }
+            }
+        }
         const parentMap = new Map<string, PlexMediaItemMinimal>();
-        for (const show of shows) {
-            // Index by ratingKey or key? Plex grandparents usually refer to show ratingKey.
-            parentMap.set(show.ratingKey, show);
+        if (shows) {
+            for (const show of shows) {
+                // Index by ratingKey or key? Plex grandparents usually refer to show ratingKey.
+                parentMap.set(show.ratingKey, show);
+            }
         }
 
         const decorated: PlexMediaItemMinimal[] = [];
@@ -504,11 +536,11 @@ export class ContentResolver {
                 break;
             case 'rating':
                 value = item.rating;
-                if (value === undefined) return true; // Skip if not available
+                if (value === undefined) return false;
                 break;
             case 'contentRating':
                 value = item.contentRating;
-                if (value === undefined) return true;
+                if (value === undefined) return false;
                 break;
             case 'genre': {
                 // Genre is array - special handling for contains/notContains/eq/neq
@@ -540,11 +572,11 @@ export class ContentResolver {
             }
             case 'watched':
                 value = item.watched;
-                if (value === undefined) return true;
+                if (value === undefined) return false;
                 break;
             case 'addedAt':
                 value = item.addedAt;
-                if (value === undefined) return true;
+                if (value === undefined) return false;
                 break;
             default:
                 return true;
@@ -605,3 +637,16 @@ export class ContentResolver {
     }
 }
 
+function isAbortLike(error: unknown, signal?: AbortSignal): boolean {
+    if (signal?.aborted) return true;
+    if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+        return true;
+    }
+    if (error && typeof error === 'object' && 'name' in error) {
+        const namedError = error as { name?: unknown };
+        if (namedError.name === 'AbortError') {
+            return true;
+        }
+    }
+    return false;
+}

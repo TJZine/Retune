@@ -18,6 +18,8 @@ export const STORAGE_CONFIG = {
         'retune_image_cache',
         'retune_schedule_cache',
     ],
+    /** User-facing message when storage quota is exceeded */
+    STORAGE_QUOTA_EXCEEDED: 'Storage full - some settings may not be saved',
 } as const;
 
 /**

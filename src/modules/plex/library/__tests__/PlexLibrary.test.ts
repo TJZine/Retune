@@ -1,6 +1,7 @@
 import { PlexLibrary, PlexLibraryError, PlexLibraryErrorCode } from '../PlexLibrary';
 import type { PlexLibraryConfig } from '../interfaces';
 import { mockLocalStorage, installMockLocalStorage } from '../../../../__tests__/mocks/localStorage';
+import { PLEX_MEDIA_TYPES } from '../constants';
 
 // ============================================
 // Install Mock localStorage
@@ -165,6 +166,15 @@ const mockPlaylistsResponse = {
     MediaContainer: {
         Metadata: [
             { ratingKey: 'pl1', key: '/playlists/pl1', title: 'Favorites', thumb: '/pl1/thumb', duration: 36000000, leafCount: 10 },
+        ],
+    },
+};
+
+const mockTagDirectoryResponse = {
+    MediaContainer: {
+        Directory: [
+            { key: 't1', title: 'Tag One', count: 12, fastKey: '/library/sections/1/actor?type=1&actor=Tag%20One', thumb: '/t1/thumb' },
+            { key: 't2', title: 'Tag Two', count: 3 },
         ],
     },
 };
@@ -373,6 +383,19 @@ describe('PlexLibrary', () => {
             expect(item).toBeNull();
         });
 
+        it('should redact tokens in URL logs', async () => {
+            const warn = jest.fn();
+            const error = jest.fn();
+            mockFetchJson({ error: 'Not found' }, 404);
+            const library = new PlexLibrary({ ...mockConfig, logger: { warn, error } });
+
+            await library.getItem('99999?X-Plex-Token=mock-token');
+
+            const message = warn.mock.calls[0]?.[0] as string;
+            expect(message).toContain('REDACTED');
+            expect(message).not.toContain('mock-token');
+        });
+
         it('should parse media files correctly', async () => {
             mockFetchJson(mockMediaItemResponse);
             const library = new PlexLibrary(mockConfig);
@@ -561,6 +584,40 @@ describe('PlexLibrary', () => {
             const items = await library.getPlaylistItems('pl1');
 
             expect(items).toHaveLength(1);
+        });
+    });
+
+    describe('tag directories', () => {
+        it('should return actors from directory entries', async () => {
+            mockFetchJson(mockTagDirectoryResponse);
+            const library = new PlexLibrary(mockConfig);
+
+            const actors = await library.getActors('1', { type: PLEX_MEDIA_TYPES.MOVIE });
+
+            expect(actors).toHaveLength(2);
+            expect(actors[0]).toEqual({
+                key: 't1',
+                title: 'Tag One',
+                count: 12,
+                fastKey: '/library/sections/1/actor?type=1&actor=Tag%20One',
+                thumb: '/t1/thumb',
+            });
+        });
+
+        it('should return studios from directory entries', async () => {
+            mockFetchJson(mockTagDirectoryResponse);
+            const library = new PlexLibrary(mockConfig);
+
+            const studios = await library.getStudios('1', { type: PLEX_MEDIA_TYPES.MOVIE });
+
+            expect(studios).toHaveLength(2);
+            expect(studios[1]).toEqual({
+                key: 't2',
+                title: 'Tag Two',
+                count: 3,
+                fastKey: undefined,
+                thumb: undefined,
+            });
         });
     });
 

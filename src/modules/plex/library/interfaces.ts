@@ -10,6 +10,7 @@ import type {
     PlexSeason,
     PlexCollection,
     PlexPlaylist,
+    PlexTagDirectoryItem,
     LibraryQueryOptions,
     SearchOptions,
     PlexLibraryEvents,
@@ -133,6 +134,28 @@ export interface IPlexLibrary {
      * @returns Promise resolving to list of items
      */
     getPlaylistItems(playlistKey: string, options?: { signal?: AbortSignal | null }): Promise<PlexMediaItem[]>;
+
+    /**
+     * Get actors for a library section (tag directory).
+     * @param libraryId - Library section ID
+     * @param options - Query options (type required)
+     * @returns Promise resolving to list of tag directory entries
+     */
+    getActors(
+        libraryId: string,
+        options: { type: number; signal?: AbortSignal | null; onUnsupported?: () => void }
+    ): Promise<PlexTagDirectoryItem[]>;
+
+    /**
+     * Get studios for a library section (tag directory).
+     * @param libraryId - Library section ID
+     * @param options - Query options (type required)
+     * @returns Promise resolving to list of tag directory entries
+     */
+    getStudios(
+        libraryId: string,
+        options: { type: number; signal?: AbortSignal | null; onUnsupported?: () => void }
+    ): Promise<PlexTagDirectoryItem[]>;
 
     // Image URLs
 
