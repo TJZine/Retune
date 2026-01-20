@@ -274,6 +274,24 @@ describe('ChannelTuningCoordinator', () => {
         consoleSpy.mockRestore();
     });
 
+    it('reports CHANNEL_NOT_FOUND when switchToChannel misses', async () => {
+        const { coordinator, deps, channelManager, videoPlayer, scheduler } = createCoordinator();
+        channelManager.getChannel.mockReturnValue(null);
+
+        await coordinator.switchToChannel('missing');
+
+        expect(deps.handleGlobalError).toHaveBeenCalledWith(
+            {
+                code: AppErrorCode.CHANNEL_NOT_FOUND,
+                message: 'Channel missing not found',
+                recoverable: true,
+            },
+            'switchToChannel'
+        );
+        expect(videoPlayer.stop).not.toHaveBeenCalled();
+        expect(scheduler.loadChannel).not.toHaveBeenCalled();
+    });
+
     it('preserves success call order', async () => {
         const { coordinator, deps, channelManager, scheduler, videoPlayer } = createCoordinator();
 

@@ -85,7 +85,9 @@ function showGlobalErrorOverlay(message: string): void {
     hint.style.opacity = '0.75';
 
     overlay.append(title, detail, hint);
-    document.body.appendChild(overlay);
+    const host = document.body ?? document.documentElement;
+    if (!host) return;
+    host.appendChild(overlay);
 }
 
 // Register global error handlers

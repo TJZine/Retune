@@ -80,6 +80,14 @@ export class ChannelTuningCoordinator {
             const channel = channelManager.getChannel(channelId);
             if (!channel) {
                 console.error('Channel not found:', channelId);
+                this.deps.handleGlobalError(
+                    {
+                        code: AppErrorCode.CHANNEL_NOT_FOUND,
+                        message: `Channel ${channelId} not found`,
+                        recoverable: true,
+                    },
+                    'switchToChannel'
+                );
                 return;
             }
 
