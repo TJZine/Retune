@@ -202,7 +202,9 @@ export class ChannelSetupCoordinator {
             }
 
             if (!addedCollections && config.enabledStrategies.libraryFallback) {
-                let libraryCount = library.contentCount;
+                let libraryCount: number | null = Number.isFinite(library.contentCount)
+                    ? library.contentCount
+                    : null;
                 if (libraryCount === 0) {
                     try {
                         const countOptions: LibraryQueryOptions = { signal: signal ?? null };
@@ -218,10 +220,11 @@ export class ChannelSetupCoordinator {
                         }
                         console.warn(`Failed to fetch item count for ${library.title}:`, summarizeErrorForLog(e));
                         errorsTotal++;
+                        libraryCount = null;
                     }
                 }
 
-                if (libraryCount === 0 || libraryCount >= minItems) {
+                if (libraryCount === null || libraryCount >= minItems) {
                     pending.push({
                         name: library.title,
                         contentSource: {
@@ -398,10 +401,10 @@ export class ChannelSetupCoordinator {
                         for (const item of scanItems) {
                             const dur = item.durationMs;
                             if (!dur) continue;
-                            if (dur < 30 * 60000) buckets['< 30m'].count++;
-                            else if (dur < 60 * 60000) buckets['30m - 60m'].count++;
-                            else if (dur < 90 * 60000) buckets['60m - 90m'].count++;
-                            else if (dur < 120 * 60000) buckets['90m - 120m'].count++;
+                        if (dur < 30 * 60 * 1000) buckets['< 30m'].count++;
+                        else if (dur < 60 * 60 * 1000) buckets['30m - 60m'].count++;
+                        else if (dur < 90 * 60 * 1000) buckets['60m - 90m'].count++;
+                        else if (dur < 120 * 60 * 1000) buckets['90m - 120m'].count++;
                             else buckets['> 120m'].count++;
                         }
 
@@ -530,7 +533,7 @@ export class ChannelSetupCoordinator {
             refreshEpgMs += Date.now() - refreshStart;
 
         } catch (e) {
-            console.error('[Orchestrator] Channel build failed:', summarizeErrorForLog(e));
+            console.error('[ChannelSetup] Channel build failed:', summarizeErrorForLog(e));
             throw e;
         } finally {
             const totalMs = Date.now() - buildStartMs;
@@ -719,9 +722,9 @@ function summarizeErrorForLog(error: unknown): { name?: string; code?: unknown; 
 
 function redactSensitiveTokens(value: string): string {
     return value
-        .replace(/X-Plex-Token=[^&\s]*/g, 'X-Plex-Token=REDACTED')
-        .replace(/access_token=[^&\s]*/g, 'access_token=REDACTED')
-        .replace(/token=[^&\s]*/g, 'token=REDACTED');
+        .replace(/X-Plex-Token=[^&\s]*/gi, 'X-Plex-Token=REDACTED')
+        .replace(/access_token=[^&\s]*/gi, 'access_token=REDACTED')
+        .replace(/\btoken=[^&\s]*/gi, 'token=REDACTED');
 }
 
 function isAbortLike(error: unknown, signal?: AbortSignal): boolean {

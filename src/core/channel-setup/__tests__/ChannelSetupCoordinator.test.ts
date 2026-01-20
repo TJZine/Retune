@@ -1,7 +1,7 @@
 import { ChannelSetupCoordinator } from '../ChannelSetupCoordinator';
 import type { ChannelSetupCoordinatorDeps } from '../ChannelSetupCoordinator';
 import type { ChannelSetupConfig, ChannelSetupRecord } from '../types';
-import type { IPlexLibrary } from '../../../modules/plex/library';
+import type { IPlexLibrary, PlexLibraryType } from '../../../modules/plex/library';
 import type { IChannelManager, ChannelConfig } from '../../../modules/scheduler/channel-manager';
 import type { INavigationManager } from '../../../modules/navigation';
 
@@ -216,6 +216,7 @@ describe('ChannelSetupCoordinator', () => {
         const parsed = JSON.parse(stored as string) as ChannelSetupRecord;
         expect(parsed.createdAt).toBe(123);
         expect(parsed.updatedAt).toBeGreaterThan(456);
+        expect(parsed.minItemsPerChannel).toBe(7);
         expect(coordinator.shouldRunChannelSetup()).toBe(false);
     });
 
@@ -243,6 +244,24 @@ describe('ChannelSetupCoordinator', () => {
         expect(summary.errorCount).toBe(0);
     });
 
+    it('createChannelsFromSetup skips library fallback when count is zero', async () => {
+        const { coordinator, plexLibrary } = createCoordinator();
+        const libraries: PlexLibraryType[] = [
+            { id: 'lib1', title: 'Movies', type: 'movie', contentCount: 0 } as PlexLibraryType,
+        ];
+        plexLibrary.getLibraries.mockResolvedValue(libraries);
+        plexLibrary.getLibraryItemCount.mockResolvedValue(0);
+
+        const summary = await coordinator.createChannelsFromSetup(createConfig({
+            selectedLibraryIds: ['lib1'],
+            enabledStrategies: { ...createConfig().enabledStrategies, libraryFallback: true },
+        }));
+
+        expect(mockBuilder.createChannel).not.toHaveBeenCalled();
+        expect(summary.created).toBe(0);
+        expect(summary.skipped).toBe(1);
+    });
+
     it('logs safe summaries for playlist fetch errors', async () => {
         const { coordinator, plexLibrary } = createCoordinator();
         const error = { name: 'Error', code: 'BAD', message: 'http://plex?X-Plex-Token=secret' };
@@ -262,8 +281,8 @@ describe('ChannelSetupCoordinator', () => {
             throw new Error('Expected warn call for playlists');
         }
         expect(firstCall[1]).not.toBe(error);
-        expect(firstCall[1].message).toContain('X-Plex-Token=REDACTED');
-        expect(firstCall[1].message).not.toContain('X-Plex-Token=secret');
+        expect(firstCall[1].message).toMatch(/X-Plex-Token=REDACTED/i);
+        expect(firstCall[1].message).not.toMatch(/X-Plex-Token=secret/i);
 
         warnSpy.mockRestore();
     });
