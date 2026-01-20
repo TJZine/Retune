@@ -81,6 +81,7 @@ export class ChannelSetupScreen {
     private _review: ChannelSetupReview | null = null;
     private _reviewError: string | null = null;
     private _lastPreviewKey: string | null = null;
+    private _pendingPreviewKey: string | null = null;
 
     private _toDomId(raw: string): string {
         return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -190,6 +191,7 @@ export class ChannelSetupScreen {
         this._review = null;
         this._reviewError = null;
         this._lastPreviewKey = null;
+        this._pendingPreviewKey = null;
         this._errorEl.textContent = '';
     }
 
@@ -295,6 +297,9 @@ export class ChannelSetupScreen {
                 } else {
                     this._selectedLibraryIds.add(library.id);
                 }
+                this._review = null;
+                this._reviewError = null;
+                this._replaceConfirm = false;
                 this._renderStep();
             });
 
@@ -961,9 +966,6 @@ export class ChannelSetupScreen {
         if (this._step !== 2) {
             return;
         }
-        if (this._isPreviewLoading) {
-            return;
-        }
         const serverId = this._getSelectedServerId();
         if (!serverId) {
             this._previewError = 'No server selected.';
@@ -973,6 +975,10 @@ export class ChannelSetupScreen {
         if (key === this._lastPreviewKey && this._preview && !this._isPreviewLoading) {
             return;
         }
+        if (this._isPreviewLoading && key === this._pendingPreviewKey) {
+            return;
+        }
+        this._pendingPreviewKey = key;
         if (this._previewTimeoutId !== null) {
             window.clearTimeout(this._previewTimeoutId);
         }
@@ -989,6 +995,7 @@ export class ChannelSetupScreen {
             this._previewError = 'No server selected.';
             this._preview = null;
             this._isPreviewLoading = false;
+            this._pendingPreviewKey = null;
             this._renderStep();
             return;
         }
@@ -997,6 +1004,9 @@ export class ChannelSetupScreen {
         const key = this._buildPreviewKey(config);
         if (key === this._lastPreviewKey && this._preview && !this._isPreviewLoading) {
             return;
+        }
+        if (this._pendingPreviewKey === key) {
+            this._pendingPreviewKey = null;
         }
 
         this._previewAbortController?.abort();
@@ -1101,6 +1111,7 @@ export class ChannelSetupScreen {
         this._preview = null;
         this._previewError = null;
         this._lastPreviewKey = null;
+        this._pendingPreviewKey = null;
     }
 
     private _getSelectedServerId(): string | null {

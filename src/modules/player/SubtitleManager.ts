@@ -36,13 +36,13 @@ export class SubtitleManager {
         }
     }
 
-    private _logSubtitleDebug(event: string, context: Record<string, unknown>): void {
+    private _logSubtitleDebug(event: string, contextFactory: () => Record<string, unknown>): void {
         if (!this._isSubtitleDebugEnabled()) return;
         const entry = {
             ts: new Date().toISOString(),
             module: 'SubtitleManager',
             event,
-            ...context,
+            ...contextFactory(),
         };
         console.warn(`[SubtitleDebug] ${JSON.stringify(entry)}`);
     }
@@ -93,7 +93,7 @@ export class SubtitleManager {
         this._tracks = tracks;
         const burnInRequired: string[] = [];
 
-        this._logSubtitleDebug('loadTracks_start', {
+        this._logSubtitleDebug('loadTracks_start', () => ({
             tracks: tracks.map((t) => ({
                 id: t.id,
                 format: t.format,
@@ -104,7 +104,7 @@ export class SubtitleManager {
                 default: t.default,
                 url: t.url ? redactSensitiveTokens(t.url) : null,
             })),
-        });
+        }));
 
         for (const track of tracks) {
             if (this._requiresBurnIn(track.format)) {
@@ -116,29 +116,29 @@ export class SubtitleManager {
             if (track.url && this._isTextFormat(track.format)) {
                 const trackElement = this._createTrackElement(track);
                 if (this._isSubtitleDebugEnabled()) {
-                    this._logSubtitleDebug('track_appended', {
+                    this._logSubtitleDebug('track_appended', () => ({
                         id: track.id,
                         format: track.format,
                         src: redactSensitiveTokens(trackElement.src),
                         hasTrackObject: !!trackElement.track,
-                    });
+                    }));
                     trackElement.addEventListener('load', () => {
-                        this._logSubtitleDebug('track_loaded', {
+                        this._logSubtitleDebug('track_loaded', () => ({
                             id: track.id,
                             format: track.format,
                             src: redactSensitiveTokens(trackElement.src),
                             hasTrackObject: !!trackElement.track,
                             nativeTextTracks: this._snapshotNativeTextTracks(),
-                        });
+                        }));
                     });
                     trackElement.addEventListener('error', () => {
-                        this._logSubtitleDebug('track_error', {
+                        this._logSubtitleDebug('track_error', () => ({
                             id: track.id,
                             format: track.format,
                             src: redactSensitiveTokens(trackElement.src),
                             hasTrackObject: !!trackElement.track,
                             nativeTextTracks: this._snapshotNativeTextTracks(),
-                        });
+                        }));
                     });
                 }
                 this._videoElement.appendChild(trackElement);
@@ -146,11 +146,11 @@ export class SubtitleManager {
             }
         }
 
-        this._logSubtitleDebug('loadTracks_end', {
+        this._logSubtitleDebug('loadTracks_end', () => ({
             burnInRequired,
             createdTrackElements: Array.from(this._trackElements.keys()),
             nativeTextTracks: this._snapshotNativeTextTracks(),
-        });
+        }));
 
         return burnInRequired;
     }
@@ -192,10 +192,10 @@ export class SubtitleManager {
         }
 
         this._activeTrackId = trackId;
-        this._logSubtitleDebug('setActiveTrack', {
+        this._logSubtitleDebug('setActiveTrack', () => ({
             activeTrackId: trackId,
             nativeTextTracks: this._snapshotNativeTextTracks(),
-        });
+        }));
     }
 
     /**
