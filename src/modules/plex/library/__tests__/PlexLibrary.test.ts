@@ -611,13 +611,13 @@ describe('PlexLibrary', () => {
             const studios = await library.getStudios('1', { type: PLEX_MEDIA_TYPES.MOVIE });
 
             expect(studios).toHaveLength(2);
-            expect(studios[1]).toEqual({
+            expect(studios[1]).toMatchObject({
                 key: 't2',
                 title: 'Tag Two',
                 count: 3,
-                fastKey: undefined,
-                thumb: undefined,
             });
+            expect(studios[1]).not.toHaveProperty('fastKey');
+            expect(studios[1]).not.toHaveProperty('thumb');
         });
     });
 

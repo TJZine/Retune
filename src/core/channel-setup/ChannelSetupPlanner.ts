@@ -106,7 +106,8 @@ export function buildChannelSetupPlan(input: ChannelSetupPlanInput): ChannelSetu
 
     const requestedMax = Number.isFinite(config.maxChannels) ? config.maxChannels : 100;
     const effectiveMaxChannels = Math.max(1, Math.floor(requestedMax));
-    const minItems = Math.max(1, Math.floor(config.minItemsPerChannel));
+    const requestedMinItems = Number.isFinite(config.minItemsPerChannel) ? config.minItemsPerChannel : 10;
+    const minItems = Math.max(1, Math.floor(requestedMinItems));
 
     const selectedLibraries = libraries
         .filter((lib) => config.selectedLibraryIds.includes(lib.id))
@@ -429,6 +430,7 @@ export function createChannelIdentityKey(candidate: ChannelIdentityCandidate): s
     const normalized = {
         source: normalizeSource(candidate.contentSource),
         filters: normalizeFilters(candidate.contentFilters),
+        sortOrder: candidate.sortOrder ?? null,
     };
     return stableStringify(normalized);
 }

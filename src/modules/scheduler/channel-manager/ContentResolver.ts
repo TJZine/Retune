@@ -297,6 +297,7 @@ export class ContentResolver {
                 if (cached) {
                     this._logger.warn('Show list fetch failed, using cached show list', error);
                     shows = cached.items;
+                    this._showCacheByLibraryId.set(source.libraryId, { items: cached.items, cachedAt: now });
                 } else {
                     this._logger.warn('Show list fetch failed, continuing without decoration', error);
                     shows = null;

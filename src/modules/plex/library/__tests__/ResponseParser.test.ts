@@ -275,9 +275,9 @@ describe('ResponseParser', () => {
                 key: 'k2',
                 title: 'Actor B',
                 count: 0,
-                fastKey: undefined,
-                thumb: undefined,
             });
+            expect(result[1]).not.toHaveProperty('fastKey');
+            expect(result[1]).not.toHaveProperty('thumb');
         });
     });
 
