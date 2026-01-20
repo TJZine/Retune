@@ -244,6 +244,33 @@ describe('ChannelSetupCoordinator', () => {
         expect(summary.errorCount).toBe(0);
     });
 
+    it('createChannelsFromSetup treats AbortError from getLibrariesForSetup as cancellation', async () => {
+        const { coordinator, plexLibrary } = createCoordinator();
+        plexLibrary.getLibraries.mockRejectedValue({ name: 'AbortError' });
+
+        const summary = await coordinator.createChannelsFromSetup(createConfig());
+
+        expect(summary.canceled).toBe(true);
+        expect(summary.lastTask).toBe('fetch_playlists');
+        expect(summary.errorCount).toBe(0);
+    });
+
+    it('createChannelsFromSetup falls back to default minItems for non-finite values', async () => {
+        const { coordinator, plexLibrary } = createCoordinator();
+        plexLibrary.getLibraries.mockResolvedValue([
+            { id: 'lib1', title: 'Movies', type: 'movie', contentCount: 25 },
+        ] as PlexLibraryType[]);
+        plexLibrary.getLibraryItems.mockResolvedValue([]);
+
+        await coordinator.createChannelsFromSetup(createConfig({
+            selectedLibraryIds: ['lib1'],
+            enabledStrategies: { ...createConfig().enabledStrategies, genres: true },
+            minItemsPerChannel: Number.NaN,
+        }));
+
+        expect(plexLibrary.getLibraryItems).toHaveBeenCalled();
+    });
+
     it('createChannelsFromSetup skips library fallback when count is zero', async () => {
         const { coordinator, plexLibrary } = createCoordinator();
         const libraries: PlexLibraryType[] = [

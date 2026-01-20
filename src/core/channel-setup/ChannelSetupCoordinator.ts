@@ -85,9 +85,19 @@ export class ChannelSetupCoordinator {
 
         reportProgress('fetch_playlists', 'Preparing...', 'Loading libraries', 0, null);
 
+        let libraries: PlexLibraryType[];
         const librariesStart = Date.now();
-        const libraries = await this.getLibrariesForSetup(signal ?? null);
-        libraryFetchMs += Date.now() - librariesStart;
+        try {
+            libraries = await this.getLibrariesForSetup(signal ?? null);
+            libraryFetchMs += Date.now() - librariesStart;
+        } catch (e) {
+            libraryFetchMs += Date.now() - librariesStart;
+            if (isAbortLike(e, signal)) {
+                reportProgress('fetch_playlists', 'Preparing...', 'Canceled', 0, null);
+                return { created: 0, skipped: 0, reachedMaxChannels: false, errorCount: 0, canceled: true, lastTask: 'fetch_playlists' };
+            }
+            throw e;
+        }
         const selectedLibraries = libraries
             .filter((lib) => config.selectedLibraryIds.includes(lib.id))
             .sort((a, b) => a.title.localeCompare(b.title));
@@ -102,7 +112,10 @@ export class ChannelSetupCoordinator {
             Math.max(Math.floor(requestedMax), 1),
             MAX_CHANNELS
         );
-        const minItems = Math.max(1, config.minItemsPerChannel ?? 10);
+        const rawMinItems = Number.isFinite(config.minItemsPerChannel)
+            ? Math.floor(config.minItemsPerChannel)
+            : 10;
+        const minItems = Math.max(1, rawMinItems);
         // Maximum items to scan for category extraction during setup.
         // Trade-off: higher values improve coverage but increase setup time.
         const CHANNEL_SETUP_SCAN_LIMIT = 500;
@@ -729,7 +742,7 @@ function redactSensitiveTokens(value: string): string {
 
 function isAbortLike(error: unknown, signal?: AbortSignal): boolean {
     if (signal?.aborted) return true;
-    if (error instanceof DOMException && error.name === 'AbortError') return true;
+    if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') return true;
     if (error && typeof error === 'object' && 'name' in error) {
         const namedError = error as { name?: unknown };
         if (namedError.name === 'AbortError') return true;
