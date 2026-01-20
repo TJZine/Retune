@@ -7,6 +7,9 @@
 
 import type { SubtitleTrack } from './types';
 import { BURN_IN_SUBTITLE_FORMATS, TEXT_SUBTITLE_FORMATS } from './constants';
+import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
+import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
+import { redactSensitiveTokens } from '../../utils/redact';
 
 /**
  * Manages subtitle tracks for the video player.
@@ -24,6 +27,45 @@ export class SubtitleManager {
 
     /** Currently active track ID */
     private _activeTrackId: string | null = null;
+
+    private _isSubtitleDebugEnabled(): boolean {
+        try {
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING));
+        } catch {
+            return false;
+        }
+    }
+
+    private _logSubtitleDebug(event: string, contextFactory: () => Record<string, unknown>): void {
+        if (!this._isSubtitleDebugEnabled()) return;
+        const entry = {
+            ts: new Date().toISOString(),
+            module: 'SubtitleManager',
+            event,
+            ...contextFactory(),
+        };
+        console.warn(`[SubtitleDebug] ${JSON.stringify(entry)}`);
+    }
+
+    private _snapshotNativeTextTracks(): Array<Record<string, unknown>> {
+        if (!this._videoElement) return [];
+        const list = this._videoElement.textTracks;
+        const result: Array<Record<string, unknown>> = [];
+        for (let i = 0; i < list.length; i++) {
+            const t = list[i];
+            if (!t) continue;
+            result.push({
+                id: t.id,
+                kind: t.kind,
+                label: t.label,
+                language: t.language,
+                mode: t.mode,
+                cuesLength: t.cues?.length ?? null,
+                activeCuesLength: t.activeCues?.length ?? null,
+            });
+        }
+        return result;
+    }
 
     /**
      * Initialize the subtitle manager with a video element.
@@ -51,6 +93,19 @@ export class SubtitleManager {
         this._tracks = tracks;
         const burnInRequired: string[] = [];
 
+        this._logSubtitleDebug('loadTracks_start', () => ({
+            tracks: tracks.map((t) => ({
+                id: t.id,
+                format: t.format,
+                languageCode: t.languageCode,
+                language: t.language,
+                title: t.title,
+                forced: t.forced,
+                default: t.default,
+                url: t.url ? redactSensitiveTokens(t.url) : null,
+            })),
+        }));
+
         for (const track of tracks) {
             if (this._requiresBurnIn(track.format)) {
                 burnInRequired.push(track.id);
@@ -60,10 +115,42 @@ export class SubtitleManager {
             // Create track element for text-based subtitles
             if (track.url && this._isTextFormat(track.format)) {
                 const trackElement = this._createTrackElement(track);
+                if (this._isSubtitleDebugEnabled()) {
+                    this._logSubtitleDebug('track_appended', () => ({
+                        id: track.id,
+                        format: track.format,
+                        src: redactSensitiveTokens(trackElement.src),
+                        hasTrackObject: !!trackElement.track,
+                    }));
+                    trackElement.addEventListener('load', () => {
+                        this._logSubtitleDebug('track_loaded', () => ({
+                            id: track.id,
+                            format: track.format,
+                            src: redactSensitiveTokens(trackElement.src),
+                            hasTrackObject: !!trackElement.track,
+                            nativeTextTracks: this._snapshotNativeTextTracks(),
+                        }));
+                    });
+                    trackElement.addEventListener('error', () => {
+                        this._logSubtitleDebug('track_error', () => ({
+                            id: track.id,
+                            format: track.format,
+                            src: redactSensitiveTokens(trackElement.src),
+                            hasTrackObject: !!trackElement.track,
+                            nativeTextTracks: this._snapshotNativeTextTracks(),
+                        }));
+                    });
+                }
                 this._videoElement.appendChild(trackElement);
                 this._trackElements.set(track.id, trackElement);
             }
         }
+
+        this._logSubtitleDebug('loadTracks_end', () => ({
+            burnInRequired,
+            createdTrackElements: Array.from(this._trackElements.keys()),
+            nativeTextTracks: this._snapshotNativeTextTracks(),
+        }));
 
         return burnInRequired;
     }
@@ -105,6 +192,10 @@ export class SubtitleManager {
         }
 
         this._activeTrackId = trackId;
+        this._logSubtitleDebug('setActiveTrack', () => ({
+            activeTrackId: trackId,
+            nativeTextTracks: this._snapshotNativeTextTracks(),
+        }));
     }
 
     /**

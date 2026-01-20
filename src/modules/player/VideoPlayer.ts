@@ -27,6 +27,9 @@ import {
     VIDEO_ELEMENT_STYLES,
     DEFAULT_CONFIG,
 } from './constants';
+import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
+import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
+import { redactSensitiveTokens } from '../../utils/redact';
 
 // Import and re-export from ErrorHandler for backward compatibility
 import { mapMediaErrorCodeToPlaybackError } from './ErrorHandler';
@@ -123,6 +126,45 @@ export class VideoPlayer implements IVideoPlayer {
 
     /** Internal state */
     private _state: VideoPlayerInternalState = this._createInitialState();
+
+    private _isSubtitleDebugEnabled(): boolean {
+        try {
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING));
+        } catch {
+            return false;
+        }
+    }
+
+    private _logSubtitleDebug(event: string, contextFactory: () => Record<string, unknown>): void {
+        if (!this._isSubtitleDebugEnabled()) return;
+        const entry = {
+            ts: new Date().toISOString(),
+            module: 'VideoPlayer',
+            event,
+            ...contextFactory(),
+        };
+        console.warn(`[SubtitleDebug] ${JSON.stringify(entry)}`);
+    }
+
+    private _snapshotNativeTextTracks(): Array<Record<string, unknown>> {
+        if (!this._videoElement) return [];
+        const list = this._videoElement.textTracks;
+        const result: Array<Record<string, unknown>> = [];
+        for (let i = 0; i < list.length; i++) {
+            const t = list[i];
+            if (!t) continue;
+            result.push({
+                id: t.id,
+                kind: t.kind,
+                label: t.label,
+                language: t.language,
+                mode: t.mode,
+                cuesLength: t.cues?.length ?? null,
+                activeCuesLength: t.activeCues?.length ?? null,
+            });
+        }
+        return result;
+    }
 
     // ========================================
     // Lifecycle
@@ -267,11 +309,30 @@ export class VideoPlayer implements IVideoPlayer {
             this._videoElement.src = descriptor.url;
         }
 
+        this._logSubtitleDebug('loadStream_src_set', () => ({
+            protocol: descriptor.protocol,
+            url: redactSensitiveTokens(descriptor.url),
+            descriptorSubtitleTracks: descriptor.subtitleTracks.map((t) => ({
+                id: t.id,
+                format: t.format,
+                languageCode: t.languageCode,
+                language: t.language,
+                title: t.title,
+                forced: t.forced,
+                default: t.default,
+                url: t.url ? redactSensitiveTokens(t.url) : null,
+            })),
+        }));
+
         // Load subtitle tracks
         const burnInTracks = this._subtitleManager.loadTracks(descriptor.subtitleTracks);
         if (burnInTracks.length > 0) {
             console.warn('[VideoPlayer] Tracks requiring burn-in:', burnInTracks);
         }
+        this._logSubtitleDebug('loadStream_subtitles_loaded', () => ({
+            burnInTracks,
+            nativeTextTracks: this._snapshotNativeTextTracks(),
+        }));
 
         // Load audio tracks
         this._audioTrackManager.setTracks(descriptor.audioTracks);
@@ -289,6 +350,10 @@ export class VideoPlayer implements IVideoPlayer {
         // Wait for canplay event with timeout (30s default)
         // Uses VideoPlayerEvents.waitForCanPlay() to avoid code duplication
         await this._eventManager.waitForCanPlay();
+
+        this._logSubtitleDebug('canplay', () => ({
+            nativeTextTracks: this._snapshotNativeTextTracks(),
+        }));
 
         // Set start position AFTER metadata is loaded
         // CRITICAL: load() resets currentTime to 0, so we must set it after canplay
@@ -519,6 +584,11 @@ export class VideoPlayer implements IVideoPlayer {
     public async setSubtitleTrack(trackId: string | null): Promise<void> {
         this._subtitleManager.setActiveTrack(trackId);
         this._state.activeSubtitleId = trackId;
+
+        this._logSubtitleDebug('setSubtitleTrack', () => ({
+            trackId,
+            nativeTextTracks: this._snapshotNativeTextTracks(),
+        }));
 
         this._emitter.emit('trackChange', { type: 'subtitle', trackId });
         this._emitStateChange();

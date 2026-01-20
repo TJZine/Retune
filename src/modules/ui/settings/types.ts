@@ -32,6 +32,8 @@ export interface DisplaySettings {
 export interface DeveloperSettings {
     /** Enable verbose debug logging */
     debugLogging: boolean;
+    /** Enable verbose subtitle debug logging */
+    subtitleDebugLogging: boolean;
     /** Show FPS counter overlay */
     showFps: boolean;
 }

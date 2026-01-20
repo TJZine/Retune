@@ -98,6 +98,9 @@ import type {
     ChannelSetupConfig,
     ChannelBuildSummary,
     ChannelBuildProgress,
+    ChannelSetupRecord,
+    ChannelSetupPreview,
+    ChannelSetupReview,
 } from './core/channel-setup/types';
 import { NowPlayingDebugManager } from './modules/debug/NowPlayingDebugManager';
 import {
@@ -134,6 +137,8 @@ export type {
     ChannelBuildSummary,
     ChannelBuildProgress,
     ChannelSetupRecord,
+    ChannelSetupPreview,
+    ChannelSetupReview,
 } from './core/channel-setup/types';
 
 export interface PlaybackInfoSnapshot {
@@ -232,6 +237,9 @@ export interface IAppOrchestrator {
     clearSelectedServer(): void;
     getSelectedServerId(): string | null;
     getLibrariesForSetup(signal?: AbortSignal | null): Promise<PlexLibraryType[]>;
+    getChannelSetupRecord(serverId: string): ChannelSetupRecord | null;
+    getSetupPreview(config: ChannelSetupConfig, options?: { signal?: AbortSignal }): Promise<ChannelSetupPreview>;
+    getSetupReview(config: ChannelSetupConfig, options?: { signal?: AbortSignal }): Promise<ChannelSetupReview>;
     createChannelsFromSetup(config: ChannelSetupConfig, options?: { signal?: AbortSignal; onProgress?: (p: ChannelBuildProgress) => void }): Promise<ChannelBuildSummary>;
     markSetupComplete(serverId: string, setupConfig: ChannelSetupConfig): void;
     requestChannelSetupRerun(): void;
@@ -934,6 +942,26 @@ export class AppOrchestrator implements IAppOrchestrator {
 
     async getLibrariesForSetup(signal?: AbortSignal | null): Promise<PlexLibraryType[]> {
         return this._channelSetup?.getLibrariesForSetup(signal ?? null)
+            ?? Promise.reject(new Error('Channel setup not initialized'));
+    }
+
+    getChannelSetupRecord(serverId: string): ChannelSetupRecord | null {
+        return this._channelSetup?.getSetupRecord(serverId) ?? null;
+    }
+
+    async getSetupPreview(
+        config: ChannelSetupConfig,
+        options?: { signal?: AbortSignal }
+    ): Promise<ChannelSetupPreview> {
+        return this._channelSetup?.getSetupPreview(config, options)
+            ?? Promise.reject(new Error('Channel setup not initialized'));
+    }
+
+    async getSetupReview(
+        config: ChannelSetupConfig,
+        options?: { signal?: AbortSignal }
+    ): Promise<ChannelSetupReview> {
+        return this._channelSetup?.getSetupReview(config, options)
             ?? Promise.reject(new Error('Channel setup not initialized'));
     }
 

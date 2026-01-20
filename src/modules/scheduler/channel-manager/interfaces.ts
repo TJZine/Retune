@@ -92,7 +92,7 @@ export interface IChannelManager {
      * Reorder channels.
      * @param orderedIds - Array of channel IDs in new order
      */
-    reorderChannels(orderedIds: string[]): void;
+    reorderChannels(orderedIds: string[]): Promise<void>;
 
     /**
      * Set the current active channel.
@@ -153,7 +153,7 @@ export interface IChannelManager {
     setStorageKeys(storageKey: string, currentChannelKey: string): void;
 
     /**
-     * Replace the entire channel lineup atomically (best-effort).
+     * Replace the entire channel lineup atomically.
      * Used to avoid partial destructive builds when generating many channels.
      */
     replaceAllChannels(

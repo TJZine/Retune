@@ -5,10 +5,11 @@
 
 import { ChannelManager } from '../ChannelManager';
 import type { IPlexLibraryMinimal, PlexMediaItemMinimal } from '../interfaces';
-import type { LibraryContentSource } from '../types';
+import type { ChannelConfig, LibraryContentSource } from '../types';
 import {
     STORAGE_KEY,
     CURRENT_CHANNEL_KEY,
+    MAX_CHANNELS,
 } from '../constants';
 
 // ============================================
@@ -44,6 +45,27 @@ function createMockContentSource(): LibraryContentSource {
         libraryId: 'lib1',
         libraryType: 'movie',
         includeWatched: true,
+    };
+}
+
+function createBaseChannel(overrides: Partial<ChannelConfig> = {}): ChannelConfig {
+    return {
+        id: 'base',
+        number: 1,
+        name: 'Base Channel',
+        contentSource: createMockContentSource(),
+        playbackMode: 'shuffle',
+        shuffleSeed: 1,
+        phaseSeed: 1,
+        startTimeAnchor: 0,
+        skipIntros: false,
+        skipCredits: false,
+        createdAt: 0,
+        updatedAt: 0,
+        lastContentRefresh: 0,
+        itemCount: 0,
+        totalDurationMs: 0,
+        ...overrides,
     };
 }
 
@@ -208,6 +230,40 @@ describe('ChannelManager', () => {
             expect(ch).not.toBeNull();
             expect(ch!.number).toBe(5);
             expect(ch!.name).toBe('Channel 5');
+        });
+    });
+
+    describe('replaceAllChannels', () => {
+        it('normalizes duplicate and invalid channel numbers in input order', async () => {
+            const channels = [
+                createBaseChannel({ id: 'c1', number: 1 }),
+                createBaseChannel({ id: 'c2', number: 1 }),
+                createBaseChannel({ id: 'c3', number: 999 }),
+                createBaseChannel({ id: 'c4', number: 2 }),
+            ];
+
+            await manager.replaceAllChannels(channels);
+
+            const result = manager.getAllChannels();
+            expect(result).toHaveLength(4);
+            expect(result[0]!.number).toBe(1);
+            expect(result[1]!.number).toBe(2);
+            expect(result[2]!.number).toBe(3);
+            expect(result[3]!.number).toBe(4);
+        });
+
+        it('skips channels over MAX_CHANNELS and warns per skipped channel', async () => {
+            const warn = jest.fn();
+            manager = new ChannelManager({ plexLibrary: mockLibrary, logger: { warn, error: jest.fn() } });
+
+            const channels = Array.from({ length: MAX_CHANNELS + 2 }, (_, index) => ({
+                ...createBaseChannel({ id: `c${index + 1}`, number: index + 1 }),
+            }));
+
+            await manager.replaceAllChannels(channels);
+
+            expect(manager.getAllChannels()).toHaveLength(MAX_CHANNELS);
+            expect(warn).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -566,7 +622,7 @@ describe('ChannelManager', () => {
                 contentSource: createMockContentSource(),
             });
 
-            manager.reorderChannels([ch3.id, ch1.id, ch2.id]);
+            await manager.reorderChannels([ch3.id, ch1.id, ch2.id]);
 
             const all = manager.getAllChannels();
             expect(all[0]!.id).toBe(ch3.id);

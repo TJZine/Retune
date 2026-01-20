@@ -14,6 +14,7 @@ import type {
     PlexSeason,
     PlexCollection,
     PlexPlaylist,
+    PlexTagDirectoryItem,
     LibraryQueryOptions,
     SearchOptions,
     PlexLibraryState,
@@ -24,6 +25,7 @@ import type {
     RawSeason,
     RawCollection,
     RawPlaylist,
+    RawDirectoryTag,
 } from './types';
 import { PlexLibraryErrorCode } from './types';
 import {
@@ -33,6 +35,7 @@ import {
     parseSeasons,
     parseCollections,
     parsePlaylists,
+    parseDirectoryTags,
 } from './ResponseParser';
 import { PLEX_LIBRARY_CONSTANTS, PLEX_ENDPOINTS, PLEX_MEDIA_TYPES } from './constants';
 
@@ -82,6 +85,23 @@ export class PlexLibrary implements IPlexLibrary {
             libraryCache: new Map(),
             isRefreshing: false,
         };
+    }
+
+    private _redactUrlForLog(url: string): string {
+        const shouldRedact = (key: string): boolean =>
+            ['x-plex-token', 'access_token', 'token'].includes(key.toLowerCase());
+
+        try {
+            const parsed = new URL(url);
+            for (const key of [...parsed.searchParams.keys()]) {
+                if (shouldRedact(key)) {
+                    parsed.searchParams.set(key, 'REDACTED');
+                }
+            }
+            return parsed.toString();
+        } catch {
+            return url.replace(/([?&])(X-Plex-Token|access_token|token)=[^&]*/gi, '$1$2=REDACTED');
+        }
     }
 
     // ============================================
@@ -470,6 +490,44 @@ export class PlexLibrary implements IPlexLibrary {
     }
 
     // ============================================
+    // Actor/Studio Tags
+    // ============================================
+
+    async getActors(
+        libraryId: string,
+        options: { type: number; signal?: AbortSignal | null; onUnsupported?: () => void }
+    ): Promise<PlexTagDirectoryItem[]> {
+        const params: Record<string, string | number> = { type: options.type };
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_ACTORS(libraryId), params);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawDirectoryTag>>(url, { signal: options.signal ?? null });
+        if (!response) {
+            const logger = this._config.logger ?? { warn: console.warn, error: console.error };
+            logger.warn(`[PlexLibrary] Actors endpoint unavailable for library ${libraryId}`);
+            options.onUnsupported?.();
+            return [];
+        }
+        const directories = response.MediaContainer.Directory || [];
+        return parseDirectoryTags(directories);
+    }
+
+    async getStudios(
+        libraryId: string,
+        options: { type: number; signal?: AbortSignal | null; onUnsupported?: () => void }
+    ): Promise<PlexTagDirectoryItem[]> {
+        const params: Record<string, string | number> = { type: options.type };
+        const url = this._buildUrl(PLEX_ENDPOINTS.LIBRARY_SECTION_STUDIOS(libraryId), params);
+        const response = await this._fetchWithRetry<PlexMediaContainer<RawDirectoryTag>>(url, { signal: options.signal ?? null });
+        if (!response) {
+            const logger = this._config.logger ?? { warn: console.warn, error: console.error };
+            logger.warn(`[PlexLibrary] Studios endpoint unavailable for library ${libraryId}`);
+            options.onUnsupported?.();
+            return [];
+        }
+        const directories = response.MediaContainer.Directory || [];
+        return parseDirectoryTags(directories);
+    }
+
+    // ============================================
     // Image URLs
     // ============================================
 
@@ -706,7 +764,7 @@ export class PlexLibrary implements IPlexLibrary {
 
                 // Handle 404 Not Found - return null, log warning
                 if (response.status === 404) {
-                    logger.warn(`[PlexLibrary] 404 Not Found: ${url}`);
+                    logger.warn(`[PlexLibrary] 404 Not Found: ${this._redactUrlForLog(url)}`);
                     return null;
                 }
 
@@ -742,14 +800,14 @@ export class PlexLibrary implements IPlexLibrary {
 
                     // Handle empty response
                     if (!text || text.trim() === '') {
-                        logger.warn(`[PlexLibrary] Empty response from: ${url}`);
+                        logger.warn(`[PlexLibrary] Empty response from: ${this._redactUrlForLog(url)}`);
                         return null;
                     }
 
                     data = JSON.parse(text) as T;
                 } catch (parseError) {
                     // Include response body in parse error log per spec
-                    logger.error(`[PlexLibrary] Parse error for ${url}:`, parseError, `Response body: ${text.substring(0, 500)}`);
+                    logger.error(`[PlexLibrary] Parse error for ${this._redactUrlForLog(url)}:`, parseError, `Response body: ${text.substring(0, 500)}`);
                     return null;
                 }
 

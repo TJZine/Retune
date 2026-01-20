@@ -15,6 +15,7 @@ import type {
     PlexSeason,
     PlexCollection,
     PlexPlaylist,
+    PlexTagDirectoryItem,
 } from './types';
 
 import type {
@@ -26,6 +27,7 @@ import type {
     RawSeason,
     RawCollection,
     RawPlaylist,
+    RawDirectoryTag,
 } from './types';
 
 // ============================================
@@ -165,6 +167,32 @@ export function mapMediaType(type: string): PlexMediaType {
             console.warn(`[ResponseParser] Unknown media type: ${type}, defaulting to 'movie'`);
             return 'movie';
     }
+}
+
+// ============================================
+// Directory Tag Parsing
+// ============================================
+
+/**
+ * Parse tag directory entries (actors/studios) from Plex API response.
+ * @param directories - Raw directory entries from Plex API
+ * @returns Parsed tag directory array
+ */
+export function parseDirectoryTags(directories: RawDirectoryTag[]): PlexTagDirectoryItem[] {
+    return (directories || []).map((entry) => {
+        const parsed: PlexTagDirectoryItem = {
+            key: String(entry.key),
+            title: entry.title,
+            count: typeof entry.count === 'number' && Number.isFinite(entry.count) ? entry.count : 0,
+        };
+        if (entry.fastKey !== undefined) {
+            parsed.fastKey = entry.fastKey;
+        }
+        if (entry.thumb !== undefined) {
+            parsed.thumb = entry.thumb;
+        }
+        return parsed;
+    });
 }
 
 // ============================================

@@ -15,6 +15,7 @@ import type {
     ContentFilter,
     ResolvedContentItem,
 } from '../types';
+import { PLEX_MEDIA_TYPES } from '../../../plex/library/constants';
 
 // ============================================
 // Mock Setup
@@ -278,6 +279,93 @@ describe('ContentResolver', () => {
 
             await expect(resolver.resolveSource(source)).rejects.toThrow('404');
         });
+
+        it('should cache show lists for show libraries within TTL', async () => {
+            const episodes = [createMockEpisode(1, 1, { ratingKey: 'ep1', grandparentRatingKey: 'show1' })];
+            const shows = [createMockItem({ ratingKey: 'show1', type: 'show', genres: ['Drama'] })];
+            mockLibrary.getLibraryItems.mockImplementation((_, options) => {
+                if (options?.filter?.type === PLEX_MEDIA_TYPES.EPISODE) {
+                    return Promise.resolve(episodes);
+                }
+                return Promise.resolve(shows);
+            });
+
+            const source: LibraryContentSource = {
+                type: 'library',
+                libraryId: 'show-lib',
+                libraryType: 'show',
+                includeWatched: true,
+            };
+
+            await resolver.resolveSource(source);
+            await resolver.resolveSource(source);
+
+            const showCalls = mockLibrary.getLibraryItems.mock.calls.filter(
+                ([, options]) => !options?.filter || options.filter.type === undefined
+            );
+            expect(showCalls).toHaveLength(1);
+        });
+
+        it('should use cached show list when show fetch fails', async () => {
+            const episodes = [createMockEpisode(1, 1, { ratingKey: 'ep1', grandparentRatingKey: 'show1' })];
+            const shows = [createMockItem({ ratingKey: 'show1', type: 'show', genres: ['Drama'] })];
+            let showCallCount = 0;
+            mockLibrary.getLibraryItems.mockImplementation((_, options) => {
+                if (options?.filter?.type === PLEX_MEDIA_TYPES.EPISODE) {
+                    return Promise.resolve(episodes);
+                }
+                showCallCount++;
+                if (showCallCount === 1) {
+                    return Promise.resolve(shows);
+                }
+                return Promise.reject(new Error('show fetch failed'));
+            });
+            const nowSpy = jest.spyOn(Date, 'now');
+            nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(300001);
+
+            const source: LibraryContentSource = {
+                type: 'library',
+                libraryId: 'show-lib',
+                libraryType: 'show',
+                includeWatched: true,
+            };
+
+            await resolver.resolveSource(source);
+            const second = await resolver.resolveSource(source);
+
+            expect(second).toHaveLength(1);
+            expect(showCallCount).toBe(2);
+            nowSpy.mockRestore();
+        });
+
+        it('should propagate AbortError instead of using cached show list', async () => {
+            const episodes = [createMockEpisode(1, 1, { ratingKey: 'ep1', grandparentRatingKey: 'show1' })];
+            const shows = [createMockItem({ ratingKey: 'show1', type: 'show', genres: ['Drama'] })];
+            let showCallCount = 0;
+            mockLibrary.getLibraryItems.mockImplementation((_, options) => {
+                if (options?.filter?.type === PLEX_MEDIA_TYPES.EPISODE) {
+                    return Promise.resolve(episodes);
+                }
+                showCallCount++;
+                if (showCallCount === 1) {
+                    return Promise.resolve(shows);
+                }
+                return Promise.reject({ name: 'AbortError' });
+            });
+            const nowSpy = jest.spyOn(Date, 'now');
+            nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(300001);
+
+            const source: LibraryContentSource = {
+                type: 'library',
+                libraryId: 'show-lib',
+                libraryType: 'show',
+                includeWatched: true,
+            };
+
+            await resolver.resolveSource(source);
+            await expect(resolver.resolveSource(source)).rejects.toMatchObject({ name: 'AbortError' });
+            nowSpy.mockRestore();
+        });
     });
 
     describe('applyFilters', () => {
@@ -315,6 +403,44 @@ describe('ContentResolver', () => {
             const result = resolver.applyFilters(items, filters);
             expect(result).toHaveLength(1);
             expect(result[0]!.ratingKey).toBe('3');
+        });
+
+        it('should reject items missing rating/contentRating/watched/addedAt when filter present', () => {
+            const missing: ResolvedContentItem = {
+                ratingKey: 'm1',
+                type: 'movie',
+                title: 'Missing',
+                fullTitle: 'Missing',
+                durationMs: 1000,
+                thumb: null,
+                year: 2020,
+                scheduledIndex: 0,
+            };
+            const filtered = resolver.applyFilters([missing], [
+                { field: 'rating', operator: 'gte', value: 5 },
+                { field: 'contentRating', operator: 'eq', value: 'PG' },
+                { field: 'watched', operator: 'eq', value: true },
+                { field: 'addedAt', operator: 'gte', value: 10 },
+            ]);
+            expect(filtered).toHaveLength(0);
+        });
+
+        it('should treat missing genre/director arrays as empty for neq/notContains', () => {
+            const missing: ResolvedContentItem = {
+                ratingKey: 'm2',
+                type: 'movie',
+                title: 'Missing',
+                fullTitle: 'Missing',
+                durationMs: 1000,
+                thumb: null,
+                year: 2020,
+                scheduledIndex: 0,
+            };
+            const result = resolver.applyFilters([missing], [
+                { field: 'genre', operator: 'neq', value: 'Drama' },
+                { field: 'director', operator: 'notContains', value: 'Smith' },
+            ]);
+            expect(result).toHaveLength(1);
         });
     });
 

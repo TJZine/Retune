@@ -6,3 +6,4 @@
 
 export { EventEmitter } from './EventEmitter';
 export type { IEventEmitter, IDisposable } from './interfaces';
+export { redactSensitiveTokens } from './redact';

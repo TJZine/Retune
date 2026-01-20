@@ -26,6 +26,7 @@ export const RETUNE_STORAGE_KEYS = {
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',
+    SUBTITLE_DEBUG_LOGGING: 'retune_subtitle_debug_logging',
     SHOW_FPS: 'retune_show_fps',
 
     // Dev menu overrides (transcode)
