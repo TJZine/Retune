@@ -414,10 +414,10 @@ export class ChannelSetupCoordinator {
                         for (const item of scanItems) {
                             const dur = item.durationMs;
                             if (!dur) continue;
-                        if (dur < 30 * 60 * 1000) buckets['< 30m'].count++;
-                        else if (dur < 60 * 60 * 1000) buckets['30m - 60m'].count++;
-                        else if (dur < 90 * 60 * 1000) buckets['60m - 90m'].count++;
-                        else if (dur < 120 * 60 * 1000) buckets['90m - 120m'].count++;
+                            if (dur < 30 * 60 * 1000) buckets['< 30m'].count++;
+                            else if (dur < 60 * 60 * 1000) buckets['30m - 60m'].count++;
+                            else if (dur < 90 * 60 * 1000) buckets['60m - 90m'].count++;
+                            else if (dur < 120 * 60 * 1000) buckets['90m - 120m'].count++;
                             else buckets['> 120m'].count++;
                         }
 
@@ -622,6 +622,7 @@ export class ChannelSetupCoordinator {
     // --- Called during initialize to clean up crash leftovers ---
     cleanupStaleChannelBuildKeys(): void {
         try {
+            // Direct localStorage enumeration is intentional: deps only support single-key ops.
             const prefixes = [
                 'retune_channels_build_tmp_v1:',
                 'retune_current_channel_build_tmp_v1:',
