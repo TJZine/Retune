@@ -230,6 +230,8 @@ const mockPlexStreamResolver = {
         protocol: 'direct',
         mimeType: 'video/mp4',
     }),
+    updateProgress: jest.fn().mockResolvedValue(undefined),
+    endSession: jest.fn().mockResolvedValue(undefined),
     on: jest.fn(() => jest.fn()),
 };
 
@@ -291,7 +293,7 @@ const mockScheduler = {
 };
 
 jest.mock('../modules/scheduler/scheduler', () => {
-    class MockShuffleGenerator {}
+    class MockShuffleGenerator { }
     return {
         ChannelScheduler: jest.fn(() => mockScheduler),
         ShuffleGenerator: MockShuffleGenerator,
@@ -312,6 +314,8 @@ const mockVideoPlayer = {
     destroy: jest.fn(),
     requestMediaSession: jest.fn(),
     releaseMediaSession: jest.fn(),
+    getCurrentTimeMs: jest.fn().mockReturnValue(5000),
+    isPlaying: jest.fn().mockReturnValue(false),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
 };
@@ -371,7 +375,7 @@ jest.mock('../modules/ui/epg', () => ({
 describe('AppOrchestrator', () => {
     let orchestrator: AppOrchestrator;
     let schedulerHandlers: { programStart?: (program: unknown) => void };
-    let playerHandlers: { ended?: () => void; error?: (error: unknown) => void };
+    let playerHandlers: { ended?: () => void; error?: (error: unknown) => void; stateChange?: (state: unknown) => void };
     let navHandlers: {
         keyPress?: (payload: unknown) => void;
         modalOpen?: (payload: unknown) => void;
@@ -379,6 +383,18 @@ describe('AppOrchestrator', () => {
     };
     let pauseHandler: (() => void | Promise<void>) | null;
     let resumeHandler: (() => void | Promise<void>) | null;
+    const flushPromises = async (): Promise<void> => {
+        await Promise.resolve();
+    };
+
+    const setTimelineContext = (): void => {
+        const mutable = orchestrator as unknown as {
+            _currentStreamDecision?: { sessionId: string };
+            _currentProgramForPlayback?: { item: { ratingKey: string } };
+        };
+        mutable._currentStreamDecision = { sessionId: 'sess-1' };
+        mutable._currentProgramForPlayback = { item: { ratingKey: 'rk-1' } };
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -410,6 +426,9 @@ describe('AppOrchestrator', () => {
                 if (event === 'error') {
                     playerHandlers.error = handler;
                 }
+                if (event === 'stateChange') {
+                    playerHandlers.stateChange = handler;
+                }
                 return jest.fn();
             });
         (mockVideoPlayer.off as jest.Mock).mockImplementation(
@@ -419,6 +438,9 @@ describe('AppOrchestrator', () => {
                 }
                 if (event === 'error' && playerHandlers.error === handler) {
                     delete playerHandlers.error;
+                }
+                if (event === 'stateChange' && playerHandlers.stateChange === handler) {
+                    delete playerHandlers.stateChange;
                 }
             });
 
@@ -1297,6 +1319,109 @@ describe('AppOrchestrator', () => {
 
             expect(emitterStatus).toBeDefined();
             expect(emitterStatus && emitterStatus.status).toBe('ready');
+        });
+    });
+
+    describe('Plex timeline reporting', () => {
+        beforeEach(async () => {
+            jest.useFakeTimers();
+            await orchestrator.initialize(mockConfig);
+            mockPlexAuth.getStoredCredentials.mockResolvedValue({
+                token: { token: 'valid-token' },
+                selectedServerId: null,
+                selectedServerUri: null,
+            });
+            mockPlexAuth.validateToken.mockResolvedValue(true);
+            mockPlexDiscovery.isConnected.mockReturnValue(true);
+            await orchestrator.start();
+        });
+
+        afterEach(async () => {
+            if (orchestrator.isReady()) {
+                await orchestrator.shutdown();
+            }
+            jest.useRealTimers();
+        });
+
+        it('should report playing immediately and on interval while playing', async () => {
+            setTimelineContext();
+            mockVideoPlayer.isPlaying.mockReturnValue(true);
+            mockVideoPlayer.getCurrentTimeMs.mockReturnValue(5000);
+            playerHandlers.stateChange?.({ status: 'playing', currentTimeMs: 5000 });
+            await flushPromises();
+
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledWith(
+                'sess-1',
+                'rk-1',
+                5000,
+                'playing'
+            );
+
+            const callsAfterStart = mockPlexStreamResolver.updateProgress.mock.calls.length;
+            jest.advanceTimersByTime(10_000);
+            await flushPromises();
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledTimes(callsAfterStart + 1);
+        });
+
+        it('should report paused state and clear interval when player pauses', async () => {
+            setTimelineContext();
+            mockVideoPlayer.isPlaying.mockReturnValue(true);
+            mockVideoPlayer.getCurrentTimeMs.mockReturnValue(5000);
+            playerHandlers.stateChange?.({ status: 'playing', currentTimeMs: 5000 });
+            await flushPromises();
+
+            mockVideoPlayer.isPlaying.mockReturnValue(false);
+            mockVideoPlayer.getCurrentTimeMs.mockReturnValue(10000);
+            playerHandlers.stateChange?.({ status: 'paused', currentTimeMs: 10000 });
+            await flushPromises();
+
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledWith(
+                'sess-1',
+                'rk-1',
+                10000,
+                'paused'
+            );
+
+            const callsAfterPause = mockPlexStreamResolver.updateProgress.mock.calls.length;
+            jest.advanceTimersByTime(20_000);
+            await flushPromises();
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledTimes(callsAfterPause);
+        });
+
+        it('should end session and stop interval on idle state', async () => {
+            setTimelineContext();
+            mockVideoPlayer.isPlaying.mockReturnValue(true);
+            mockVideoPlayer.getCurrentTimeMs.mockReturnValue(5000);
+            playerHandlers.stateChange?.({ status: 'playing', currentTimeMs: 5000 });
+            await flushPromises();
+
+            playerHandlers.stateChange?.({ status: 'idle' });
+            await flushPromises();
+
+            expect(mockPlexStreamResolver.endSession).toHaveBeenCalledWith('sess-1', 'rk-1');
+
+            const callsAfterIdle = mockPlexStreamResolver.updateProgress.mock.calls.length;
+            jest.advanceTimersByTime(20_000);
+            await flushPromises();
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledTimes(callsAfterIdle);
+        });
+
+        it('should end session and stop interval on shutdown', async () => {
+            setTimelineContext();
+            mockVideoPlayer.isPlaying.mockReturnValue(true);
+            mockVideoPlayer.getCurrentTimeMs.mockReturnValue(5000);
+            playerHandlers.stateChange?.({ status: 'playing', currentTimeMs: 5000 });
+            await flushPromises();
+
+            await orchestrator.shutdown();
+            await flushPromises();
+
+            expect(mockPlexStreamResolver.endSession).toHaveBeenCalledWith('sess-1', 'rk-1');
+
+            const callsAfterShutdown = mockPlexStreamResolver.updateProgress.mock.calls.length;
+            jest.advanceTimersByTime(20_000);
+            await flushPromises();
+            expect(mockPlexStreamResolver.updateProgress).toHaveBeenCalledTimes(callsAfterShutdown);
         });
     });
 

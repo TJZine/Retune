@@ -52,6 +52,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
     private readonly _config: PlexStreamResolverConfig;
     private readonly _emitter: EventEmitter<StreamResolverEventMap>;
     private readonly _state: StreamResolverState;
+    /** Last time a progress reporting error was logged (to rate-limit spam) */
+    private _lastProgressErrorLogAt: number = 0;
 
     /**
      * Create a new PlexStreamResolver instance.
@@ -670,8 +672,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             if (error instanceof Error && error.name === 'AbortError') {
                 return 'timeout';
             }
-            // Swallow errors for progress reporting (fire-and-forget)
-            console.warn('Failed to report progress:', error);
+            // Rate-limit error logging to once per minute to avoid log spam when PMS is unreachable
+            const now = Date.now();
+            if (now - this._lastProgressErrorLogAt > 60_000) {
+                this._lastProgressErrorLogAt = now;
+                console.warn('[PlexStreamResolver] Failed to report progress:', error);
+            }
             return 'error';
         }
     }

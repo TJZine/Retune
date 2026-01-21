@@ -1666,17 +1666,16 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._plexTimelineIntervalId = null;
         }
 
-        if (finalState) {
+        if (finalState === 'paused') {
+            // Report paused state
             this._reportPlexTimeline(finalState).catch(() => { /* swallow */ });
-
-            // End session on stop
-            if (finalState === 'stopped') {
-                const decision = this._currentStreamDecision;
-                const program = this._currentProgramForPlayback;
-                if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
-                    this._plexStreamResolver.endSession(decision.sessionId, program.item.ratingKey)
-                        .catch(() => { /* swallow */ });
-                }
+        } else if (finalState === 'stopped') {
+            // End session (which already sends stopped timeline - no need for duplicate updateProgress)
+            const decision = this._currentStreamDecision;
+            const program = this._currentProgramForPlayback;
+            if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
+                this._plexStreamResolver.endSession(decision.sessionId, program.item.ratingKey)
+                    .catch(() => { /* swallow */ });
             }
         }
     }
