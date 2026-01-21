@@ -75,6 +75,7 @@ describe('EPGComponent', () => {
             visibleHours: 3,
             totalHours: 24,
             pixelsPerMinute: 4,
+            autoFitPixelsPerMinute: false,
             rowHeight: 80,
             showCurrentTimeIndicator: true,
             autoScrollToNow: false,
@@ -103,6 +104,7 @@ describe('EPGComponent', () => {
                     visibleHours: 3,
                     totalHours: 24,
                     pixelsPerMinute: 4,
+                    autoFitPixelsPerMinute: false,
                     rowHeight: 80,
                     showCurrentTimeIndicator: true,
                     autoScrollToNow: false,
@@ -152,6 +154,60 @@ describe('EPGComponent', () => {
             const titles = Array.from(container.querySelectorAll('.epg-cell-title'))
                 .map((el) => el.textContent);
             expect(titles).toContain('Loading...');
+        });
+    });
+
+    describe('auto-fit pixelsPerMinute', () => {
+        it('computes pixelsPerMinute from program area width and refreshes time header', () => {
+            const autoContainer = document.createElement('div');
+            autoContainer.id = 'epg-container-autofit';
+            document.body.appendChild(autoContainer);
+
+            type EPGComponentPrivate = {
+                timeHeader: { refreshLayout: () => void };
+                config: { pixelsPerMinute: number };
+            };
+
+            const autoEpg = new EPGComponent();
+            autoEpg.initialize({
+                containerId: 'epg-container-autofit',
+                visibleChannels: 5,
+                timeSlotMinutes: 30,
+                visibleHours: 3,
+                totalHours: 24,
+                pixelsPerMinute: 4,
+                autoFitPixelsPerMinute: true,
+                minPixelsPerMinute: 6,
+                maxPixelsPerMinute: 12,
+                rowHeight: 80,
+                showCurrentTimeIndicator: true,
+                autoScrollToNow: false,
+            });
+
+            const programArea = autoContainer.querySelector('.epg-program-area') as HTMLElement;
+            programArea.getBoundingClientRect = (): DOMRect =>
+                ({
+                    width: 1080,
+                    height: 0,
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    x: 0,
+                    y: 0,
+                    toJSON: () => ({}),
+                }) as DOMRect;
+
+            const autoEpgPrivate = autoEpg as unknown as EPGComponentPrivate;
+            const refreshSpy = jest.spyOn(autoEpgPrivate.timeHeader, 'refreshLayout');
+            autoEpg.show();
+
+            expect(autoEpgPrivate.config.pixelsPerMinute).toBe(6);
+            expect(refreshSpy).toHaveBeenCalled();
+
+            refreshSpy.mockRestore();
+            autoEpg.destroy();
+            autoContainer.remove();
         });
     });
 

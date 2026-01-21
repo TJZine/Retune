@@ -105,9 +105,10 @@ describe('NavigationCoordinator', () => {
     });
 
     it('routes EPG key handling and marks handled', () => {
-        const { handlers, epg } = setup();
+        const { handlers, epg, navigation } = setup();
         (epg.isVisible as jest.Mock).mockReturnValue(true);
         (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
 
         const event = makeKeyEvent('up');
         handlers.keyPress?.(event);
@@ -180,5 +181,62 @@ describe('NavigationCoordinator', () => {
 
         handlers.modalClose?.({ modalId: NOW_PLAYING_INFO_MODAL_ID });
         expect(deps.hideNowPlayingInfoOverlay).toHaveBeenCalled();
+    });
+
+    it('does not route to EPG when overlay is not visible', () => {
+        const { handlers, epg } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(false);
+
+        const event = makeKeyEvent('left');
+        handlers.keyPress?.(event);
+
+        expect(epg.handleNavigation).not.toHaveBeenCalled();
+        expect(event.handled).toBeUndefined();
+    });
+
+    it('does not route to EPG when a modal is open', () => {
+        const { handlers, epg, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
+
+        const event = makeKeyEvent('down');
+        handlers.keyPress?.(event);
+
+        expect(epg.handleNavigation).not.toHaveBeenCalled();
+    });
+
+    it('routes to EPG when overlay is visible and no modal open', () => {
+        const { handlers, epg, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+        (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+        const event = makeKeyEvent('right');
+        handlers.keyPress?.(event);
+
+        expect(epg.handleNavigation).toHaveBeenCalledWith('right');
+        expect(event.handled).toBe(true);
+    });
+
+    it('routes to EPG when overlay is visible on player screen', () => {
+        const { handlers, epg, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('player' as Screen);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+        (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+        const event = makeKeyEvent('down');
+        handlers.keyPress?.(event);
+
+        expect(epg.handleNavigation).toHaveBeenCalledWith('down');
+        expect(event.handled).toBe(true);
+    });
+
+    it('hides EPG when entering settings screen', () => {
+        const { handlers, epg } = setup();
+
+        handlers.screenChange?.({ from: 'player', to: 'settings' });
+
+        expect(epg.hide).toHaveBeenCalled();
     });
 });

@@ -5,6 +5,7 @@
  */
 
 import { AppErrorCode } from '../../../types/app-errors';
+import type { PlexMediaFile } from '../shared/types';
 
 // ============================================
 // Shared Types (repo-local)
@@ -73,60 +74,9 @@ export interface PlexMediaItem {
 }
 
 /**
- * A specific media file/version
+ * Shared media file/part/stream types.
  */
-export interface PlexMediaFile {
-    id: string;
-    duration: number;
-    bitrate: number;
-    width: number;
-    height: number;
-    aspectRatio: number;
-    videoCodec: string;
-    audioCodec: string;
-    audioChannels: number;
-    container: string;
-    videoResolution: string;
-    parts: PlexMediaPart[];
-}
-
-/**
- * A part of a media file
- */
-export interface PlexMediaPart {
-    id: string;
-    key: string;
-    duration: number;
-    file: string;
-    size: number;
-    container: string;
-    videoProfile?: string;
-    audioProfile?: string;
-    streams: PlexStream[];
-}
-
-/**
- * A stream within a media file
- */
-export interface PlexStream {
-    id: string;
-    streamType: 1 | 2 | 3;
-    codec: string;
-    language?: string;
-    languageCode?: string;
-    title?: string;
-    selected?: boolean;
-    default?: boolean;
-    forced?: boolean;
-    width?: number;
-    height?: number;
-    bitrate?: number;
-    frameRate?: number;
-    channels?: number;
-    samplingRate?: number;
-    format?: string;
-    key?: string;
-}
+export type { PlexMediaFile, PlexMediaPart, PlexStream } from '../shared/types';
 
 /**
  * A TV show season

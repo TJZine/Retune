@@ -468,6 +468,7 @@ export class EPGVirtualizer {
         const element = document.createElement('div');
         element.className = EPG_CLASSES.CELL;
         element.innerHTML = `
+      <div class="${EPG_CLASSES.CELL_SHOW}"></div>
       <div class="${EPG_CLASSES.CELL_TITLE}"></div>
       <div class="${EPG_CLASSES.CELL_TIME}"></div>
     `;
@@ -509,8 +510,13 @@ export class EPGVirtualizer {
      * @param element - Element to reset
      */
     private resetElement(element: HTMLElement): void {
+        const show = element.querySelector(`.${EPG_CLASSES.CELL_SHOW}`) as HTMLElement | null;
         const title = element.querySelector(`.${EPG_CLASSES.CELL_TITLE}`);
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
+        if (show) {
+            show.textContent = '';
+            show.style.display = 'none';
+        }
         if (title) title.textContent = '';
         if (time) time.textContent = '';
         const liveBadge = element.querySelector('.epg-live-badge');
@@ -524,6 +530,31 @@ export class EPGVirtualizer {
         // Remove state classes
         element.classList.remove(EPG_CLASSES.CELL_FOCUSED, EPG_CLASSES.CELL_CURRENT);
         element.removeAttribute('data-key');
+    }
+
+    private extractShowTitleFromFullTitle(fullTitle: string): string | null {
+        const match = fullTitle.match(/^(.*?)\s-\sS\d{2}E\d{2}\s-/);
+        if (!match) return null;
+        const showTitle = match[1]?.trim() ?? '';
+        return showTitle.length > 0 ? showTitle : null;
+    }
+
+    private updateShowLine(element: HTMLElement, cellData: CellRenderData): void {
+        const show = element.querySelector(`.${EPG_CLASSES.CELL_SHOW}`) as HTMLElement | null;
+        if (!show) return;
+
+        if (cellData.kind === 'program' && cellData.program.item.type === 'episode') {
+            const showTitle = cellData.program.item.showTitle ??
+                this.extractShowTitleFromFullTitle(cellData.program.item.fullTitle);
+            if (showTitle) {
+                show.textContent = showTitle;
+                show.style.display = 'block';
+                return;
+            }
+        }
+
+        show.textContent = '';
+        show.style.display = 'none';
     }
 
     /**
@@ -553,6 +584,7 @@ export class EPGVirtualizer {
                 cellData.placeholder.scheduledEndTime
             );
         }
+        this.updateShowLine(element, cellData);
 
         // Calculate position
         element.style.left = `${cellData.left}px`;
@@ -634,6 +666,7 @@ export class EPGVirtualizer {
                 cellData.placeholder.scheduledEndTime
             );
         }
+        this.updateShowLine(element, cellData);
     }
 
     /**

@@ -158,10 +158,22 @@
 .epg-cell-title {
   font-size: 24px;
   font-weight: 500;
+  margin-top: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+}
+
+.epg-cell-show {
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  margin-top: 0;
 }
 
 .epg-cell-time {
@@ -211,7 +223,11 @@
   }
 }
 
-.epg-cell.current .epg-cell-title {
+.epg-cell.current .epg-cell-show:not(:empty) {
+  margin-top: 16px;
+}
+
+.epg-cell.current .epg-cell-show:empty + .epg-cell-title {
   margin-top: 16px;
 }
 
@@ -240,7 +256,9 @@
   right: 0;
   height: 240px;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.8));
-  padding: 16px 24px;
+  --epg-info-panel-padding-y: 16px;
+  --epg-info-panel-padding-x: 24px;
+  padding: var(--epg-info-panel-padding-y) var(--epg-info-panel-padding-x);
   display: flex;
   gap: 24px;
   box-sizing: border-box;
@@ -249,7 +267,7 @@
 
 .epg-info-poster {
   width: 160px;
-  height: 240px;
+  height: 100%;
   object-fit: contain;
   object-position: center;
   background: rgba(0, 0, 0, 0.35);
@@ -282,6 +300,14 @@
   flex-wrap: wrap;
 }
 
+.epg-info-genres {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .epg-info-description {
   font-size: 20px;
   line-height: 1.4;
@@ -292,6 +318,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-height: calc(20px * 1.4 * 3);
+}
+
+.epg-info-quality {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.epg-info-quality-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .epg-info-actions {

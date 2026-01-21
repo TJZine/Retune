@@ -34,6 +34,7 @@ describe('EPGChannelList', () => {
         visibleHours: 3,
         totalHours: 24,
         pixelsPerMinute: 4,
+        autoFitPixelsPerMinute: false,
         rowHeight: 80,
         showCurrentTimeIndicator: true,
         autoScrollToNow: false,

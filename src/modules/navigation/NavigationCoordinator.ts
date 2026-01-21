@@ -27,7 +27,7 @@ export interface NavigationCoordinatorDeps {
 }
 
 export class NavigationCoordinator {
-    constructor(private readonly deps: NavigationCoordinatorDeps) {}
+    constructor(private readonly deps: NavigationCoordinatorDeps) { }
 
     wireNavigationEvents(): Array<() => void> {
         const navigation = this.deps.getNavigation();
@@ -132,6 +132,11 @@ export class NavigationCoordinator {
             }
         }
 
+        // Hide EPG when entering settings (prevents overlay bleed)
+        if (to === 'settings') {
+            epg?.hide();
+        }
+
         // Pause playback when leaving player for settings/channel-edit
         if (from === 'player' && (to === 'settings' || to === 'channel-edit')) {
             videoPlayer?.pause();
@@ -149,8 +154,13 @@ export class NavigationCoordinator {
             return;
         }
 
+        // Compute EPG routing eligibility: only route to EPG when on guide screen with no modal open
         const epg = this.deps.getEpg();
-        if (epg?.isVisible()) {
+        const navigation = this.deps.getNavigation();
+        const modalOpen = navigation?.isModalOpen() ?? false;
+        const shouldRouteToEpg = !modalOpen && !!epg?.isVisible();
+
+        if (epg && shouldRouteToEpg) {
             switch (event.button) {
                 case 'up':
                 case 'down':

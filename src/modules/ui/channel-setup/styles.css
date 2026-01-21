@@ -68,6 +68,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-height: 180px;
 }
 
 .setup-preview-title {
@@ -121,4 +122,11 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.setup-preview-updating {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+    margin-top: 4px;
 }

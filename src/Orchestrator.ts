@@ -73,6 +73,7 @@ import {
     type VideoPlayerConfig,
     type StreamDescriptor,
     type PlaybackError,
+    type PlaybackState,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
 import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
@@ -309,6 +310,9 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
+
+    // Plex timeline reporting state
+    private _plexTimelineIntervalId: ReturnType<typeof setInterval> | null = null;
 
     constructor() {
         this._initializeModuleStatus();
@@ -648,6 +652,9 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
+        // Stop Plex timeline reporting
+        this._stopPlexTimelineReporting('stopped');
+
         if (this._initCoordinator) {
             this._initCoordinator.clearAuthResume();
             this._initCoordinator.clearServerResume();
@@ -1464,6 +1471,8 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Player ended -> skip to next
         const endedHandler = (): void => {
+            // Stop timeline reporting on ended
+            this._stopPlexTimelineReporting('stopped');
             if (this._scheduler) {
                 this._scheduler.skipToNext();
             }
@@ -1513,6 +1522,21 @@ export class AppOrchestrator implements IAppOrchestrator {
             if (this._videoPlayer) {
                 this._videoPlayer.off('error', errorHandler);
             }
+        });
+
+        // Player state change -> timeline reporting
+        const stateHandler = (state: PlaybackState): void => {
+            if (state.status === 'playing') {
+                this._startPlexTimelineReporting();
+            } else if (state.status === 'paused') {
+                this._stopPlexTimelineReporting('paused');
+            } else if (state.status === 'idle') {
+                this._stopPlexTimelineReporting('stopped');
+            }
+        };
+        this._videoPlayer.on('stateChange', stateHandler);
+        this._eventUnsubscribers.push(() => {
+            this._videoPlayer?.off('stateChange', stateHandler);
         });
     }
 
@@ -1606,6 +1630,85 @@ export class AppOrchestrator implements IAppOrchestrator {
                 await this._videoPlayer.play();
             }
         });
+    }
+
+    // ========================================
+    // Plex Timeline Reporting
+    // ========================================
+
+    /**
+     * Start periodic Plex timeline reporting.
+     * Reports progress every 10 seconds while playing.
+     */
+    private _startPlexTimelineReporting(): void {
+        // Guard: don't start if already running
+        if (this._plexTimelineIntervalId !== null) {
+            return;
+        }
+
+        // Report immediately on start
+        this._reportPlexTimeline('playing').catch(() => { /* swallow */ });
+
+        // Start 10-second interval
+        this._plexTimelineIntervalId = setInterval(() => {
+            if (this._videoPlayer?.isPlaying()) {
+                this._reportPlexTimeline('playing').catch(() => { /* swallow */ });
+            }
+        }, 10_000);
+    }
+
+    /**
+     * Stop Plex timeline reporting and optionally report final state.
+     */
+    private _stopPlexTimelineReporting(finalState?: 'paused' | 'stopped'): void {
+        if (this._plexTimelineIntervalId !== null) {
+            clearInterval(this._plexTimelineIntervalId);
+            this._plexTimelineIntervalId = null;
+        }
+
+        if (finalState === 'paused') {
+            // Report paused state
+            this._reportPlexTimeline(finalState).catch(() => { /* swallow */ });
+        } else if (finalState === 'stopped') {
+            // End session (which already sends stopped timeline - no need for duplicate updateProgress)
+            const decision = this._currentStreamDecision;
+            const program = this._currentProgramForPlayback;
+            if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
+                this._plexStreamResolver.endSession(decision.sessionId, program.item.ratingKey)
+                    .catch(() => { /* swallow */ });
+            }
+        }
+    }
+
+    /**
+     * Report current playback state to Plex timeline endpoint.
+     * Best-effort: errors are swallowed, never blocks playback.
+     */
+    private async _reportPlexTimeline(state: 'playing' | 'paused' | 'stopped'): Promise<void> {
+        const decision = this._currentStreamDecision;
+        const program = this._currentProgramForPlayback;
+
+        // Guard: must have all required data
+        if (!this._plexStreamResolver) return;
+        if (!decision?.sessionId) return;
+        if (!program?.item.ratingKey) return;
+
+        // Get current position from VideoPlayer
+        let positionMs = this._videoPlayer?.getCurrentTimeMs() ?? 0;
+        if (!Number.isFinite(positionMs)) {
+            positionMs = 0;
+        }
+
+        try {
+            await this._plexStreamResolver.updateProgress(
+                decision.sessionId,
+                program.item.ratingKey,
+                positionMs,
+                state
+            );
+        } catch {
+            // Best-effort: swallow errors to never stall playback
+        }
     }
 
     /**

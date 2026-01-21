@@ -286,6 +286,22 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.setTimeOffsetToNow();
         }
 
+        if (this.config.autoFitPixelsPerMinute && this.programAreaElement) {
+            const width = this.programAreaElement.getBoundingClientRect().width;
+            const minutesVisible = this.config.visibleHours * 60;
+            const raw = minutesVisible > 0 ? width / minutesVisible : 0;
+            const minPpm = this.config.minPixelsPerMinute ?? 6;
+            const maxPpm = this.config.maxPixelsPerMinute ?? 12;
+
+            if (Number.isFinite(raw) && width > 0) {
+                const ppm = Math.min(maxPpm, Math.max(minPpm, Math.round(raw)));
+                this.config.pixelsPerMinute = ppm;
+                this.timeHeader.refreshLayout();
+                this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
+                this.updateTimeIndicatorPosition();
+            }
+        }
+
         // Render immediately on open to avoid a blank guide before first input.
         this.renderGridInternal();
 

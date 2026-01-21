@@ -29,6 +29,12 @@ export interface EPGConfig {
     totalHours: number;
     /** Pixels per minute (width scaling) */
     pixelsPerMinute: number;
+    /** Auto-fit pixels per minute to available width */
+    autoFitPixelsPerMinute?: boolean;
+    /** Minimum auto-fit pixels per minute */
+    minPixelsPerMinute?: number;
+    /** Maximum auto-fit pixels per minute */
+    maxPixelsPerMinute?: number;
     /** Pixels per channel row */
     rowHeight: number;
     /** Show current time indicator */
