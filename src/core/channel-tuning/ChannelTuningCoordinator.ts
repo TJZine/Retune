@@ -49,6 +49,7 @@ function summarizeErrorForLog(error: unknown): { name?: string; code?: unknown; 
 
 export class ChannelTuningCoordinator {
     private _isChannelSwitching = false;
+    private _channelSwitchTimeoutId: number | null = null;
 
     constructor(private readonly deps: ChannelTuningCoordinatorDeps) {}
 
@@ -190,9 +191,14 @@ export class ChannelTuningCoordinator {
         const playerContainer = document.getElementById('video-container');
         if (!playerContainer) return;
 
+        if (this._channelSwitchTimeoutId !== null) {
+            window.clearTimeout(this._channelSwitchTimeoutId);
+        }
+
         playerContainer.classList.add('channel-switching');
-        window.setTimeout(() => {
+        this._channelSwitchTimeoutId = window.setTimeout(() => {
             playerContainer.classList.remove('channel-switching');
+            this._channelSwitchTimeoutId = null;
         }, 300);
     }
 

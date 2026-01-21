@@ -31,7 +31,9 @@ export class ThemeManager {
 
     private _loadSavedTheme(): void {
         const saved = safeLocalStorageGet(RETUNE_STORAGE_KEYS.THEME);
-        if (saved === 'retro' || saved === 'default') {
+        const isThemeName = (value: string | null): value is ThemeName =>
+            !!value && Object.prototype.hasOwnProperty.call(THEME_CLASSES, value);
+        if (isThemeName(saved)) {
             this._currentTheme = saved;
             this._applyTheme(saved);
         } else {
@@ -51,14 +53,18 @@ export class ThemeManager {
     }
 
     private _applyTheme(theme: ThemeName): void {
+        if (typeof document === 'undefined') return;
+        const root = document.body ?? document.documentElement;
+        if (!root) return;
+
         const classes = Object.values(THEME_CLASSES).filter((value) => value !== '');
         if (classes.length > 0) {
-            document.body.classList.remove(...classes);
+            root.classList.remove(...classes);
         }
 
         const themeClass = THEME_CLASSES[theme];
         if (themeClass) {
-            document.body.classList.add(themeClass);
+            root.classList.add(themeClass);
         }
     }
 }

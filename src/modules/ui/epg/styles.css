@@ -126,6 +126,7 @@
   overflow: hidden;
   box-sizing: border-box;
   margin: 2px;
+  contain: layout paint;
   transition: transform 150ms ease-out, box-shadow 150ms ease-out;
   cursor: pointer;
 }
@@ -187,6 +188,7 @@
   color: #ff4444;
   text-transform: uppercase;
   z-index: 2;
+  pointer-events: none;
 }
 
 .epg-live-badge::before {

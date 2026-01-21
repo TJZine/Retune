@@ -140,6 +140,106 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
     }
 
+    private _isSubtitleDebugEnabled(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    private _logSubtitleDebug(event: string, context: Record<string, unknown>): void {
+        if (!this._isSubtitleDebugEnabled()) return;
+        console.warn(`[SubtitleDebug] ${JSON.stringify({
+            ts: new Date().toISOString(),
+            module: 'PlexStreamResolver',
+            event,
+            ...context,
+        })}`);
+    }
+
+    private _detectSubtitleTextFormat(sample: string): 'webvtt' | 'srt' | 'unknown' {
+        const trimmed = sample.replace(/^\uFEFF/, '').trimStart(); // strip UTF-8 BOM
+        if (trimmed.startsWith('WEBVTT')) return 'webvtt';
+        // Heuristic: SRT has timestamps with -->
+        if (trimmed.includes('-->')) return 'srt';
+        return 'unknown';
+    }
+
+    private async _probeSubtitleStreamDelivery(options: {
+        itemKey: string;
+        subtitleStreamId: string;
+        codec?: string;
+        language?: string;
+    }): Promise<void> {
+        if (!this._isSubtitleDebugEnabled()) return;
+        const serverUri = this._config.getServerUri();
+        if (!serverUri) return;
+
+        const url = new URL(`/library/streams/${encodeURIComponent(options.subtitleStreamId)}`, serverUri);
+        const redactedUrl = redactSensitiveTokens(url.toString());
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    Accept: '*/*',
+                    ...this._config.getAuthHeaders(),
+                    // Best-effort: keep payload small if PMS supports byte ranges.
+                    Range: 'bytes=0-2047',
+                },
+                signal: controller.signal,
+            });
+
+            const contentType = response.headers.get('content-type');
+            const contentLength = response.headers.get('content-length');
+            const acceptRanges = response.headers.get('accept-ranges');
+            const contentRange = response.headers.get('content-range');
+
+            let detected: 'webvtt' | 'srt' | 'unknown' = 'unknown';
+            let sampleLength = 0;
+            try {
+                const text = await response.text();
+                sampleLength = text.length;
+                detected = this._detectSubtitleTextFormat(text);
+            } catch {
+                // Ignore read errors; still log status/headers.
+            }
+
+            this._logSubtitleDebug('subtitle_stream_probe', {
+                itemKey: options.itemKey,
+                subtitleStreamId: options.subtitleStreamId,
+                codec: options.codec ?? null,
+                language: options.language ?? null,
+                url: redactedUrl,
+                ok: response.ok,
+                status: response.status,
+                contentType,
+                contentLength,
+                acceptRanges,
+                contentRange,
+                detected,
+                sampleLength,
+            });
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            this._logSubtitleDebug('subtitle_stream_probe_error', {
+                itemKey: options.itemKey,
+                subtitleStreamId: options.subtitleStreamId,
+                codec: options.codec ?? null,
+                language: options.language ?? null,
+                url: redactedUrl,
+                error: message,
+            });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
     // ========================================
     // Stream Resolution
     // ========================================
@@ -193,19 +293,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 ) ?? null)
                 : null;
 
-        const subtitleDebugEnabled = ((): boolean => {
-            try {
-                return isStoredTrue(
-                    safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING)
-                );
-            } catch {
-                return false;
-            }
-        })();
-        if (subtitleDebugEnabled) {
-            const subtitleStreams = part.streams
-                .filter((s) => s.streamType === 3)
-                .map((s) => ({
+        if (this._isSubtitleDebugEnabled()) {
+            const subtitleStreams = part.streams.filter((s) => s.streamType === 3);
+            this._logSubtitleDebug('subtitle_streams_discovered', {
+                itemKey: request.itemKey,
+                subtitlesCount: subtitleStreams.length,
+                subtitleStreams: subtitleStreams.map((s) => ({
                     id: s.id,
                     codec: s.codec,
                     format: s.format,
@@ -213,15 +306,36 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     forced: s.forced,
                     selected: subtitleStream?.id === s.id,
                     key: typeof s.key === 'string' ? redactSensitiveTokens(s.key) : null,
-                }));
-            console.warn(`[SubtitleDebug] ${JSON.stringify({
-                ts: new Date().toISOString(),
-                module: 'PlexStreamResolver',
-                event: 'subtitle_streams_discovered',
-                itemKey: request.itemKey,
-                subtitlesCount: subtitleStreams.length,
-                subtitleStreams,
-            })}`);
+                })),
+            });
+
+            const hasAnyKey = subtitleStreams.some((s) => typeof s.key === 'string' && s.key.length > 0);
+            if (!hasAnyKey && subtitleStreams.length > 0) {
+                const candidates = subtitleStreams.filter((s) => {
+                    const c = (s.codec ?? '').toLowerCase();
+                    return c === 'srt' || c === 'vtt' || c === 'webvtt';
+                });
+                if (candidates.length > 0) {
+                    const preferred = ((): typeof candidates => {
+                        const forced = candidates.filter((s) => s.forced);
+                        if (forced.length > 0) return forced;
+                        const english = candidates.filter(
+                            (s) => (s.language ?? '').toLowerCase() === 'english' || (s.languageCode ?? '').toLowerCase() === 'en'
+                        );
+                        if (english.length > 0) return english;
+                        return candidates;
+                    })();
+                    const toProbe = preferred.slice(0, 2);
+                    for (const s of toProbe) {
+                        void this._probeSubtitleStreamDelivery({
+                            itemKey: request.itemKey,
+                            subtitleStreamId: s.id,
+                            codec: s.codec,
+                            ...(typeof s.language === 'string' ? { language: s.language } : {}),
+                        });
+                    }
+                }
+            }
         }
 
         const shouldForceAudioStreamId = this._shouldForceTranscodeAudioStreamId(
