@@ -547,12 +547,8 @@ export class ChannelSetupScreen {
             error.className = 'setup-preview-warning';
             error.textContent = this._previewError;
             previewPanel.appendChild(error);
-        } else if (this._isPreviewLoading) {
-            const loading = document.createElement('div');
-            loading.className = 'setup-preview-loading';
-            loading.textContent = 'Estimating channels...';
-            previewPanel.appendChild(loading);
         } else if (this._preview) {
+            // Render existing preview (even while loading new one)
             const { estimates, warnings, reachedMaxChannels } = this._preview;
 
             const rows = document.createElement('div');
@@ -568,6 +564,14 @@ export class ChannelSetupScreen {
             rows.appendChild(this._buildPreviewRow('Studios', estimates.studios));
             rows.appendChild(this._buildPreviewRow('Actors', estimates.actors));
             previewPanel.appendChild(rows);
+
+            // Show "Updating..." indicator while loading with existing preview
+            if (this._isPreviewLoading) {
+                const updating = document.createElement('div');
+                updating.className = 'setup-preview-updating';
+                updating.textContent = 'Updating...';
+                previewPanel.appendChild(updating);
+            }
 
             if (reachedMaxChannels) {
                 const cap = document.createElement('div');
@@ -587,6 +591,12 @@ export class ChannelSetupScreen {
                 }
                 previewPanel.appendChild(warningList);
             }
+        } else if (this._isPreviewLoading) {
+            // First-load case: no previous preview exists
+            const loading = document.createElement('div');
+            loading.className = 'setup-preview-loading';
+            loading.textContent = 'Estimating channels...';
+            previewPanel.appendChild(loading);
         } else {
             const empty = document.createElement('div');
             empty.className = 'setup-preview-empty';
