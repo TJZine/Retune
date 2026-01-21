@@ -108,7 +108,6 @@ describe('NavigationCoordinator', () => {
         const { handlers, epg, navigation } = setup();
         (epg.isVisible as jest.Mock).mockReturnValue(true);
         (epg.handleNavigation as jest.Mock).mockReturnValue(true);
-        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('guide' as Screen);
         (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
 
         const event = makeKeyEvent('up');
@@ -184,10 +183,9 @@ describe('NavigationCoordinator', () => {
         expect(deps.hideNowPlayingInfoOverlay).toHaveBeenCalled();
     });
 
-    it('does not route to EPG when current screen is settings', () => {
-        const { handlers, epg, navigation } = setup();
-        (epg.isVisible as jest.Mock).mockReturnValue(true);
-        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('settings' as Screen);
+    it('does not route to EPG when overlay is not visible', () => {
+        const { handlers, epg } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(false);
 
         const event = makeKeyEvent('left');
         handlers.keyPress?.(event);
@@ -199,7 +197,6 @@ describe('NavigationCoordinator', () => {
     it('does not route to EPG when a modal is open', () => {
         const { handlers, epg, navigation } = setup();
         (epg.isVisible as jest.Mock).mockReturnValue(true);
-        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('guide' as Screen);
         (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
 
         const event = makeKeyEvent('down');
@@ -208,10 +205,9 @@ describe('NavigationCoordinator', () => {
         expect(epg.handleNavigation).not.toHaveBeenCalled();
     });
 
-    it('routes to EPG when on guide screen and no modal open', () => {
+    it('routes to EPG when overlay is visible and no modal open', () => {
         const { handlers, epg, navigation } = setup();
         (epg.isVisible as jest.Mock).mockReturnValue(true);
-        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('guide' as Screen);
         (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
         (epg.handleNavigation as jest.Mock).mockReturnValue(true);
 
@@ -219,6 +215,20 @@ describe('NavigationCoordinator', () => {
         handlers.keyPress?.(event);
 
         expect(epg.handleNavigation).toHaveBeenCalledWith('right');
+        expect(event.handled).toBe(true);
+    });
+
+    it('routes to EPG when overlay is visible on player screen', () => {
+        const { handlers, epg, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.getCurrentScreen as jest.Mock).mockReturnValue('player' as Screen);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+        (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+        const event = makeKeyEvent('down');
+        handlers.keyPress?.(event);
+
+        expect(epg.handleNavigation).toHaveBeenCalledWith('down');
         expect(event.handled).toBe(true);
     });
 

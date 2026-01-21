@@ -5,6 +5,7 @@
  */
 
 import { AppErrorCode } from '../../../types/app-errors';
+import type { PlexStream, PlexMediaPart, PlexMediaFile } from '../shared/types';
 
 // ============================================
 // Shared Types (repo-local)
@@ -16,99 +17,7 @@ import { AppErrorCode } from '../../../types/app-errors';
  */
 export type PlexMediaType = 'movie' | 'show' | 'episode' | 'track' | 'clip';
 
-/**
- * A stream within a media file (video, audio, or subtitle track)
- */
-export interface PlexStream {
-    /** Stream ID */
-    id: string;
-    /** Stream type: 1=video, 2=audio, 3=subtitle */
-    streamType: 1 | 2 | 3;
-    /** Codec name */
-    codec: string;
-    /** Language name (e.g., "English") */
-    language?: string;
-    /** ISO 639-1 language code (e.g., "en") */
-    languageCode?: string;
-    /** Track title/description */
-    title?: string;
-    /** Currently selected for playback */
-    selected?: boolean;
-    /** Default track */
-    default?: boolean;
-    /** Forced subtitles */
-    forced?: boolean;
-    /** Video width */
-    width?: number;
-    /** Video height */
-    height?: number;
-    /** Bitrate in kbps */
-    bitrate?: number;
-    /** Frame rate */
-    frameRate?: number;
-    /** Audio channels */
-    channels?: number;
-    /** Audio sampling rate */
-    samplingRate?: number;
-    /** Subtitle format (srt, vtt, pgs, ass) */
-    format?: string;
-    /** URL to fetch subtitle file */
-    key?: string;
-}
-
-/**
- * A part of a media file
- */
-export interface PlexMediaPart {
-    /** Part ID */
-    id: string;
-    /** API path for streaming */
-    key: string;
-    /** Duration in ms */
-    duration: number;
-    /** Original filename */
-    file: string;
-    /** File size in bytes */
-    size: number;
-    /** Container format */
-    container: string;
-    /** Video profile */
-    videoProfile?: string;
-    /** Audio profile */
-    audioProfile?: string;
-    /** Available streams (video, audio, subtitle) */
-    streams: PlexStream[];
-}
-
-/**
- * A specific media file/version for a Plex item
- */
-export interface PlexMediaFile {
-    /** Media file ID */
-    id: string;
-    /** Duration in ms */
-    duration: number;
-    /** Bitrate in kbps */
-    bitrate: number;
-    /** Video width in pixels */
-    width: number;
-    /** Video height in pixels */
-    height: number;
-    /** Aspect ratio (e.g., 1.78 for 16:9) */
-    aspectRatio: number;
-    /** Video codec (e.g., "h264", "hevc") */
-    videoCodec: string;
-    /** Audio codec (e.g., "aac", "ac3") */
-    audioCodec: string;
-    /** Audio channel count */
-    audioChannels: number;
-    /** Container format (e.g., "mkv", "mp4") */
-    container: string;
-    /** Resolution label (e.g., "1080", "4k") */
-    videoResolution: string;
-    /** File parts (for multi-part media) */
-    parts: PlexMediaPart[];
-}
+export type { PlexStream, PlexMediaPart, PlexMediaFile };
 
 /**
  * A media item from Plex (movie, episode, etc.)

@@ -269,9 +269,10 @@ describe('EPGVirtualizer', () => {
             const range = virtualizer.calculateVisibleRange({ channelOffset: 0, timeOffset: 0 });
             virtualizer.renderVisibleCells([channelId], new Map([[channelId, schedule]]), range);
 
-            const showLine = container.querySelector('.epg-cell-show') as HTMLElement;
-            expect(showLine.textContent).toBe('Great Show');
-            expect(showLine.style.display).toBe('block');
+            const showLine = container.querySelector('.epg-cell-show') as HTMLElement | null;
+            expect(showLine).not.toBeNull();
+            expect(showLine?.textContent).toBe('Great Show');
+            expect(showLine?.style.display).toBe('block');
         });
 
         it('hides show title line for non-episode programs', () => {
@@ -307,9 +308,10 @@ describe('EPGVirtualizer', () => {
             const range = virtualizer.calculateVisibleRange({ channelOffset: 0, timeOffset: 0 });
             virtualizer.renderVisibleCells([channelId], new Map([[channelId, schedule]]), range);
 
-            const showLine = container.querySelector('.epg-cell-show') as HTMLElement;
-            expect(showLine.textContent).toBe('');
-            expect(showLine.style.display).toBe('none');
+            const showLine = container.querySelector('.epg-cell-show') as HTMLElement | null;
+            expect(showLine).not.toBeNull();
+            expect(showLine?.textContent).toBe('');
+            expect(showLine?.style.display).toBe('none');
         });
 
         it('renders loading placeholders when schedules are missing', () => {

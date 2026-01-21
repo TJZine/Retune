@@ -533,10 +533,9 @@ export class EPGVirtualizer {
     }
 
     private extractShowTitleFromFullTitle(fullTitle: string): string | null {
-        const separator = ' - ';
-        const splitIndex = fullTitle.indexOf(separator);
-        if (splitIndex === -1) return null;
-        const showTitle = fullTitle.slice(0, splitIndex).trim();
+        const match = fullTitle.match(/^(.*?)\s-\sS\d{2}E\d{2}\s-/);
+        if (!match) return null;
+        const showTitle = match[1]?.trim() ?? '';
         return showTitle.length > 0 ? showTitle : null;
     }
 
@@ -545,7 +544,8 @@ export class EPGVirtualizer {
         if (!show) return;
 
         if (cellData.kind === 'program' && cellData.program.item.type === 'episode') {
-            const showTitle = this.extractShowTitleFromFullTitle(cellData.program.item.fullTitle);
+            const showTitle = cellData.program.item.showTitle ??
+                this.extractShowTitleFromFullTitle(cellData.program.item.fullTitle);
             if (showTitle) {
                 show.textContent = showTitle;
                 show.style.display = 'block';

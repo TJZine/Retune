@@ -255,6 +255,8 @@ export interface ResolvedContentItem {
     title: string;
     /** Full title (e.g., "Show - S01E05 - Episode Name") */
     fullTitle: string;
+    /** Show title for episodes (fallback for EPG show line) */
+    showTitle?: string;
     /** Duration in ms */
     durationMs: number;
     /** Poster thumbnail URL (with token) */

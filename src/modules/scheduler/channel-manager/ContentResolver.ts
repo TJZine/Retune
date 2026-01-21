@@ -35,6 +35,8 @@ type PlexStreamMinimal = {
     title?: string;
     language?: string;
     languageCode?: string;
+    codec?: string;
+    channels?: number;
 };
 
 /**
@@ -490,6 +492,9 @@ export class ContentResolver {
         if (typeof item.episodeNumber === 'number') {
             resolved.episodeNumber = item.episodeNumber;
         }
+        if (item.grandparentTitle) {
+            resolved.showTitle = item.grandparentTitle;
+        }
         // Issue 8: Include filterable fields
         if (typeof item.rating === 'number') {
             resolved.rating = item.rating;
@@ -527,8 +532,6 @@ export class ContentResolver {
         const mediaInfo: ResolvedContentItem['mediaInfo'] = {};
         const resolution = this._normalizeResolution(media.videoResolution);
         if (resolution) mediaInfo.resolution = resolution;
-        if (media.audioCodec) mediaInfo.audioCodec = media.audioCodec;
-        if (typeof media.audioChannels === 'number') mediaInfo.audioChannels = media.audioChannels;
 
         const streams = media.parts?.[0]?.streams ?? [];
         const videoStream = streams.find((stream) => stream.streamType === 1);
@@ -536,6 +539,12 @@ export class ContentResolver {
         if (hdr) mediaInfo.hdr = hdr;
 
         const audioStream = this._selectAudioStream(streams);
+        if (audioStream?.codec) mediaInfo.audioCodec = audioStream.codec;
+        if (typeof audioStream?.channels === 'number') mediaInfo.audioChannels = audioStream.channels;
+        if (!mediaInfo.audioCodec && media.audioCodec) mediaInfo.audioCodec = media.audioCodec;
+        if (mediaInfo.audioChannels === undefined && typeof media.audioChannels === 'number') {
+            mediaInfo.audioChannels = media.audioChannels;
+        }
         const audioTitle = audioStream?.title || audioStream?.language || audioStream?.languageCode;
         if (audioTitle) mediaInfo.audioTrackTitle = audioTitle;
 

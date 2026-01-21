@@ -146,7 +146,8 @@ describe('EPGInfoPanel', () => {
 
             const noGenres = createMockProgram(null, { genres: [] });
             panel.show(noGenres);
-            expect(genres.style.display).toBe('none');
+            const refreshedGenres = container.querySelector('.epg-info-genres') as HTMLElement;
+            expect(refreshedGenres.style.display).toBe('none');
         });
 
         it('renders summary when available', () => {

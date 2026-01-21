@@ -155,13 +155,12 @@ export class NavigationCoordinator {
         }
 
         // Compute EPG routing eligibility: only route to EPG when on guide screen with no modal open
-        const navigation = this.deps.getNavigation();
-        const currentScreen = navigation?.getCurrentScreen();
-        const modalOpen = navigation?.isModalOpen() ?? false;
-        const shouldRouteToEpg = !modalOpen && currentScreen === 'guide';
-
         const epg = this.deps.getEpg();
-        if (epg?.isVisible() && shouldRouteToEpg) {
+        const navigation = this.deps.getNavigation();
+        const modalOpen = navigation?.isModalOpen() ?? false;
+        const shouldRouteToEpg = !modalOpen && !!epg?.isVisible();
+
+        if (epg && shouldRouteToEpg) {
             switch (event.button) {
                 case 'up':
                 case 'down':
