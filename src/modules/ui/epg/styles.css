@@ -126,6 +126,7 @@
   overflow: hidden;
   box-sizing: border-box;
   margin: 2px;
+  contain: layout paint;
   transition: transform 150ms ease-out, box-shadow 150ms ease-out;
   cursor: pointer;
 }
@@ -169,6 +170,55 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* =========================================
+   LIVE Indicator Badge
+   ========================================= */
+.epg-live-badge {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ff4444;
+  text-transform: uppercase;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.epg-live-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4444;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(255, 68, 68, 0);
+  }
+}
+
+.epg-cell.current .epg-cell-title {
+  margin-top: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .epg-live-badge::before {
+    animation: none;
+  }
 }
 
 /* Current Time Indicator */

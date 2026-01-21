@@ -513,6 +513,8 @@ export class EPGVirtualizer {
         const time = element.querySelector(`.${EPG_CLASSES.CELL_TIME}`);
         if (title) title.textContent = '';
         if (time) time.textContent = '';
+        const liveBadge = element.querySelector('.epg-live-badge');
+        if (liveBadge) liveBadge.remove();
 
         // Reset positioning
         element.style.left = '';
@@ -562,6 +564,7 @@ export class EPGVirtualizer {
         if (cellData.isCurrent) {
             element.classList.add(EPG_CLASSES.CELL_CURRENT);
         }
+        this.updateLiveBadge(element, cellData.isCurrent);
 
         // Append to grid
         this.contentElement.appendChild(element);
@@ -586,6 +589,23 @@ export class EPGVirtualizer {
             element.classList.add(EPG_CLASSES.CELL_CURRENT);
         } else {
             element.classList.remove(EPG_CLASSES.CELL_CURRENT);
+        }
+        this.updateLiveBadge(element, cellData.isCurrent);
+    }
+
+    private updateLiveBadge(element: HTMLElement, isCurrent: boolean): void {
+        const existing = element.querySelector('.epg-live-badge') as HTMLElement | null;
+        if (isCurrent) {
+            if (existing) return;
+            const liveBadge = document.createElement('span');
+            liveBadge.className = 'epg-live-badge';
+            liveBadge.textContent = 'LIVE';
+            liveBadge.setAttribute('aria-label', 'Currently playing');
+            element.appendChild(liveBadge);
+            return;
+        }
+        if (existing) {
+            existing.remove();
         }
     }
 

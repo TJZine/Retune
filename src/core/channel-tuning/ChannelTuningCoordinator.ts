@@ -49,6 +49,7 @@ function summarizeErrorForLog(error: unknown): { name?: string; code?: unknown; 
 
 export class ChannelTuningCoordinator {
     private _isChannelSwitching = false;
+    private _channelSwitchTimeoutId: number | null = null;
 
     constructor(private readonly deps: ChannelTuningCoordinatorDeps) {}
 
@@ -152,6 +153,7 @@ export class ChannelTuningCoordinator {
 
             // Only stop player after successful content resolution
             videoPlayer.stop();
+            this._triggerChannelSwitchEffect();
 
             // Configure scheduler
             const now = Date.now();
@@ -180,6 +182,24 @@ export class ChannelTuningCoordinator {
                 this.deps.setPendingNowPlayingChannelId(null);
             }
         }
+    }
+
+    private _triggerChannelSwitchEffect(): void {
+        if (typeof document === 'undefined') return;
+        if (!document.body.classList.contains('theme-retro')) return;
+
+        const playerContainer = document.getElementById('video-container');
+        if (!playerContainer) return;
+
+        if (this._channelSwitchTimeoutId !== null) {
+            window.clearTimeout(this._channelSwitchTimeoutId);
+        }
+
+        playerContainer.classList.add('channel-switching');
+        this._channelSwitchTimeoutId = window.setTimeout(() => {
+            playerContainer.classList.remove('channel-switching');
+            this._channelSwitchTimeoutId = null;
+        }, 300);
     }
 
     async switchToChannelByNumber(number: number): Promise<void> {

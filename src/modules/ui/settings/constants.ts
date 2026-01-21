@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         directPlayAudioFallback: false,
     },
     display: {
-        theme: 'dark',
+        theme: 'default',
         scanlineEffect: false,
         nowPlayingInfoAutoHideMs: 10_000,
     },
@@ -55,7 +55,6 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
  * Theme CSS class mappings.
  */
 export const THEME_CLASSES = {
-    dark: 'theme-dark',
-    'retro-green': 'theme-retro-green',
-    'retro-amber': 'theme-retro-amber',
+    default: '',
+    retro: 'theme-retro',
 } as const;
