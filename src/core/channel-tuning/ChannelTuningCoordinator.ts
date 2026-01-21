@@ -152,6 +152,7 @@ export class ChannelTuningCoordinator {
 
             // Only stop player after successful content resolution
             videoPlayer.stop();
+            this._triggerChannelSwitchEffect();
 
             // Configure scheduler
             const now = Date.now();
@@ -180,6 +181,19 @@ export class ChannelTuningCoordinator {
                 this.deps.setPendingNowPlayingChannelId(null);
             }
         }
+    }
+
+    private _triggerChannelSwitchEffect(): void {
+        if (typeof document === 'undefined') return;
+        if (!document.body.classList.contains('theme-retro')) return;
+
+        const playerContainer = document.getElementById('video-container');
+        if (!playerContainer) return;
+
+        playerContainer.classList.add('channel-switching');
+        window.setTimeout(() => {
+            playerContainer.classList.remove('channel-switching');
+        }, 300);
     }
 
     async switchToChannelByNumber(number: number): Promise<void> {

@@ -18,6 +18,7 @@
     /* Accent - Phosphor */
     --color-accent-green: #33ff66;
     --color-accent-amber: #ffcc00;
+    --color-accent: var(--color-accent-green);
 
     /* Background */
     --color-bg-deep: #000000;
@@ -57,6 +58,7 @@
     --font-family-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     --font-family-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
     --font-family-retro: 'VT323', 'Press Start 2P', monospace;
+    --font-family-display: var(--font-family-sans);
 
     /* 10-foot UI Sizes */
     --text-xs: 14px;
@@ -120,26 +122,6 @@
     --z-overlay: 5000;
     --z-toast: 9000;
     --z-max: 10000;
-}
-
-/* =========================================
-   Theme Variants
-   ========================================= */
-
-.theme-retro-green {
-    --color-primary: var(--color-accent-green);
-    --color-primary-dark: #29cc52;
-    --color-primary-light: #66ff8c;
-    --focus-color: var(--color-accent-green);
-    --focus-glow-color: rgba(51, 255, 102, 0.35);
-}
-
-.theme-retro-amber {
-    --color-primary: var(--color-accent-amber);
-    --color-primary-dark: #cc9900;
-    --color-primary-light: #ffd633;
-    --focus-color: var(--color-accent-amber);
-    --focus-glow-color: rgba(255, 204, 0, 0.35);
 }
 
 /* =========================================

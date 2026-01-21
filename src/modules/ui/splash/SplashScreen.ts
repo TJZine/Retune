@@ -1,49 +1,64 @@
 /**
- * @fileoverview Minimal splash screen shown during startup.
+ * @fileoverview Splash screen shown during startup.
  * @module modules/ui/splash/SplashScreen
- * @version 1.0.0
+ * @version 2.0.0
  */
+
+import './styles.css';
 
 export class SplashScreen {
     private _container: HTMLElement;
+    private _statusElement: HTMLElement | null = null;
 
     constructor(container: HTMLElement) {
         this._container = container;
-        this._container.classList.add('screen');
-        this._container.style.position = 'absolute';
-        this._container.style.inset = '0';
-        this._container.style.display = 'none';
-        this._container.style.alignItems = 'center';
-        this._container.style.justifyContent = 'center';
-
-        const panel = document.createElement('div');
-        panel.className = 'screen-panel';
-
-        const title = document.createElement('h1');
-        title.className = 'screen-title';
-        title.textContent = 'Retune';
-        panel.appendChild(title);
-
-        const subtitle = document.createElement('p');
-        subtitle.className = 'screen-subtitle';
-        subtitle.textContent = 'Warming up Plex, loading channels, and getting ready.';
-        panel.appendChild(subtitle);
-
-        const status = document.createElement('div');
-        status.className = 'screen-status';
-        status.textContent = 'Starting up…';
-        panel.appendChild(status);
-
-        this._container.appendChild(panel);
+        this._buildUI();
     }
 
-    show(): void {
-        this._container.style.display = 'flex';
+    private _buildUI(): void {
+        this._container.className = 'splash-screen screen';
+        this._container.innerHTML = '';
+
+        const crtContainer = document.createElement('div');
+        crtContainer.className = 'splash-crt-container';
+
+        const content = document.createElement('div');
+        content.className = 'splash-content';
+
+        const title = document.createElement('h1');
+        title.className = 'splash-title screen-title';
+        title.textContent = 'RETUNE';
+
+        const subtitle = document.createElement('p');
+        subtitle.className = 'splash-subtitle screen-subtitle';
+        subtitle.textContent = 'Warming up Plex, loading channels...';
+
+        const status = document.createElement('div');
+        status.className = 'splash-status screen-status';
+        status.textContent = 'Starting up…';
+        this._statusElement = status;
+
+        content.appendChild(title);
+        content.appendChild(subtitle);
+        content.appendChild(status);
+        crtContainer.appendChild(content);
+        this._container.appendChild(crtContainer);
+    }
+
+    public updateStatus(text: string): void {
+        if (this._statusElement) {
+            this._statusElement.textContent = text;
+        }
+    }
+
+    public show(): void {
+        this._container.style.display = 'none';
+        void this._container.offsetHeight;
+        this._container.style.display = '';
         this._container.classList.add('visible');
     }
 
-    hide(): void {
-        this._container.style.display = 'none';
+    public hide(): void {
         this._container.classList.remove('visible');
     }
 }

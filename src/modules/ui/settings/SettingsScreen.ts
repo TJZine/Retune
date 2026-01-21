@@ -11,6 +11,7 @@ import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from './constants';
 import type { SettingsSectionConfig, SettingsItemConfig, SettingsSelectConfig } from './types';
 import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from '../now-playing-info';
 import { parseStoredBoolean, safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
+import { ThemeManager } from '../theme';
 
 /**
  * Settings screen component.
@@ -87,6 +88,7 @@ export class SettingsScreen {
         );
         this._applyScanlineEffect(scanlineEnabled);
         const nowPlayingAutoHide = this._loadClampedNowPlayingAutoHide();
+        const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
 
         return [
             {
@@ -116,6 +118,20 @@ export class SettingsScreen {
             {
                 title: 'Display',
                 items: [
+                    {
+                        id: 'settings-theme',
+                        label: 'Theme',
+                        description: 'Visual style of the application',
+                        value: themeValue,
+                        options: [
+                            { label: 'Default', value: 0 },
+                            { label: 'Retro', value: 1 },
+                        ],
+                        onChange: (value: number): void => {
+                            const theme = value === 1 ? 'retro' : 'default';
+                            ThemeManager.getInstance().setTheme(theme);
+                        },
+                    },
                     {
                         id: 'settings-scanline-effect',
                         label: 'Scanline Effect',
@@ -315,6 +331,11 @@ export class SettingsScreen {
                 : this._loadNumberSetting(meta.storageKey, meta.defaultValue);
             select.update(value);
             meta.onRefresh?.(value);
+        }
+        const themeSelect = this._selectElements.get('settings-theme');
+        if (themeSelect) {
+            const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
+            themeSelect.update(themeValue);
         }
     }
 

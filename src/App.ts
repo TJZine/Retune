@@ -22,6 +22,7 @@ import { ServerSelectScreen } from './modules/ui/server-select';
 import { SplashScreen } from './modules/ui/splash';
 import { SettingsScreen } from './modules/ui/settings';
 import { AudioSetupScreen } from './modules/ui/audio-setup';
+import { ThemeManager } from './modules/ui/theme';
 import { STORAGE_KEYS } from './types';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import {
@@ -116,6 +117,8 @@ export class App {
      */
     async start(): Promise<void> {
         try {
+            ThemeManager.getInstance();
+
             // Create root containers
             this._createContainers();
 
