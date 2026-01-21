@@ -90,6 +90,28 @@ export class EPGTimeHeader {
     }
 
     /**
+     * Refresh slot layout after pixelsPerMinute changes.
+     * Avoids DOM rebuild by reapplying left/width styles.
+     */
+    refreshLayout(): void {
+        if (!this.containerElement || !this.config || this.slotElements.length === 0) return;
+
+        const totalMinutes = this.config.totalHours * 60;
+        const slotMinutes = this.config.timeSlotMinutes;
+        const slotCount = totalMinutes / slotMinutes;
+        const maxSlots = Math.min(slotCount, this.slotElements.length);
+
+        for (let i = 0; i < maxSlots; i++) {
+            const slot = this.slotElements[i];
+            if (!slot) continue;
+            const minutesFromAnchor = i * slotMinutes;
+            const left = minutesFromAnchor * this.config.pixelsPerMinute;
+            slot.style.left = `${left}px`;
+            slot.style.width = `${slotMinutes * this.config.pixelsPerMinute}px`;
+        }
+    }
+
+    /**
      * Create a time slot element.
      *
      * @param time - Slot time (Unix ms)

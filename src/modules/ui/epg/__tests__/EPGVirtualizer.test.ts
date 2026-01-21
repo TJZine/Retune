@@ -27,6 +27,7 @@ describe('EPGVirtualizer', () => {
             visibleHours: 3,
             totalHours: 24,
             pixelsPerMinute: 4,
+            autoFitPixelsPerMinute: false,
             rowHeight: 80,
             showCurrentTimeIndicator: true,
             autoScrollToNow: false,
@@ -233,6 +234,82 @@ describe('EPGVirtualizer', () => {
             const cell = container.querySelector(`[data-key="${expectedKey}"]`) as HTMLElement;
             expect(cell).not.toBeNull();
             expect(cell.style.top).toBe('0px');
+        });
+
+        it('renders show title line for episode programs', () => {
+            virtualizer.setChannelCount(1);
+            const channelId = 'ch-episode';
+            const schedule: ScheduleWindow = {
+                startTime: gridAnchorTime,
+                endTime: gridAnchorTime + 3600000,
+                programs: [
+                    {
+                        item: {
+                            ratingKey: 'ep1',
+                            type: 'episode',
+                            title: 'Episode One',
+                            fullTitle: 'Great Show - S01E01 - Episode One',
+                            durationMs: 1800000,
+                            thumb: null,
+                            year: 2020,
+                            scheduledIndex: 0,
+                        },
+                        scheduledStartTime: gridAnchorTime,
+                        scheduledEndTime: gridAnchorTime + 1800000,
+                        elapsedMs: 0,
+                        remainingMs: 1800000,
+                        scheduleIndex: 0,
+                        loopNumber: 0,
+                        streamDescriptor: null,
+                        isCurrent: false,
+                    },
+                ],
+            };
+
+            const range = virtualizer.calculateVisibleRange({ channelOffset: 0, timeOffset: 0 });
+            virtualizer.renderVisibleCells([channelId], new Map([[channelId, schedule]]), range);
+
+            const showLine = container.querySelector('.epg-cell-show') as HTMLElement;
+            expect(showLine.textContent).toBe('Great Show');
+            expect(showLine.style.display).toBe('block');
+        });
+
+        it('hides show title line for non-episode programs', () => {
+            virtualizer.setChannelCount(1);
+            const channelId = 'ch-movie';
+            const schedule: ScheduleWindow = {
+                startTime: gridAnchorTime,
+                endTime: gridAnchorTime + 3600000,
+                programs: [
+                    {
+                        item: {
+                            ratingKey: 'movie1',
+                            type: 'movie',
+                            title: 'Feature Film',
+                            fullTitle: 'Feature Film',
+                            durationMs: 1800000,
+                            thumb: null,
+                            year: 2021,
+                            scheduledIndex: 0,
+                        },
+                        scheduledStartTime: gridAnchorTime,
+                        scheduledEndTime: gridAnchorTime + 1800000,
+                        elapsedMs: 0,
+                        remainingMs: 1800000,
+                        scheduleIndex: 0,
+                        loopNumber: 0,
+                        streamDescriptor: null,
+                        isCurrent: false,
+                    },
+                ],
+            };
+
+            const range = virtualizer.calculateVisibleRange({ channelOffset: 0, timeOffset: 0 });
+            virtualizer.renderVisibleCells([channelId], new Map([[channelId, schedule]]), range);
+
+            const showLine = container.querySelector('.epg-cell-show') as HTMLElement;
+            expect(showLine.textContent).toBe('');
+            expect(showLine.style.display).toBe('none');
         });
 
         it('renders loading placeholders when schedules are missing', () => {

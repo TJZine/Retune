@@ -28,6 +28,14 @@ import { PLEX_MEDIA_TYPES } from '../../plex/library/constants';
 // ============================================
 
 const SHOW_CACHE_TTL_MS = 300000;
+type PlexStreamMinimal = {
+    streamType: number;
+    selected?: boolean;
+    default?: boolean;
+    title?: string;
+    language?: string;
+    languageCode?: string;
+};
 
 /**
  * Resolves content from various Plex sources.
@@ -495,6 +503,13 @@ export class ContentResolver {
         if (item.directors && item.directors.length > 0) {
             resolved.directors = item.directors;
         }
+        if (item.summary && item.summary.trim().length > 0) {
+            resolved.summary = item.summary;
+        }
+        const mediaInfo = this._buildMediaInfo(item);
+        if (mediaInfo) {
+            resolved.mediaInfo = mediaInfo;
+        }
         if (typeof item.viewCount === 'number') {
             resolved.watched = item.viewCount > 0;
         }
@@ -503,6 +518,64 @@ export class ContentResolver {
         }
 
         return resolved;
+    }
+
+    private _buildMediaInfo(item: PlexMediaItemMinimal): ResolvedContentItem['mediaInfo'] | undefined {
+        const media = item.media?.[0];
+        if (!media) return undefined;
+
+        const mediaInfo: ResolvedContentItem['mediaInfo'] = {};
+        const resolution = this._normalizeResolution(media.videoResolution);
+        if (resolution) mediaInfo.resolution = resolution;
+        if (media.audioCodec) mediaInfo.audioCodec = media.audioCodec;
+        if (typeof media.audioChannels === 'number') mediaInfo.audioChannels = media.audioChannels;
+
+        const streams = media.parts?.[0]?.streams ?? [];
+        const videoStream = streams.find((stream) => stream.streamType === 1);
+        const hdr = this._detectHdrFromStreamTitle(videoStream?.title);
+        if (hdr) mediaInfo.hdr = hdr;
+
+        const audioStream = this._selectAudioStream(streams);
+        const audioTitle = audioStream?.title || audioStream?.language || audioStream?.languageCode;
+        if (audioTitle) mediaInfo.audioTrackTitle = audioTitle;
+
+        return Object.keys(mediaInfo).length > 0 ? mediaInfo : undefined;
+    }
+
+    private _normalizeResolution(resolution?: string): string | undefined {
+        if (!resolution) return undefined;
+        const normalized = resolution.trim().toLowerCase();
+        if (normalized === '4k' || normalized === 'uhd' || normalized === '2160' || normalized === '2160p') {
+            return '4K';
+        }
+        if (normalized === '1080' || normalized === '1080p') {
+            return '1080p';
+        }
+        if (normalized === '720' || normalized === '720p') {
+            return '720p';
+        }
+        return resolution;
+    }
+
+    private _detectHdrFromStreamTitle(title?: string): string | undefined {
+        if (!title) return undefined;
+        const normalized = title.toLowerCase();
+        if (normalized.includes('dolby vision')) return 'Dolby Vision';
+        if (normalized.includes('hdr10+')) return 'HDR10+';
+        if (normalized.includes('hdr10')) return 'HDR10';
+        return undefined;
+    }
+
+    private _selectAudioStream(
+        streams: PlexStreamMinimal[]
+    ): PlexStreamMinimal | undefined {
+        const audioStreams = streams.filter((stream) => stream.streamType === 2);
+        if (audioStreams.length === 0) return undefined;
+        return (
+            audioStreams.find((stream) => stream.selected) ??
+            audioStreams.find((stream) => stream.default) ??
+            audioStreams[0]
+        );
     }
 
     private _buildFullTitle(item: PlexMediaItemMinimal): string {

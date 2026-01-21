@@ -10,6 +10,7 @@ import type {
     ImportResult,
     ChannelManagerEventMap,
 } from './types';
+import type { PlexMediaFile } from '../../plex/library';
 
 // ============================================
 // Main Interface
@@ -236,6 +237,8 @@ export interface PlexMediaItemMinimal {
     year: number;
     durationMs: number;
     thumb: string | null;
+    summary?: string;
+    media?: PlexMediaFile[];
     grandparentTitle?: string;
     parentTitle?: string;
     seasonNumber?: number;

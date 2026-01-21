@@ -15,9 +15,15 @@ import type { ScheduledProgram } from './types';
  */
 export class EPGInfoPanel implements IEPGInfoPanel {
     private containerElement: HTMLElement | null = null;
+    private posterElement: HTMLImageElement | null = null;
+    private titleElement: HTMLElement | null = null;
+    private metaElement: HTMLElement | null = null;
+    private genresElement: HTMLElement | null = null;
+    private descriptionElement: HTMLElement | null = null;
     private isVisible: boolean = false;
     private currentProgram: ScheduledProgram | null = null;
     private thumbResolver: ((pathOrUrl: string | null) => string | null) | null = null;
+    private qualityBadges: HTMLElement[] = [];
 
     /**
      * Set the thumb URL resolver callback.
@@ -40,6 +46,36 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         this.containerElement.innerHTML = this.createTemplate();
         this.containerElement.style.display = 'none';
         parentElement.appendChild(this.containerElement);
+
+        this.posterElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_POSTER}`
+        ) as HTMLImageElement | null;
+        this.titleElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_TITLE}`
+        ) as HTMLElement | null;
+        this.metaElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_META}`
+        ) as HTMLElement | null;
+        this.genresElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_GENRES}`
+        ) as HTMLElement | null;
+        this.descriptionElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_DESCRIPTION}`
+        ) as HTMLElement | null;
+
+        const qualityContainer = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_QUALITY}`
+        ) as HTMLElement | null;
+        if (qualityContainer) {
+            this.qualityBadges = [];
+            for (let i = 0; i < 4; i++) {
+                const badge = document.createElement('span');
+                badge.className = EPG_CLASSES.INFO_QUALITY_BADGE;
+                badge.style.display = 'none';
+                qualityContainer.appendChild(badge);
+                this.qualityBadges.push(badge);
+            }
+        }
     }
 
     /**
@@ -51,6 +87,8 @@ export class EPGInfoPanel implements IEPGInfoPanel {
       <div class="${EPG_CLASSES.INFO_CONTENT}">
         <div class="${EPG_CLASSES.INFO_TITLE}"></div>
         <div class="${EPG_CLASSES.INFO_META}"></div>
+        <div class="${EPG_CLASSES.INFO_GENRES}"></div>
+        <div class="${EPG_CLASSES.INFO_QUALITY}"></div>
         <div class="${EPG_CLASSES.INFO_DESCRIPTION}"></div>
       </div>
     `;
@@ -64,9 +102,15 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             this.containerElement.remove();
             this.containerElement = null;
         }
+        this.posterElement = null;
+        this.titleElement = null;
+        this.metaElement = null;
+        this.genresElement = null;
+        this.descriptionElement = null;
         this.currentProgram = null;
         this.thumbResolver = null;
         this.isVisible = false;
+        this.qualityBadges = [];
     }
 
     /**
@@ -113,9 +157,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         const { item } = program;
 
         // Update poster: use resolver if available, otherwise validate URL scheme
-        const poster = this.containerElement.querySelector(
-            `.${EPG_CLASSES.INFO_POSTER}`
-        ) as HTMLImageElement;
+        const poster = this.posterElement;
         if (poster) {
             // Use resolver callback to convert relative Plex paths to absolute URLs
             const resolvedUrl = this.thumbResolver?.(item.thumb) ?? null;
@@ -131,13 +173,13 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         }
 
         // Update title
-        const title = this.containerElement.querySelector(`.${EPG_CLASSES.INFO_TITLE}`);
+        const title = this.titleElement;
         if (title) {
             title.textContent = item.fullTitle || item.title;
         }
 
         // Update meta info
-        const meta = this.containerElement.querySelector(`.${EPG_CLASSES.INFO_META}`);
+        const meta = this.metaElement;
         if (meta) {
             const startTime = formatTime(program.scheduledStartTime);
             const endTime = formatTime(program.scheduledEndTime);
@@ -147,13 +189,96 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             meta.textContent = `${startTime} - ${endTime} (${duration}) ${year}`;
         }
 
-        // Update description - hide when no extended metadata available
-        const description = this.containerElement.querySelector(`.${EPG_CLASSES.INFO_DESCRIPTION}`) as HTMLElement;
-        if (description) {
-            // Description would come from extended metadata, hide until available
-            description.textContent = '';
-            description.style.display = 'none';
+        // Update genres
+        const genres = this.genresElement;
+        if (genres) {
+            const genreText = item.genres && item.genres.length > 0
+                ? item.genres.slice(0, 3).join(' • ')
+                : '';
+            genres.textContent = genreText;
+            genres.style.display = genreText ? 'block' : 'none';
         }
+
+        // Update description
+        const description = this.descriptionElement;
+        if (description) {
+            const summary = item.summary?.trim() ?? '';
+            description.textContent = summary;
+            description.style.display = summary ? 'block' : 'none';
+        }
+
+        // Update quality badges
+        const qualityBadges = this.qualityBadges;
+        const mediaInfo = item.mediaInfo;
+        const badgeValues: string[] = [];
+
+        if (mediaInfo?.resolution) badgeValues.push(mediaInfo.resolution);
+        if (mediaInfo?.hdr) badgeValues.push(mediaInfo.hdr);
+        if (mediaInfo?.audioCodec) {
+            badgeValues.push(this.formatAudioCodec(mediaInfo.audioCodec));
+        }
+        const audioDetail = this.formatAudioDetail(mediaInfo);
+        if (audioDetail) badgeValues.push(audioDetail);
+
+        for (let i = 0; i < qualityBadges.length; i++) {
+            const badge = qualityBadges[i];
+            const value = badgeValues[i];
+            if (badge && value) {
+                badge.textContent = value;
+                badge.style.display = 'inline-flex';
+            } else if (badge) {
+                badge.textContent = '';
+                badge.style.display = 'none';
+            }
+        }
+    }
+
+    private formatAudioCodec(codec: string): string {
+        const normalized = codec.trim().toLowerCase();
+        switch (normalized) {
+            case 'truehd':
+                return 'TRUEHD';
+            case 'eac3':
+                return 'DD+';
+            case 'ac3':
+                return 'DD';
+            case 'dca':
+            case 'dts':
+                return 'DTS';
+            case 'dts-hd':
+            case 'dtshd':
+                return 'DTS-HD';
+            default:
+                return normalized.toUpperCase();
+        }
+    }
+
+    private formatAudioDetail(
+        mediaInfo: ScheduledProgram['item']['mediaInfo'] | undefined
+    ): string | null {
+        if (!mediaInfo) return null;
+
+        if (typeof mediaInfo.audioChannels === 'number' && mediaInfo.audioChannels > 0) {
+            switch (mediaInfo.audioChannels) {
+                case 1:
+                    return '1.0';
+                case 2:
+                    return '2.0';
+                case 6:
+                    return '5.1';
+                case 8:
+                    return '7.1';
+                default:
+                    return `${mediaInfo.audioChannels}ch`;
+            }
+        }
+
+        if (mediaInfo.audioTrackTitle) {
+            const trimmed = mediaInfo.audioTrackTitle.trim();
+            return trimmed.length > 0 ? trimmed.slice(0, 24) : null;
+        }
+
+        return null;
     }
 
     /**

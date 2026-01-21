@@ -13,7 +13,10 @@ describe('EPGInfoPanel', () => {
     let panel: EPGInfoPanel;
     let container: HTMLElement;
 
-    const createMockProgram = (thumbPath: string | null): ScheduledProgram => ({
+    const createMockProgram = (
+        thumbPath: string | null,
+        itemOverrides: Partial<ScheduledProgram['item']> = {}
+    ): ScheduledProgram => ({
         item: {
             ratingKey: 'test-1',
             type: 'movie',
@@ -23,6 +26,7 @@ describe('EPGInfoPanel', () => {
             thumb: thumbPath,
             year: 2024,
             scheduledIndex: 0,
+            ...itemOverrides,
         },
         scheduledStartTime: Date.now(),
         scheduledEndTime: Date.now() + 7200000,
@@ -128,6 +132,50 @@ describe('EPGInfoPanel', () => {
 
             const title = container.querySelector('.epg-info-title');
             expect(title?.textContent).toBe('Test Movie');
+        });
+    });
+
+    describe('metadata rendering', () => {
+        it('renders genres and hides when empty', () => {
+            const program = createMockProgram(null, { genres: ['Drama', 'Comedy'] });
+            panel.show(program);
+
+            const genres = container.querySelector('.epg-info-genres') as HTMLElement;
+            expect(genres.textContent).toBe('Drama • Comedy');
+            expect(genres.style.display).toBe('block');
+
+            const noGenres = createMockProgram(null, { genres: [] });
+            panel.show(noGenres);
+            expect(genres.style.display).toBe('none');
+        });
+
+        it('renders summary when available', () => {
+            const program = createMockProgram(null, { summary: 'A concise summary.' });
+            panel.show(program);
+
+            const description = container.querySelector('.epg-info-description') as HTMLElement;
+            expect(description.textContent).toBe('A concise summary.');
+            expect(description.style.display).toBe('block');
+        });
+
+        it('renders quality badges from mediaInfo', () => {
+            const program = createMockProgram(null, {
+                mediaInfo: {
+                    resolution: '4K',
+                    hdr: 'HDR10+',
+                    audioCodec: 'eac3',
+                    audioChannels: 6,
+                },
+            });
+            panel.show(program);
+
+            const badges = Array.from(
+                container.querySelectorAll('.epg-info-quality-badge')
+            ) as HTMLElement[];
+            const visibleBadges = badges.filter((badge) => badge.style.display !== 'none');
+            const texts = visibleBadges.map((badge) => badge.textContent);
+
+            expect(texts).toEqual(['4K', 'HDR10+', 'DD+', '5.1']);
         });
     });
 });

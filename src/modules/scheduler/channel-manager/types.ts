@@ -276,6 +276,16 @@ export interface ResolvedContentItem {
     genres?: string[];
     /** Directors */
     directors?: string[];
+    /** Summary/description */
+    summary?: string;
+    /** Media quality info */
+    mediaInfo?: {
+        resolution?: string;
+        hdr?: string;
+        audioCodec?: string;
+        audioChannels?: number;
+        audioTrackTitle?: string;
+    };
     /** Whether item has been watched */
     watched?: boolean;
     /** When item was added to Plex */

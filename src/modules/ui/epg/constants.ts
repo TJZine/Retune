@@ -49,6 +49,7 @@ export const EPG_CLASSES = {
     CELL: 'epg-cell',
     CELL_FOCUSED: 'focused',
     CELL_CURRENT: 'current',
+    CELL_SHOW: 'epg-cell-show',
     CELL_TITLE: 'epg-cell-title',
     CELL_TIME: 'epg-cell-time',
     TIME_HEADER: 'epg-time-header',
@@ -59,7 +60,10 @@ export const EPG_CLASSES = {
     INFO_CONTENT: 'epg-info-content',
     INFO_TITLE: 'epg-info-title',
     INFO_META: 'epg-info-meta',
+    INFO_GENRES: 'epg-info-genres',
     INFO_DESCRIPTION: 'epg-info-description',
+    INFO_QUALITY: 'epg-info-quality',
+    INFO_QUALITY_BADGE: 'epg-info-quality-badge',
 } as const;
 
 /**
@@ -83,6 +87,9 @@ export const DEFAULT_EPG_CONFIG = {
     visibleHours: EPG_CONSTANTS.VISIBLE_HOURS,
     totalHours: EPG_CONSTANTS.TOTAL_HOURS,
     pixelsPerMinute: EPG_CONSTANTS.PIXELS_PER_MINUTE,
+    autoFitPixelsPerMinute: true,
+    minPixelsPerMinute: 6,
+    maxPixelsPerMinute: 12,
     rowHeight: EPG_CONSTANTS.ROW_HEIGHT,
     showCurrentTimeIndicator: true,
     autoScrollToNow: true,
