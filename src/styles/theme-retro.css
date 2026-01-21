@@ -314,8 +314,4 @@
     .theme-retro .server-status-pill.ok::before {
         animation: none;
     }
-
-    .theme-retro .epg-live-badge {
-        animation: none;
-    }
 }
