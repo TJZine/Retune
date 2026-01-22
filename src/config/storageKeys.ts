@@ -23,6 +23,11 @@ export const RETUNE_STORAGE_KEYS = {
     NOW_PLAYING_INFO_AUTO_HIDE_MS: 'retune_now_playing_info_auto_hide_ms',
     NOW_PLAYING_STREAM_DEBUG: 'retune_now_playing_stream_debug',
     NOW_PLAYING_STREAM_DEBUG_AUTO_SHOW: 'retune_now_playing_stream_debug_auto_show',
+    SUBTITLES_ENABLED: 'retune_subtitles_enabled',
+    SUBTITLE_LANGUAGE: 'retune_subtitle_language',
+    SUBTITLE_PREFERENCE_GLOBAL: 'retune_subtitle_pref_global',
+    SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE: 'retune_subtitle_pref_global_override',
+    SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX: 'retune_subtitle_pref_channel:',
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',

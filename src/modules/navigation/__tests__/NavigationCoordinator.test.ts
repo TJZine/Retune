@@ -75,6 +75,10 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
         hideNowPlayingInfoOverlay: jest.fn(),
+        playbackOptionsModalId: 'playback-options',
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({ focusableIds: ['playback-subtitle-off'], preferredFocusId: 'playback-subtitle-off' }),
+        showPlaybackOptionsModal: jest.fn(),
+        hidePlaybackOptionsModal: jest.fn(),
         setLastChannelChangeSourceRemote: jest.fn(),
         setLastChannelChangeSourceNumber: jest.fn(),
         switchToNextChannel: jest.fn(),
@@ -102,6 +106,23 @@ describe('NavigationCoordinator', () => {
 
         expect(epg.handleBack).not.toHaveBeenCalled();
         expect(event.originalEvent.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it('opens playback options when OK pressed in now playing modal', () => {
+        const { handlers, navigation, deps } = setup({
+            isNowPlayingModalOpen: jest.fn().mockReturnValue(true),
+        });
+        const event = makeKeyEvent('ok');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalled();
+        expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
+        expect(navigation.openModal).toHaveBeenCalledWith(
+            'playback-options',
+            ['playback-subtitle-off']
+        );
+        expect(event.handled).toBe(true);
     });
 
     it('routes EPG key handling and marks handled', () => {

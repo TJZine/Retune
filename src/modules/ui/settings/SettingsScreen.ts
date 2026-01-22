@@ -10,8 +10,22 @@ import { createSettingsSelect } from './SettingsSelect';
 import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from './constants';
 import type { SettingsSectionConfig, SettingsItemConfig, SettingsSelectConfig } from './types';
 import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from '../now-playing-info';
-import { parseStoredBoolean, safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
+import { parseStoredBoolean, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../../../utils/storage';
 import { ThemeManager } from '../theme';
+
+const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> = [
+    { label: 'Auto (Plex)', code: null },
+    { label: 'English', code: 'en' },
+    { label: 'Spanish', code: 'es' },
+    { label: 'French', code: 'fr' },
+    { label: 'German', code: 'de' },
+    { label: 'Italian', code: 'it' },
+    { label: 'Portuguese', code: 'pt' },
+    { label: 'Russian', code: 'ru' },
+    { label: 'Japanese', code: 'ja' },
+    { label: 'Korean', code: 'ko' },
+    { label: 'Chinese', code: 'zh' },
+];
 
 /**
  * Settings screen component.
@@ -89,6 +103,15 @@ export class SettingsScreen {
         this._applyScanlineEffect(scanlineEnabled);
         const nowPlayingAutoHide = this._loadClampedNowPlayingAutoHide();
         const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
+        const subtitlesEnabled = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
+            DEFAULT_SETTINGS.subtitles.enabled
+        );
+        const useGlobalSubtitlePreference = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
+            DEFAULT_SETTINGS.subtitles.useGlobalPreference
+        );
+        const subtitleLanguageValue = this._loadSubtitleLanguageValue();
 
         return [
             {
@@ -112,6 +135,49 @@ export class SettingsScreen {
                         ),
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK, value),
+                    },
+                ],
+            },
+            {
+                title: 'Subtitles',
+                items: [
+                    {
+                        id: 'settings-subtitles-enabled',
+                        label: 'Subtitles (beta)',
+                        description: 'Enable text-based subtitle tracks',
+                        value: subtitlesEnabled,
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED, value);
+                        },
+                    },
+                    {
+                        id: 'settings-subtitle-language',
+                        label: 'Preferred Subtitle Language',
+                        description: 'Override Plex user preference (Auto uses Plex)',
+                        value: subtitleLanguageValue,
+                        options: SUBTITLE_LANGUAGE_OPTIONS.map((option, index) => ({
+                            label: option.label,
+                            value: index,
+                        })),
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: number): void => {
+                            this._saveSubtitleLanguageValue(value);
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-global',
+                        label: 'Use Global Subtitle Preference',
+                        description: 'Apply a single subtitle choice to all channels',
+                        value: useGlobalSubtitlePreference,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
+                                value
+                            );
+                        },
                     },
                 ],
             },
@@ -293,6 +359,18 @@ export class SettingsScreen {
         return Number.isFinite(parsed) ? parsed : defaultValue;
     }
 
+    private _loadSubtitleLanguageValue(): number {
+        const raw = safeLocalStorageGet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
+        if (!raw) return 0;
+        const normalized = raw.trim().toLowerCase();
+        if (!normalized) return 0;
+        const index = SUBTITLE_LANGUAGE_OPTIONS.findIndex((option) => {
+            if (!option.code) return false;
+            return option.code.toLowerCase() === normalized;
+        });
+        return index >= 0 ? index : 0;
+    }
+
     /**
      * Save a boolean setting to localStorage.
      */
@@ -302,6 +380,15 @@ export class SettingsScreen {
 
     private _saveNumberSetting(key: string, value: number): void {
         safeLocalStorageSet(key, String(value));
+    }
+
+    private _saveSubtitleLanguageValue(value: number): void {
+        const option = SUBTITLE_LANGUAGE_OPTIONS[value];
+        if (!option || !option.code) {
+            safeLocalStorageRemove(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
+            return;
+        }
+        safeLocalStorageSet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE, option.code);
     }
 
     /**
@@ -328,7 +415,9 @@ export class SettingsScreen {
             if (!select) continue;
             const value = id === 'settings-now-playing-timeout'
                 ? this._loadClampedNowPlayingAutoHide()
-                : this._loadNumberSetting(meta.storageKey, meta.defaultValue);
+                : id === 'settings-subtitle-language'
+                    ? this._loadSubtitleLanguageValue()
+                    : this._loadNumberSetting(meta.storageKey, meta.defaultValue);
             select.update(value);
             meta.onRefresh?.(value);
         }
@@ -396,6 +485,11 @@ export class SettingsScreen {
                 return {
                     storageKey: SETTINGS_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS,
                     defaultValue: DEFAULT_SETTINGS.display.nowPlayingInfoAutoHideMs,
+                };
+            case 'settings-subtitle-language':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE,
+                    defaultValue: 0,
                 };
             default:
                 return null;

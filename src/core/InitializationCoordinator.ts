@@ -23,6 +23,7 @@ import type { IChannelScheduler } from '../modules/scheduler/scheduler';
 import type { IVideoPlayer } from '../modules/player';
 import type { IEPGComponent } from '../modules/ui/epg';
 import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
+import type { IPlaybackOptionsModal } from '../modules/ui/playback-options';
 import type { IDisposable } from '../utils/interfaces';
 import type { OrchestratorConfig, ModuleStatus } from '../Orchestrator';
 
@@ -46,6 +47,7 @@ export interface InitializationDependencies {
     videoPlayer: IVideoPlayer | null;
     epg: IEPGComponent | null;
     nowPlayingInfo: INowPlayingInfoOverlay | null;
+    playbackOptions: IPlaybackOptionsModal | null;
 }
 
 /**
@@ -83,6 +85,9 @@ export interface InitializationCallbacks {
 
     // EPG thumb resolver (Orchestrator owns _buildPlexResourceUrl for security)
     buildPlexResourceUrl: (pathOrUrl: string | null) => string | null;
+
+    // Optional: seed subtitle language from Plex profile when unset
+    seedSubtitleLanguageFromPlexUser?: () => void;
 }
 
 /**
@@ -140,6 +145,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
     // EPG init promise (prevents duplicate initialization)
     private _epgInitPromise: Promise<void> | null = null;
     private _nowPlayingInfoInitPromise: Promise<void> | null = null;
+    private _playbackOptionsInitPromise: Promise<void> | null = null;
 
     constructor(
         private readonly _config: OrchestratorConfig,
@@ -409,6 +415,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                         selectedServerId: null,
                         selectedServerUri: null,
                     });
+                    this._callbacks.seedSubtitleLanguageFromPlexUser?.();
                     this._callbacks.updateModuleStatus(
                         'plex-auth',
                         'ready',
@@ -625,6 +632,42 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             });
 
         await this._nowPlayingInfoInitPromise;
+        await this._initPlaybackOptionsUI();
+    }
+
+    private async _initPlaybackOptionsUI(): Promise<void> {
+        if (this._callbacks.getModuleStatus('playback-options-ui') === 'ready') {
+            return;
+        }
+        if (this._playbackOptionsInitPromise) {
+            await this._playbackOptionsInitPromise;
+            return;
+        }
+        if (!this._deps.playbackOptions || !this._config) {
+            return;
+        }
+
+        const startTime = Date.now();
+        this._callbacks.updateModuleStatus('playback-options-ui', 'initializing');
+        const init = async (): Promise<void> => {
+            this._deps.playbackOptions!.initialize(this._config.playbackOptionsConfig);
+            this._callbacks.updateModuleStatus(
+                'playback-options-ui',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        };
+        this._playbackOptionsInitPromise = init()
+            .catch((e) => {
+                this._callbacks.updateModuleStatus('playback-options-ui', 'error');
+                throw e;
+            })
+            .finally(() => {
+                this._playbackOptionsInitPromise = null;
+            });
+
+        await this._playbackOptionsInitPromise;
     }
 
     // ============================================

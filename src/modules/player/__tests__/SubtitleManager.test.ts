@@ -39,13 +39,16 @@ function createMockSubtitleTrack(
 ): SubtitleTrack {
     return {
         id: 'sub-1',
-        title: 'English',
+        label: 'English (SRT)',
         languageCode: 'en',
         language: 'English',
+        codec: 'srt',
         format: 'srt',
-        url: 'http://example.com/subs.srt',
+        key: '/library/streams/1',
         default: false,
         forced: false,
+        isTextCandidate: true,
+        fetchableViaKey: true,
         ...overrides,
     };
 }
@@ -79,7 +82,10 @@ describe('SubtitleManager', () => {
                 createMockSubtitleTrack({ id: 'es', format: 'vtt', languageCode: 'es' }),
             ];
 
-            const burnInRequired = manager.loadTracks(tracks);
+            const burnInRequired = manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
 
             // Should not require burn-in for SRT/VTT
             expect(burnInRequired).toHaveLength(0);
@@ -93,7 +99,10 @@ describe('SubtitleManager', () => {
                 createMockSubtitleTrack({ id: 'pgs-en', format: 'pgs' }),
             ];
 
-            const burnInRequired = manager.loadTracks(tracks);
+            const burnInRequired = manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
 
             expect(burnInRequired).toContain('pgs-en');
         });
@@ -103,7 +112,10 @@ describe('SubtitleManager', () => {
                 createMockSubtitleTrack({ id: 'ass-en', format: 'ass' }),
             ];
 
-            const burnInRequired = manager.loadTracks(tracks);
+            const burnInRequired = manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
 
             expect(burnInRequired).toContain('ass-en');
         });
@@ -116,11 +128,17 @@ describe('SubtitleManager', () => {
                 createMockSubtitleTrack({ id: 'en-2' }),
             ];
 
-            manager.loadTracks(tracks1);
+            manager.loadTracks(tracks1, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
             expect(manager.getTracks()).toHaveLength(1);
             expect(manager.getTracks()[0]?.id).toBe('en-1');
 
-            manager.loadTracks(tracks2);
+            manager.loadTracks(tracks2, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
             expect(manager.getTracks()).toHaveLength(1);
             expect(manager.getTracks()[0]?.id).toBe('en-2');
         });
@@ -135,7 +153,10 @@ describe('SubtitleManager', () => {
             const tracks: SubtitleTrack[] = [
                 createMockSubtitleTrack({ id: 'en' }),
             ];
-            manager.loadTracks(tracks);
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
 
             manager.setActiveTrack('en');
             expect(manager.getActiveTrackId()).toBe('en');
@@ -155,7 +176,10 @@ describe('SubtitleManager', () => {
                 createMockSubtitleTrack({ id: 'en' }),
                 createMockSubtitleTrack({ id: 'es' }),
             ];
-            manager.loadTracks(tracks);
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
 
             expect(manager.getTracks()).toHaveLength(2);
 
@@ -185,6 +209,10 @@ describe('SubtitleManager', () => {
             expect(manager.requiresBurnIn('ssa')).toBe(true);
         });
 
+        it('should return true for VOBSUB', () => {
+            expect(manager.requiresBurnIn('vobsub')).toBe(true);
+        });
+
         it('should return false for SRT', () => {
             expect(manager.requiresBurnIn('srt')).toBe(false);
         });
@@ -203,13 +231,89 @@ describe('SubtitleManager', () => {
             const tracks: SubtitleTrack[] = [
                 createMockSubtitleTrack({ id: 'en' }),
             ];
-            manager.loadTracks(tracks);
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
             manager.setActiveTrack('en');
 
             manager.destroy();
 
             expect(manager.getTracks()).toHaveLength(0);
             expect(manager.getActiveTrackId()).toBeNull();
+        });
+    });
+
+    // ========================================
+    // fallback + logging
+    // ========================================
+
+    describe('fallback behavior', () => {
+        let originalFetch: typeof fetch | undefined;
+        let originalCreateObjectUrl: typeof URL.createObjectURL | undefined;
+        let originalRevokeObjectUrl: typeof URL.revokeObjectURL | undefined;
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            originalFetch = global.fetch;
+            originalCreateObjectUrl = global.URL.createObjectURL;
+            originalRevokeObjectUrl = global.URL.revokeObjectURL;
+            (global as { fetch?: unknown }).fetch = jest.fn().mockResolvedValue({
+                ok: true,
+                status: 200,
+                text: async () => '1\n00:00:01,000 --> 00:00:02,000\nHello\n',
+            });
+            global.URL.createObjectURL = jest.fn().mockReturnValue('blob:mock');
+            global.URL.revokeObjectURL = jest.fn();
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+            jest.restoreAllMocks();
+            if (originalFetch) {
+                global.fetch = originalFetch;
+            } else {
+                delete (global as { fetch?: unknown }).fetch;
+            }
+            if (originalCreateObjectUrl) {
+                global.URL.createObjectURL = originalCreateObjectUrl;
+            }
+            if (originalRevokeObjectUrl) {
+                global.URL.revokeObjectURL = originalRevokeObjectUrl;
+            }
+        });
+
+        it('triggers fallback when textTracks length is unchanged', async () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en' }),
+            ];
+
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
+
+            jest.advanceTimersByTime(2000);
+            await Promise.resolve();
+
+            expect(global.fetch).toHaveBeenCalled();
+        });
+
+        it('redacts tokenized URLs in debug logs', () => {
+            localStorage.setItem('retune_subtitle_debug_logging', '1');
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en' }),
+            ];
+
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'secret-token' },
+            });
+
+            const logs = warnSpy.mock.calls.map((call) => String(call[0]));
+            expect(logs.join(' ')).not.toContain('secret-token');
         });
     });
 });

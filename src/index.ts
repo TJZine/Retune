@@ -9,6 +9,7 @@ import './styles/tokens.css';
 import './styles/theme-retro.css';
 import './modules/ui/epg/styles.css';
 import './modules/ui/now-playing-info/styles.css';
+import './modules/ui/playback-options/styles.css';
 import './modules/ui/settings/styles.css';
 import './modules/ui/server-select/styles.css';
 import './modules/ui/channel-setup/styles.css';

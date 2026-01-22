@@ -106,6 +106,8 @@ export interface PlexAuthToken {
     expiresAt: Date | null;
     /** When token was issued */
     issuedAt: Date;
+    /** Preferred subtitle language (if provided by Plex user profile) */
+    preferredSubtitleLanguage?: string | null;
 }
 
 /**

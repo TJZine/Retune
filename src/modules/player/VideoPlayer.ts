@@ -146,6 +146,18 @@ export class VideoPlayer implements IVideoPlayer {
         console.warn(`[SubtitleDebug] ${JSON.stringify(entry)}`);
     }
 
+    private _handleSubtitleDeactivated(reason: string): void {
+        if (this._state.activeSubtitleId === null) {
+            return;
+        }
+        this._state.activeSubtitleId = null;
+        this._logSubtitleDebug('subtitle_track_deactivated', () => ({
+            reason,
+        }));
+        this._emitter.emit('trackChange', { type: 'subtitle', trackId: null });
+        this._emitStateChange();
+    }
+
     private _snapshotNativeTextTracks(): Array<Record<string, unknown>> {
         if (!this._videoElement) return [];
         const list = this._videoElement.textTracks;
@@ -315,17 +327,31 @@ export class VideoPlayer implements IVideoPlayer {
             descriptorSubtitleTracks: descriptor.subtitleTracks.map((t) => ({
                 id: t.id,
                 format: t.format,
+                codec: t.codec,
                 languageCode: t.languageCode,
                 language: t.language,
-                title: t.title,
+                label: t.label,
                 forced: t.forced,
                 default: t.default,
-                url: t.url ? redactSensitiveTokens(t.url) : null,
+                fetchableViaKey: t.fetchableViaKey,
+                key: t.key ? redactSensitiveTokens(t.key) : null,
             })),
         }));
 
         // Load subtitle tracks
-        const burnInTracks = this._subtitleManager.loadTracks(descriptor.subtitleTracks);
+        const subtitleContext = descriptor.subtitleContext
+            ? {
+                ...descriptor.subtitleContext,
+                onDeactivate: (reason: string): void => {
+                    descriptor.subtitleContext?.onDeactivate?.(reason);
+                    this._handleSubtitleDeactivated(reason);
+                },
+            }
+            : undefined;
+        const burnInTracks = this._subtitleManager.loadTracks(
+            descriptor.subtitleTracks,
+            subtitleContext
+        );
         if (burnInTracks.length > 0) {
             console.warn('[VideoPlayer] Tracks requiring burn-in:', burnInTracks);
         }
@@ -333,6 +359,10 @@ export class VideoPlayer implements IVideoPlayer {
             burnInTracks,
             nativeTextTracks: this._snapshotNativeTextTracks(),
         }));
+
+        if (descriptor.preferredSubtitleTrackId !== undefined) {
+            await this.setSubtitleTrack(descriptor.preferredSubtitleTrackId ?? null);
+        }
 
         // Load audio tracks
         this._audioTrackManager.setTracks(descriptor.audioTracks);
@@ -584,6 +614,16 @@ export class VideoPlayer implements IVideoPlayer {
     public async setSubtitleTrack(trackId: string | null): Promise<void> {
         this._subtitleManager.setActiveTrack(trackId);
         this._state.activeSubtitleId = trackId;
+
+        const selected = trackId
+            ? this._subtitleManager.getTracks().find((t) => t.id === trackId) ?? null
+            : null;
+        this._logSubtitleDebug('subtitle_track_selected', () => ({
+            id: trackId,
+            codec: selected?.codec ?? null,
+            language: selected?.language ?? null,
+            fetchableViaKey: selected?.fetchableViaKey ?? null,
+        }));
 
         this._logSubtitleDebug('setSubtitleTrack', () => ({
             trackId,

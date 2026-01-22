@@ -101,7 +101,7 @@ export const PROTOCOL_MIME_TYPES: Record<string, string> = {
 /**
  * Subtitle formats that require burn-in (cannot be rendered natively).
  */
-export const BURN_IN_SUBTITLE_FORMATS = ['pgs', 'ass', 'ssa'];
+export const BURN_IN_SUBTITLE_FORMATS = ['pgs', 'ass', 'ssa', 'vobsub'];
 
 /**
  * Subtitle formats that can be rendered as text tracks.

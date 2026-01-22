@@ -181,9 +181,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const serverUri = this._config.getServerUri();
         if (!serverUri) return;
 
-        const url = ((): URL => {
+        let urlSource: 'key' | 'id_fallback' = 'id_fallback';
+        const baseUrl = ((): URL => {
             if (typeof options.subtitleStreamKey === 'string' && options.subtitleStreamKey.length > 0) {
                 try {
+                    urlSource = 'key';
                     return new URL(options.subtitleStreamKey, serverUri);
                 } catch {
                     // Fall through to ID-based URL
@@ -191,57 +193,119 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
             return new URL(`/library/streams/${encodeURIComponent(options.subtitleStreamId)}`, serverUri);
         })();
-        const redactedUrl = redactSensitiveTokens(url.toString());
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        try {
-            const response = await fetch(url.toString(), {
-                method: 'GET',
+        const tokenFromHeader = ((): string | null => {
+            try {
+                const headers = this._config.getAuthHeaders();
+                const token = headers['X-Plex-Token'] ?? headers['x-plex-token'];
+                return typeof token === 'string' && token.length > 0 ? token : null;
+            } catch {
+                return null;
+            }
+        })();
+
+        const variants: Array<{
+            authMode: 'header';
+            url: URL;
+            headers: Record<string, string>;
+        }> = [
+            {
+                // Closest to how Retune currently talks to PMS (token in header)
+                authMode: 'header',
+                url: baseUrl,
                 headers: {
-                    Accept: '*/*',
+                    Accept: 'text/vtt, text/plain, */*',
                     ...this._config.getAuthHeaders(),
-                    // Best-effort: keep payload small if PMS supports byte ranges.
-                    Range: 'bytes=0-2047',
                 },
-                signal: controller.signal,
-            });
+            },
+        ];
+
+        for (const variant of variants) {
+            const redactedUrl = redactSensitiveTokens(variant.url.toString());
+            const redactedTrackSrcQueryAuth = ((): string | null => {
+                // NOTE: <track src="..."> cannot send X-Plex-Token headers. Prefer a blob URL
+                // created from an authenticated fetch to avoid token-in-URL and CORS issues.
+                if (!tokenFromHeader) return null;
+                try {
+                    const u = new URL(baseUrl.toString());
+                    if (!u.searchParams.has('X-Plex-Token')) u.searchParams.set('X-Plex-Token', tokenFromHeader);
+                    return redactSensitiveTokens(u.toString());
+                } catch {
+                    return null;
+                }
+            })();
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(variant.url.toString(), {
+                    method: 'GET',
+                    headers: variant.headers,
+                    cache: 'no-store',
+                    // Explicitly CORS so the behavior matches what the TV browser enforces.
+                    mode: 'cors',
+                    credentials: 'omit',
+                    signal: controller.signal,
+                });
 
             const contentType = response.headers.get('content-type');
             const contentLength = response.headers.get('content-length');
             const acceptRanges = response.headers.get('accept-ranges');
             const contentRange = response.headers.get('content-range');
+            const contentDisposition = response.headers.get('content-disposition');
+            const accessControlAllowOrigin = response.headers.get('access-control-allow-origin');
+            const accessControlExposeHeaders = response.headers.get('access-control-expose-headers');
+            const responseType = response.type;
+            const redirected = response.redirected;
+            const finalUrl = redactSensitiveTokens(response.url);
 
-            let detected: 'webvtt' | 'srt' | 'unknown' = 'unknown';
-            let sampleLength = 0;
-            try {
-                const reader = response.body?.getReader?.();
-                if (reader) {
-                    const decoder = new TextDecoder('utf-8');
-                    let sample = '';
-                    while (sample.length < 2048) {
-                        const { value, done } = await reader.read();
-                        if (done) break;
-                        if (value) {
-                            sample += decoder.decode(value, { stream: true });
+                let detected: 'webvtt' | 'srt' | 'unknown' = 'unknown';
+                let sampleLength = 0;
+                let sampleCapped = false;
+                let looksLikeHtml = false;
+                try {
+                    const reader = response.body?.getReader?.();
+                    if (reader) {
+                        const decoder = new TextDecoder('utf-8');
+                        let sample = '';
+                        const MAX_SAMPLE_CHARS = 2048;
+                        while (sample.length < MAX_SAMPLE_CHARS) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            if (value) {
+                                const chunk = decoder.decode(value, { stream: true });
+                                const remaining = MAX_SAMPLE_CHARS - sample.length;
+                                if (chunk.length > remaining) {
+                                    sample += chunk.slice(0, remaining);
+                                    sampleCapped = true;
+                                    break;
+                                }
+                                sample += chunk;
+                            }
                         }
+                        try {
+                            // Stop downloading if more data exists.
+                            await reader.cancel();
+                        } catch {
+                            // Ignore cancel errors.
+                        }
+                        sampleLength = sample.length;
+                        looksLikeHtml = sample.replace(/^\uFEFF/, '').trimStart().startsWith('<');
+                        detected = this._detectSubtitleTextFormat(sample);
+                    } else {
+                        // Some client stacks may not expose a streaming body. Avoid downloading full subtitle
+                        // payloads in debug mode; fall back to codec-based detection.
+                        detected =
+                            ((): 'webvtt' | 'srt' | 'unknown' => {
+                                const c = (options.codec ?? '').toLowerCase();
+                                if (c === 'vtt' || c === 'webvtt') return 'webvtt';
+                                if (c === 'srt') return 'srt';
+                                return 'unknown';
+                            })();
                     }
-                    try {
-                        // Stop downloading if more data exists.
-                        await reader.cancel();
-                    } catch {
-                        // Ignore cancel errors.
-                    }
-                    sampleLength = sample.length;
-                    detected = this._detectSubtitleTextFormat(sample);
-                } else {
-                    const text = await response.text();
-                    sampleLength = text.length;
-                    detected = this._detectSubtitleTextFormat(text);
+                } catch {
+                    // Ignore read errors; still log status/headers.
                 }
-            } catch {
-                // Ignore read errors; still log status/headers.
-            }
 
             this._logSubtitleDebug('subtitle_stream_probe', {
                 itemKey: options.itemKey,
@@ -249,29 +313,45 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
                 codec: options.codec ?? null,
                 language: options.language ?? null,
+                urlSource,
+                authMode: variant.authMode,
                 url: redactedUrl,
+                trackSrcQueryAuthExample: redactedTrackSrcQueryAuth,
+                originHost: variant.url.host,
+                originIsPlexDirect: variant.url.hostname.endsWith('.plex.direct'),
+                responseType,
+                redirected,
+                finalUrl,
                 ok: response.ok,
                 status: response.status,
                 contentType,
                 contentLength,
-                acceptRanges,
-                contentRange,
-                detected,
-                sampleLength,
-            });
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
+                contentDisposition,
+                    accessControlAllowOrigin,
+                    accessControlExposeHeaders,
+                    acceptRanges,
+                    contentRange,
+                    detected,
+                    sampleLength,
+                    sampleCapped,
+                    looksLikeHtml,
+                });
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
             this._logSubtitleDebug('subtitle_stream_probe_error', {
                 itemKey: options.itemKey,
                 subtitleStreamId: options.subtitleStreamId,
                 subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
                 codec: options.codec ?? null,
                 language: options.language ?? null,
+                urlSource,
+                authMode: variant.authMode,
                 url: redactedUrl,
                 error: message,
             });
-        } finally {
-            clearTimeout(timeoutId);
+            } finally {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
@@ -327,40 +407,69 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     (s) => s.streamType === 3 && s.id === request.subtitleStreamId
                 ) ?? null)
                 : null;
+        const availableSubtitleStreams = part.streams.filter((s) => s.streamType === 3);
+        const availableAudioStreams = part.streams.filter((s) => s.streamType === 2);
 
         if (this._isSubtitleDebugEnabled()) {
-            const subtitleStreams = part.streams.filter((s) => s.streamType === 3);
+            const isTextCandidate = (s: PlexStream): boolean => {
+                const c = (s.codec ?? '').toLowerCase();
+                return c === 'srt' || c === 'vtt' || c === 'webvtt';
+            };
+            const hasKey = (s: PlexStream): boolean => typeof s.key === 'string' && s.key.length > 0;
+            const codecCounts = availableSubtitleStreams.reduce<Record<string, number>>((acc, stream) => {
+                const codec = (stream.codec ?? stream.format ?? 'unknown').toLowerCase();
+                acc[codec] = (acc[codec] ?? 0) + 1;
+                return acc;
+            }, {});
+            const withKeyCount = availableSubtitleStreams.filter(hasKey).length;
+            this._logSubtitleDebug('subtitle_tracks_discovered', {
+                count: availableSubtitleStreams.length,
+                codecs: codecCounts,
+                withKeyCount,
+                withoutKeyCount: Math.max(0, availableSubtitleStreams.length - withKeyCount),
+            });
             this._logSubtitleDebug('subtitle_streams_discovered', {
                 itemKey: request.itemKey,
-                subtitlesCount: subtitleStreams.length,
-                subtitleStreams: subtitleStreams.map((s) => ({
+                subtitlesCount: availableSubtitleStreams.length,
+                subtitleStreams: availableSubtitleStreams.map((s) => ({
                     id: s.id,
                     codec: s.codec,
                     format: s.format,
                     language: s.language,
+                    languageCode: s.languageCode,
+                    title: s.title,
+                    default: s.default,
                     forced: s.forced,
                     selected: subtitleStream?.id === s.id,
+                    isTextCandidate: isTextCandidate(s),
+                    fetchableViaKey: hasKey(s),
                     key: typeof s.key === 'string' ? redactSensitiveTokens(s.key) : null,
                 })),
             });
 
-            const candidates = subtitleStreams.filter((s) => {
-                const c = (s.codec ?? '').toLowerCase();
-                return c === 'srt' || c === 'vtt' || c === 'webvtt';
-            });
+            const candidates = availableSubtitleStreams.filter(isTextCandidate);
             if (candidates.length > 0) {
-                const preferred = ((): typeof candidates => {
-                    const forced = candidates.filter((s) => s.forced);
-                    if (forced.length > 0) return forced;
-                    const english = candidates.filter(
+                const pickPreferred = (streams: PlexStream[]): PlexStream => {
+                    const forced = streams.find((s) => s.forced);
+                    if (forced) return forced;
+                    const english = streams.find(
                         (s) => (s.language ?? '').toLowerCase() === 'english' || (s.languageCode ?? '').toLowerCase() === 'en'
                     );
-                    if (english.length > 0) return english;
-                    return candidates;
-                })();
+                    if (english) return english;
+                    return streams[0]!;
+                };
 
-                const missingKeyFirst = preferred.filter((s) => !(typeof s.key === 'string' && s.key.length > 0));
-                const toProbe = (missingKeyFirst.length > 0 ? missingKeyFirst : preferred).slice(0, 2);
+                // Probe both a key-backed and keyless candidate when possible, to categorize behavior.
+                const withKey = candidates.filter(hasKey);
+                const withoutKey = candidates.filter((s) => !hasKey(s));
+                const toProbe: PlexStream[] = [];
+                if (withKey.length > 0) toProbe.push(pickPreferred(withKey));
+                if (withoutKey.length > 0 && toProbe.length < 2) toProbe.push(pickPreferred(withoutKey));
+                while (toProbe.length < 2) {
+                    const next = candidates.find((s) => !toProbe.some((p) => p.id === s.id));
+                    if (!next) break;
+                    toProbe.push(next);
+                }
                 for (const s of toProbe) {
                     void this._probeSubtitleStreamDelivery({
                         itemKey: request.itemKey,
@@ -525,6 +634,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 sessionId,
                 selectedAudioStream: audioStream,
                 selectedSubtitleStream: subtitleStream,
+                availableAudioStreams,
+                availableSubtitleStreams,
                 width: media.width,
                 height: media.height,
                 bitrate: isTranscoding

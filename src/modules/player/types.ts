@@ -129,20 +129,26 @@ export interface TimeRange {
 export interface SubtitleTrack {
     /** Unique track identifier */
     id: string;
-    /** Human-readable title */
-    title: string;
+    /** Display label for UI */
+    label: string;
     /** Language code (e.g., "en") */
     languageCode: string;
     /** Language name (e.g., "English") */
     language: string;
+    /** Subtitle codec (e.g., "srt") */
+    codec: string;
     /** Subtitle format (srt, vtt, pgs, ass) */
     format: string;
-    /** URL to fetch subtitle file */
-    url?: string;
+    /** Plex subtitle stream key (relative or absolute) */
+    key?: string;
     /** Whether this is the default track */
     default?: boolean;
     /** Whether these are forced subtitles */
     forced?: boolean;
+    /** True when codec is a supported text format */
+    isTextCandidate: boolean;
+    /** True when a key-backed subtitle stream can be fetched */
+    fetchableViaKey: boolean;
 }
 
 /**
@@ -189,6 +195,15 @@ export interface StreamDescriptor {
     subtitleTracks: SubtitleTrack[];
     /** Available audio tracks */
     audioTracks: AudioTrack[];
+    /** Subtitle fetch context (for fallback) */
+    subtitleContext?: {
+        serverUri: string | null;
+        authHeaders: Record<string, string>;
+        onUnavailable?: () => void;
+        onDeactivate?: (reason: string) => void;
+    };
+    /** Preferred subtitle track ID (default selection) */
+    preferredSubtitleTrackId?: string | null;
     /** Total duration in milliseconds */
     durationMs: number;
     /** Whether this is a live stream */

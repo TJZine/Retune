@@ -14,6 +14,10 @@ export interface NavigationCoordinatorDeps {
     toggleNowPlayingInfoOverlay: () => void;
     showNowPlayingInfoOverlay: () => void;
     hideNowPlayingInfoOverlay: () => void;
+    playbackOptionsModalId: string;
+    preparePlaybackOptionsModal: () => { focusableIds: string[]; preferredFocusId: string | null };
+    showPlaybackOptionsModal: () => void;
+    hidePlaybackOptionsModal: () => void;
 
     setLastChannelChangeSourceRemote: () => void;
     setLastChannelChangeSourceNumber: () => void;
@@ -87,10 +91,16 @@ export class NavigationCoordinator {
             if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
                 this.deps.showNowPlayingInfoOverlay();
             }
+            if (payload.modalId === this.deps.playbackOptionsModalId) {
+                this.deps.showPlaybackOptionsModal();
+            }
         };
         const modalCloseHandler = (payload: { modalId: string }): void => {
             if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
                 this.deps.hideNowPlayingInfoOverlay();
+            }
+            if (payload.modalId === this.deps.playbackOptionsModalId) {
+                this.deps.hidePlaybackOptionsModal();
             }
         };
         navigation.on('modalOpen', modalOpenHandler);
@@ -151,6 +161,17 @@ export class NavigationCoordinator {
     private _handleKeyPress(event: KeyEvent): void {
         const isNowPlayingModalOpen = this.deps.isNowPlayingModalOpen();
         if (isNowPlayingModalOpen && event.button === 'back') {
+            return;
+        }
+        if (isNowPlayingModalOpen && event.button === 'ok') {
+            const navigation = this.deps.getNavigation();
+            if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
+                const prep = this.deps.preparePlaybackOptionsModal();
+                navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+                navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
+            }
+            event.handled = true;
+            event.originalEvent.preventDefault();
             return;
         }
 

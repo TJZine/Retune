@@ -175,6 +175,7 @@ export function parseUserResponse(
 ): PlexAuthToken {
     const thumbValue = data['thumb'];
     const thumb = typeof thumbValue === 'string' ? thumbValue : '';
+    const preferredSubtitleLanguage = extractPreferredSubtitleLanguage(data);
 
     return {
         token: token,
@@ -184,7 +185,33 @@ export function parseUserResponse(
         thumb: thumb,
         expiresAt: null,
         issuedAt: new Date(),
+        preferredSubtitleLanguage: preferredSubtitleLanguage,
     };
+}
+
+function extractPreferredSubtitleLanguage(data: Record<string, unknown>): string | null {
+    const direct = coerceLanguageValue(data['preferredSubtitleLanguage']) ??
+        coerceLanguageValue(data['subtitleLanguage']) ??
+        coerceLanguageValue(data['preferredSubtitleLanguageCode']) ??
+        coerceLanguageValue(data['subtitleLanguageCode']);
+    if (direct) return direct;
+
+    const settings = data['settings'];
+    if (settings && typeof settings === 'object') {
+        const prefs = settings as Record<string, unknown>;
+        return coerceLanguageValue(prefs['preferredSubtitleLanguage']) ??
+            coerceLanguageValue(prefs['subtitleLanguage']) ??
+            coerceLanguageValue(prefs['preferredSubtitleLanguageCode']) ??
+            coerceLanguageValue(prefs['subtitleLanguageCode']);
+    }
+
+    return null;
+}
+
+function coerceLanguageValue(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
 }
 
 // ============================================

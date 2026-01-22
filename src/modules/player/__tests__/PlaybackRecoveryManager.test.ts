@@ -17,7 +17,6 @@ const makeProgram = (overrides: Partial<ScheduledProgram> = {}): ScheduledProgra
         scheduledEndTime: 0,
         remainingMs: 0,
         scheduleIndex: 0,
-        channelId: 'ch1',
         ...overrides,
     } as ScheduledProgram);
 
@@ -41,6 +40,7 @@ const setup = (overrides: Partial<PlaybackRecoveryDeps> = {}): {
         pauseSyncTimer: jest.fn(),
         resumeSyncTimer: jest.fn(),
         skipToNext: jest.fn(),
+        getState: jest.fn().mockReturnValue({ channelId: 'ch1' }),
     } as unknown as IChannelScheduler;
     const resolver: IPlexStreamResolver = {
         resolveStream: jest.fn().mockResolvedValue(makeDecision()),
@@ -59,6 +59,11 @@ const setup = (overrides: Partial<PlaybackRecoveryDeps> = {}): {
         setCurrentStreamDescriptor: jest.fn(),
         buildPlexResourceUrl: (pathOrUrl: string) => pathOrUrl,
         getMimeType: () => 'video/mp4',
+        getAuthHeaders: () => ({ 'X-Plex-Token': 'token' }),
+        getServerUri: () => 'http://example.com',
+        getPreferredSubtitleLanguage: () => null,
+        getPlexPreferredSubtitleLanguage: () => null,
+        notifySubtitleUnavailable: jest.fn(),
         handleGlobalError: jest.fn(),
         ...overrides,
     };

@@ -182,6 +182,10 @@ export interface StreamDecision {
     selectedAudioStream: PlexStream | null;
     /** Selected subtitle stream */
     selectedSubtitleStream: PlexStream | null;
+    /** Available audio streams for UI selection */
+    availableAudioStreams?: PlexStream[];
+    /** Available subtitle streams for UI selection */
+    availableSubtitleStreams?: PlexStream[];
     /** Output video width */
     width: number;
     /** Output video height */
