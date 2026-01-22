@@ -26,7 +26,7 @@ export class PlaybackOptionsCoordinator {
     private pendingPreferredFocusId: string | null = null;
     private registeredFocusableIds: string[] = [];
 
-    constructor(private readonly deps: PlaybackOptionsCoordinatorDeps) {}
+    constructor(private readonly deps: PlaybackOptionsCoordinatorDeps) { }
 
     prepareModal(): { focusableIds: string[]; preferredFocusId: string | null } {
         const viewModel = this.buildViewModel();
@@ -61,6 +61,13 @@ export class PlaybackOptionsCoordinator {
         this.unregisterFocusables();
     }
 
+    dispose(): void {
+        this.unregisterFocusables();
+        this.pendingViewModel = null;
+        this.pendingFocusableIds = [];
+        this.pendingPreferredFocusId = null;
+    }
+
     refreshIfOpen(): void {
         const modal = this.deps.getPlaybackOptionsModal();
         const navigation = this.deps.getNavigation();
@@ -79,29 +86,31 @@ export class PlaybackOptionsCoordinator {
         const subtitleTracks = subtitlesEnabled ? player?.getAvailableSubtitles() ?? [] : [];
         const audioTracks = player?.getAvailableAudio() ?? [];
         const state = player?.getState();
-        const activeSubtitleId = state?.activeSubtitleId ?? null;
+        // Force activeSubtitleId to null when subtitles are disabled
+        const effectiveActiveSubtitleId = subtitlesEnabled ? state?.activeSubtitleId ?? null : null;
         const activeAudioId = state?.activeAudioId ?? null;
 
         const subtitleOptions: PlaybackOptionsItem[] = [
             {
                 id: 'playback-subtitle-off',
                 label: 'Off',
-                selected: activeSubtitleId === null,
+                selected: effectiveActiveSubtitleId === null,
                 onSelect: (): void => {
                     this.handleSubtitleSelect(null);
                 },
             },
         ];
 
+        // Include tracks fetchable via key or ID-based fallback
         const eligibleSubtitles = subtitleTracks.filter(
-            (track) => track.isTextCandidate && track.fetchableViaKey
+            (track) => track.isTextCandidate && (track.fetchableViaKey || track.id)
         );
 
         for (const track of eligibleSubtitles) {
             subtitleOptions.push({
                 id: `playback-subtitle-${track.id}`,
                 label: track.label,
-                selected: activeSubtitleId === track.id,
+                selected: effectiveActiveSubtitleId === track.id,
                 onSelect: (): void => {
                     this.handleSubtitleSelect(track.id);
                 },

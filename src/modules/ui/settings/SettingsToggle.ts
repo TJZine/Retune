@@ -14,6 +14,8 @@ import type { SettingsToggleConfig } from './types';
 export function createSettingsToggle(config: SettingsToggleConfig): {
     element: HTMLButtonElement;
     update: (value: boolean) => void;
+    setDisabled: (disabled: boolean) => void;
+    isDisabled: () => boolean;
     getId: () => string;
 } {
     const button = document.createElement('button');
@@ -58,9 +60,24 @@ export function createSettingsToggle(config: SettingsToggleConfig): {
         state.textContent = value ? 'On' : 'Off';
     }
 
+    function setDisabled(disabled: boolean): void {
+        config.disabled = disabled;
+        button.disabled = disabled;
+        if (disabled) {
+            button.classList.add('disabled');
+        } else {
+            button.classList.remove('disabled');
+        }
+        meta.textContent = disabled && config.disabledReason
+            ? config.disabledReason
+            : config.description ?? '';
+    }
+
     return {
         element: button,
         update,
+        setDisabled,
+        isDisabled: (): boolean => config.disabled ?? false,
         getId: (): string => config.id,
     };
 }

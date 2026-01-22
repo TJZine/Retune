@@ -343,7 +343,14 @@ export class VideoPlayer implements IVideoPlayer {
             ? {
                 ...descriptor.subtitleContext,
                 onDeactivate: (reason: string): void => {
-                    descriptor.subtitleContext?.onDeactivate?.(reason);
+                    try {
+                        descriptor.subtitleContext?.onDeactivate?.(reason);
+                    } catch (error) {
+                        this._logSubtitleDebug('subtitle_onDeactivate_error', () => ({
+                            reason,
+                            error: String(error),
+                        }));
+                    }
                     this._handleSubtitleDeactivated(reason);
                 },
             }

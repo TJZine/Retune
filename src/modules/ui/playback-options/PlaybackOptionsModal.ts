@@ -47,7 +47,7 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
 
     destroy(): void {
         if (this.containerElement) {
-            this.containerElement.innerHTML = '';
+            this.containerElement.textContent = '';
             this.containerElement.classList.remove('visible');
         }
         this.containerElement = null;
@@ -159,7 +159,9 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
             item.onSelect();
         });
 
-        this.focusableIds.push(item.id);
+        if (!item.disabled) {
+            this.focusableIds.push(item.id);
+        }
         this.optionElements.set(item.id, button);
         return button;
     }

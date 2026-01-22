@@ -111,6 +111,10 @@ export class SettingsScreen {
             SETTINGS_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
             DEFAULT_SETTINGS.subtitles.useGlobalPreference
         );
+        const preferForcedSubtitles = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
+            DEFAULT_SETTINGS.subtitles.preferForced
+        );
         const subtitleLanguageValue = this._loadSubtitleLanguageValue();
 
         return [
@@ -148,6 +152,7 @@ export class SettingsScreen {
                         value: subtitlesEnabled,
                         onChange: (value: boolean): void => {
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED, value);
+                            this._updateSubtitleDependentControls(value);
                         },
                     },
                     {
@@ -175,6 +180,20 @@ export class SettingsScreen {
                         onChange: (value: boolean): void => {
                             this._saveBoolSetting(
                                 SETTINGS_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
+                                value
+                            );
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-prefer-forced',
+                        label: 'Prefer Forced Subtitles',
+                        description: 'Auto-select forced (partial) subtitles over full subtitles',
+                        value: preferForcedSubtitles,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
                                 value
                             );
                         },
@@ -298,9 +317,10 @@ export class SettingsScreen {
         const nav = this._getNavigation();
         if (!nav) return;
 
-        const focusableIds = [...this._focusableOrder];
+        const focusableIds = this._focusableOrder.filter((id) => this._isFocusableEnabled(id));
         this._focusableIds = focusableIds;
 
+        const currentFocusId = nav.getFocusedElement()?.id ?? null;
         for (let i = 0; i < focusableIds.length; i++) {
             const id = focusableIds[i];
             if (!id) continue;
@@ -324,10 +344,12 @@ export class SettingsScreen {
             nav.registerFocusable(focusable);
         }
 
-        // Set initial focus to first toggle
-        const firstId = focusableIds[0];
-        if (firstId) {
-            nav.setFocus(firstId);
+        // Preserve current focus if still enabled, otherwise focus the first available
+        const preferredId = currentFocusId && focusableIds.includes(currentFocusId)
+            ? currentFocusId
+            : focusableIds[0];
+        if (preferredId) {
+            nav.setFocus(preferredId);
         }
     }
 
@@ -426,6 +448,36 @@ export class SettingsScreen {
             const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
             themeSelect.update(themeValue);
         }
+        const subtitlesEnabled = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
+            DEFAULT_SETTINGS.subtitles.enabled
+        );
+        this._updateSubtitleDependentControls(subtitlesEnabled);
+    }
+
+    private _updateSubtitleDependentControls(subtitlesEnabled: boolean): void {
+        const subtitleLanguage = this._selectElements.get('settings-subtitle-language');
+        subtitleLanguage?.setDisabled(!subtitlesEnabled);
+        const subtitleGlobal = this._toggleElements.get('settings-subtitles-global');
+        subtitleGlobal?.setDisabled(!subtitlesEnabled);
+        const subtitlePreferForced = this._toggleElements.get('settings-subtitles-prefer-forced');
+        subtitlePreferForced?.setDisabled(!subtitlesEnabled);
+        if (this._container.classList.contains('visible')) {
+            this._unregisterFocusables();
+            this._registerFocusables();
+        }
+    }
+
+    private _isFocusableEnabled(id: string): boolean {
+        const toggle = this._toggleElements.get(id);
+        if (toggle) {
+            return !toggle.isDisabled();
+        }
+        const select = this._selectElements.get(id);
+        if (select) {
+            return !select.isDisabled();
+        }
+        return false;
     }
 
     private _loadClampedNowPlayingAutoHide(): number {
@@ -470,6 +522,11 @@ export class SettingsScreen {
                 return {
                     storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING,
                     defaultValue: DEFAULT_SETTINGS.developer.subtitleDebugLogging,
+                };
+            case 'settings-subtitles-prefer-forced':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
+                    defaultValue: DEFAULT_SETTINGS.subtitles.preferForced,
                 };
             default:
                 // If we can't infer the key, don't attempt refresh.

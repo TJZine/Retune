@@ -4,6 +4,7 @@ import type { IEPGComponent } from '../../ui/epg';
 import type { IVideoPlayer } from '../../player';
 import type { IPlexAuth } from '../../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../../ui/now-playing-info';
+import { PLAYBACK_OPTIONS_MODAL_ID } from '../../ui/playback-options/constants';
 
 type HandlerMap = Partial<{
     [K in keyof NavigationEventMap]: (payload: NavigationEventMap[K]) => void;
@@ -21,6 +22,7 @@ const makeNavigation = (): {
         closeModal: jest.fn(),
         goTo: jest.fn(),
         replaceScreen: jest.fn(),
+        setFocus: jest.fn(),
         on: jest.fn(<K extends keyof NavigationEventMap>(
             event: K,
             handler: (payload: NavigationEventMap[K]) => void
@@ -75,7 +77,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
         hideNowPlayingInfoOverlay: jest.fn(),
-        playbackOptionsModalId: 'playback-options',
+        playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
         preparePlaybackOptionsModal: jest.fn().mockReturnValue({ focusableIds: ['playback-subtitle-off'], preferredFocusId: 'playback-subtitle-off' }),
         showPlaybackOptionsModal: jest.fn(),
         hidePlaybackOptionsModal: jest.fn(),
@@ -119,7 +121,7 @@ describe('NavigationCoordinator', () => {
         expect(deps.preparePlaybackOptionsModal).toHaveBeenCalled();
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
         expect(navigation.openModal).toHaveBeenCalledWith(
-            'playback-options',
+            PLAYBACK_OPTIONS_MODAL_ID,
             ['playback-subtitle-off']
         );
         expect(event.handled).toBe(true);

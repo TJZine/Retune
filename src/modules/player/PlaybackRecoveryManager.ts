@@ -47,7 +47,7 @@ export class PlaybackRecoveryManager {
     private _directFallbackAttemptedForItemKey: Set<string> = new Set();
     private _streamRecoveryInProgress: boolean = false;
 
-    constructor(private readonly deps: PlaybackRecoveryDeps) {}
+    constructor(private readonly deps: PlaybackRecoveryDeps) { }
 
     private _isSubtitlesEnabled(): boolean {
         try {
@@ -61,6 +61,16 @@ export class PlaybackRecoveryManager {
         try {
             return isStoredTrue(
                 safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    private _preferForcedSubtitles(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED)
             );
         } catch {
             return false;
@@ -189,8 +199,16 @@ export class PlaybackRecoveryManager {
             );
         });
         if (matches.length === 0) return null;
-        const forced = matches.find((t) => t.forced);
-        return forced ?? matches[0] ?? null;
+
+        // Use setting to determine forced/full preference
+        const preferForced = this._preferForcedSubtitles();
+        if (preferForced) {
+            const forced = matches.find((t) => t.forced);
+            return forced ?? matches[0] ?? null;
+        } else {
+            const nonForced = matches.find((t) => !t.forced);
+            return nonForced ?? matches[0] ?? null;
+        }
     }
 
     private _mapAudioTracks(streams: PlexStream[]): AudioTrack[] {
@@ -208,28 +226,28 @@ export class PlaybackRecoveryManager {
 
     private _mapSubtitleTracks(streams: PlexStream[]): SubtitleTrack[] {
         const baseTracks = streams.map((stream) => {
-        const codec = (stream.codec ?? stream.format ?? 'unknown').toLowerCase();
-        const format = (stream.format ?? stream.codec ?? 'unknown').toLowerCase();
-        const languageCode = (stream.languageCode ?? '').toLowerCase();
-        const language = (stream.language ?? languageCode) || 'Unknown';
-        const isTextCandidate = TEXT_SUBTITLE_FORMATS.includes(codec);
-        const fetchableViaKey = typeof stream.key === 'string' && stream.key.length > 0;
-        const codecLabel = codec ? codec.toUpperCase() : 'Unknown';
-        const languageLabel = language || 'Unknown';
-        const key = typeof stream.key === 'string' && stream.key.length > 0 ? stream.key : undefined;
-        return {
-            id: stream.id,
-            label: `${languageLabel} (${codecLabel})`,
-            languageCode,
-            language: languageLabel,
-            codec,
-            format,
-            ...(key ? { key } : {}),
-            forced: stream.forced ?? false,
-            default: stream.default ?? false,
-            isTextCandidate,
-            fetchableViaKey,
-            title: stream.title ?? '',
+            const codec = (stream.codec ?? stream.format ?? 'unknown').toLowerCase();
+            const format = (stream.format ?? stream.codec ?? 'unknown').toLowerCase();
+            const languageCode = (stream.languageCode ?? '').toLowerCase();
+            const language = (stream.language ?? languageCode) || 'Unknown';
+            const isTextCandidate = TEXT_SUBTITLE_FORMATS.includes(codec);
+            const fetchableViaKey = typeof stream.key === 'string' && stream.key.length > 0;
+            const codecLabel = codec ? codec.toUpperCase() : 'Unknown';
+            const languageLabel = language || 'Unknown';
+            const key = typeof stream.key === 'string' && stream.key.length > 0 ? stream.key : undefined;
+            return {
+                id: stream.id,
+                label: `${languageLabel} (${codecLabel})`,
+                languageCode,
+                language: languageLabel,
+                codec,
+                format,
+                ...(key ? { key } : {}),
+                forced: stream.forced ?? false,
+                default: stream.default ?? false,
+                isTextCandidate,
+                fetchableViaKey,
+                title: stream.title ?? '',
             };
         });
 
@@ -375,6 +393,18 @@ export class PlaybackRecoveryManager {
         });
         this.deps.setCurrentStreamDecision(decision);
 
+        return this._buildStreamDescriptor(program, decision, clampedOffset);
+    }
+
+    /**
+     * Build a StreamDescriptor from a StreamDecision and ScheduledProgram.
+     * Shared helper to reduce duplication between normal playback and transcode fallback.
+     */
+    private _buildStreamDescriptor(
+        program: ScheduledProgram,
+        decision: StreamDecision,
+        startOffsetMs: number
+    ): StreamDescriptor {
         // Build mediaMetadata carefully for exactOptionalPropertyTypes
         const metadata: StreamDescriptor['mediaMetadata'] = {
             title: program.item.title,
@@ -413,7 +443,7 @@ export class PlaybackRecoveryManager {
             url: decision.playbackUrl,
             protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
             mimeType: this.deps.getMimeType(decision),
-            startPositionMs: clampedOffset,
+            startPositionMs: startOffsetMs,
             mediaMetadata: metadata,
             subtitleTracks,
             audioTracks,
@@ -464,52 +494,8 @@ export class PlaybackRecoveryManager {
             }
             this.deps.setCurrentStreamDecision(decision);
 
-            const metadata: StreamDescriptor['mediaMetadata'] = {
-                title: program.item.title,
-                durationMs: program.item.durationMs,
-            };
-            if (program.item.type === 'episode' && program.item.fullTitle) {
-                metadata.subtitle = program.item.fullTitle;
-            }
-            if (program.item.thumb) {
-                const thumbUrl = this.deps.buildPlexResourceUrl(program.item.thumb);
-                if (thumbUrl) {
-                    metadata.thumb = thumbUrl;
-                }
-            }
-            if (program.item.year !== undefined) {
-                metadata.year = program.item.year;
-            }
-
-            const audioTracks = this._mapAudioTracks(decision.availableAudioStreams ?? []);
-            const subtitleTracks = this._isSubtitlesEnabled()
-                ? this._mapSubtitleTracks(decision.availableSubtitleStreams ?? [])
-                : [];
-            const channelId = this._getCurrentChannelId();
-            const preferredSubtitleTrackId = this._isSubtitlesEnabled()
-                ? this._resolvePreferredSubtitleId(channelId, subtitleTracks)
-                : null;
-            const subtitleContext = this._isSubtitlesEnabled()
-                ? {
-                    serverUri: this.deps.getServerUri(),
-                    authHeaders: this.deps.getAuthHeaders(),
-                    onUnavailable: this.deps.notifySubtitleUnavailable,
-                }
-                : null;
-
-            const descriptor: StreamDescriptor = {
-                url: decision.playbackUrl,
-                protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-                mimeType: this.deps.getMimeType(decision),
-                startPositionMs: clampedOffset,
-                mediaMetadata: metadata,
-                subtitleTracks,
-                audioTracks,
-                ...(subtitleContext ? { subtitleContext } : {}),
-                ...(preferredSubtitleTrackId !== undefined ? { preferredSubtitleTrackId } : {}),
-                durationMs: program.item.durationMs,
-                isLive: false,
-            };
+            const descriptor = this._buildStreamDescriptor(program, decision, clampedOffset);
+            const preferredSubtitleTrackId = descriptor.preferredSubtitleTrackId;
 
             this.deps.setCurrentStreamDescriptor(descriptor);
             await player.loadStream(descriptor);

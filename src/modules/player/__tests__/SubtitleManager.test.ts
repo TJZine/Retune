@@ -270,6 +270,7 @@ describe('SubtitleManager', () => {
         afterEach(() => {
             jest.useRealTimers();
             jest.restoreAllMocks();
+            localStorage.removeItem('retune_subtitle_debug_logging');
             if (originalFetch) {
                 global.fetch = originalFetch;
             } else {

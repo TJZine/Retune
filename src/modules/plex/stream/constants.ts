@@ -106,26 +106,8 @@ export const PROGRESS_REPORT_INTERVAL_MS = 10000;
 // Subtitle Formats
 // ============================================
 
-/**
- * Subtitle formats that require burn-in (image-based or styled).
- */
-export const BURN_IN_SUBTITLE_FORMATS: readonly string[] = [
-    'pgs',
-    'vobsub',
-    'dvdsub',
-    'ass', // WebOS cannot render ASS natively usually
-    'ssa',
-] as const;
-
-/**
- * Subtitle formats that can be delivered as sidecar (text-based).
- */
-export const SIDECAR_SUBTITLE_FORMATS: readonly string[] = [
-    'srt',
-    'vtt',
-    'webvtt',
-    'subrip',
-] as const;
+// Re-export from shared module for backward compatibility
+export { BURN_IN_SUBTITLE_FORMATS, TEXT_SUBTITLE_FORMATS as SIDECAR_SUBTITLE_FORMATS } from '../../../shared/subtitle-formats';
 
 // ============================================
 // Client Profile

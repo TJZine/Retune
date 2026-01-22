@@ -48,6 +48,8 @@ export interface SubtitleSettings {
     useGlobalPreference: boolean;
     /** Preferred subtitle language code (app override) */
     language: string | null;
+    /** Prefer forced subtitles over full subtitles when auto-selecting */
+    preferForced: boolean;
 }
 
 /**

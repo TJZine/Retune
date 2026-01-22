@@ -2,7 +2,9 @@ import { PlaybackRecoveryManager, type PlaybackRecoveryDeps } from '../PlaybackR
 import { AppErrorCode } from '../../lifecycle';
 import type { IVideoPlayer, StreamDescriptor } from '../index';
 import type { IPlexStreamResolver, StreamDecision } from '../../plex/stream';
+import type { PlexStream } from '../../plex/shared/types';
 import type { IChannelScheduler, ScheduledProgram } from '../../scheduler/scheduler';
+import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 
 const makeProgram = (overrides: Partial<ScheduledProgram> = {}): ScheduledProgram =>
     ({
@@ -27,6 +29,55 @@ const makeDecision = (overrides: Partial<StreamDecision> = {}): StreamDecision =
         container: 'mpegts',
         ...overrides,
     } as StreamDecision);
+
+const makeSubtitleStreams = (): PlexStream[] => [
+    {
+        id: 'sub-full',
+        streamType: 3,
+        language: 'English',
+        languageCode: 'en',
+        codec: 'srt',
+        format: 'srt',
+        key: '/library/streams/1',
+        forced: false,
+        default: false,
+        title: 'Full',
+    },
+    {
+        id: 'sub-forced',
+        streamType: 3,
+        language: 'English',
+        languageCode: 'en',
+        codec: 'srt',
+        format: 'srt',
+        key: '/library/streams/2',
+        forced: true,
+        default: false,
+        title: 'Forced',
+    },
+];
+
+const createLocalStorageMock = (): Storage => {
+    let store: Record<string, string> = {};
+    return {
+        getItem: (key: string): string | null => (
+            Object.prototype.hasOwnProperty.call(store, key) ? (store[key] ?? null) : null
+        ),
+        setItem: (key: string, value: string): void => {
+            store[key] = String(value);
+        },
+        removeItem: (key: string): void => {
+            delete store[key];
+        },
+        clear: (): void => {
+            store = {};
+        },
+        key: (index: number): string | null => Object.keys(store)[index] ?? null,
+        get length(): number {
+            return Object.keys(store).length;
+        },
+    } as Storage;
+};
 
 const setup = (overrides: Partial<PlaybackRecoveryDeps> = {}): {
     manager: PlaybackRecoveryManager;
@@ -73,6 +124,18 @@ const setup = (overrides: Partial<PlaybackRecoveryDeps> = {}): {
 };
 
 describe('PlaybackRecoveryManager', () => {
+    beforeEach(() => {
+        if (!globalThis.localStorage) {
+            (globalThis as { localStorage?: Storage }).localStorage = createLocalStorageMock();
+        } else {
+            globalThis.localStorage.clear();
+        }
+    });
+
+    afterEach(() => {
+        localStorage.removeItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED);
+        localStorage.removeItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED);
+    });
     it('resets playback failure guard and resumes scheduler', () => {
         const { manager, scheduler } = setup();
 
@@ -173,5 +236,43 @@ describe('PlaybackRecoveryManager', () => {
         expect(setDescriptor).toHaveBeenCalled();
         expect(player.loadStream).toHaveBeenCalled();
         expect(player.play).toHaveBeenCalled();
+    });
+
+    it('prefers forced subtitles when preference is enabled', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED, '1');
+
+        const resolver: IPlexStreamResolver = {
+            resolveStream: jest.fn().mockResolvedValue(
+                makeDecision({ availableSubtitleStreams: makeSubtitleStreams() })
+            ),
+        } as unknown as IPlexStreamResolver;
+
+        const { manager } = setup({
+            getStreamResolver: () => resolver,
+            getPreferredSubtitleLanguage: () => 'en',
+        });
+        const stream = await manager.resolveStreamForProgram(makeProgram());
+
+        expect(stream.preferredSubtitleTrackId).toBe('sub-forced');
+    });
+
+    it('prefers full subtitles when preference is disabled', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED, '0');
+
+        const resolver: IPlexStreamResolver = {
+            resolveStream: jest.fn().mockResolvedValue(
+                makeDecision({ availableSubtitleStreams: makeSubtitleStreams() })
+            ),
+        } as unknown as IPlexStreamResolver;
+
+        const { manager } = setup({
+            getStreamResolver: () => resolver,
+            getPreferredSubtitleLanguage: () => 'en',
+        });
+        const stream = await manager.resolveStreamForProgram(makeProgram());
+
+        expect(stream.preferredSubtitleTrackId).toBe('sub-full');
     });
 });

@@ -169,6 +169,9 @@ export class NavigationCoordinator {
                 const prep = this.deps.preparePlaybackOptionsModal();
                 navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
                 navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
+                if (prep.preferredFocusId) {
+                    navigation.setFocus(prep.preferredFocusId);
+                }
             }
             event.handled = true;
             event.originalEvent.preventDefault();

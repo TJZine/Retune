@@ -35,6 +35,8 @@ export const SETTINGS_STORAGE_KEYS = {
     SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE: RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
     /** Preferred subtitle language (app override) */
     SUBTITLE_LANGUAGE: RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE,
+    /** Prefer forced subtitles over full subtitles */
+    SUBTITLE_PREFER_FORCED: RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
 } as const;
 
 /**
@@ -59,6 +61,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         enabled: false,
         useGlobalPreference: false,
         language: null,
+        preferForced: false,
     },
 };
 

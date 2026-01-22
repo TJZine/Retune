@@ -149,8 +149,8 @@ export class SubtitleManager {
                 continue;
             }
 
-            // Create track element for text-based subtitles
-            if (track.isTextCandidate && track.fetchableViaKey) {
+            // Create track element for text-based subtitles (key-based or ID-based fetch)
+            if (track.isTextCandidate && (track.fetchableViaKey || track.id)) {
                 const directUrl = this._buildDirectTrackUrl(track);
                 if (!directUrl) {
                     this._logSubtitleDebug('subtitle_track_error', () => ({
@@ -168,7 +168,7 @@ export class SubtitleManager {
 
                 this._logSubtitleDebug('subtitle_track_attach', () => ({
                     id: track.id,
-                    path: 'direct',
+                    path: track.key ? 'direct' : 'id-fallback',
                     src: redactSensitiveTokens(trackElement.src),
                 }));
 
@@ -308,12 +308,14 @@ export class SubtitleManager {
     }
 
     private _buildDirectTrackUrl(track: SubtitleTrack): string | null {
-        if (!this._subtitleContext || !track.key) return null;
+        if (!this._subtitleContext) return null;
         const token = this._getAuthTokenFromHeaders(this._subtitleContext.authHeaders);
         if (!token) return null;
         const baseUri = this._subtitleContext.serverUri;
+        // Use key if available, otherwise fall back to ID-based endpoint
+        const path = track.key ?? `/library/streams/${encodeURIComponent(track.id)}`;
         try {
-            const url = new URL(track.key, baseUri ?? undefined);
+            const url = new URL(path, baseUri ?? undefined);
             if (!url.searchParams.has('X-Plex-Token')) {
                 url.searchParams.set('X-Plex-Token', token);
             }

@@ -750,6 +750,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (this._nowPlayingInfo) {
             this._nowPlayingInfo.destroy();
         }
+        this._playbackOptionsCoordinator?.dispose();
         if (this._playbackOptionsModal) {
             this._playbackOptionsModal.destroy();
         }

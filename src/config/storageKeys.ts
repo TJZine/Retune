@@ -28,6 +28,8 @@ export const RETUNE_STORAGE_KEYS = {
     SUBTITLE_PREFERENCE_GLOBAL: 'retune_subtitle_pref_global',
     SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE: 'retune_subtitle_pref_global_override',
     SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX: 'retune_subtitle_pref_channel:',
+    /** Prefer forced subtitles over full subtitles */
+    SUBTITLE_PREFER_FORCED: 'retune_subtitle_prefer_forced',
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',
