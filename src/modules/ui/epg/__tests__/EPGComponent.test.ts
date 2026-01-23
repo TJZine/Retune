@@ -157,6 +157,7 @@ describe('EPGComponent', () => {
             const initialLeft = indicator.style.left;
 
             let visibilityState = 'visible';
+            const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
             Object.defineProperty(document, 'visibilityState', {
                 configurable: true,
                 get: () => visibilityState,
@@ -169,6 +170,9 @@ describe('EPGComponent', () => {
             expect(indicator.style.left).not.toBe(initialLeft);
 
             nowSpy.mockRestore();
+            if (originalDescriptor) {
+                Object.defineProperty(document, 'visibilityState', originalDescriptor);
+            }
         });
 
         it('renders placeholders on open when schedules are missing', () => {

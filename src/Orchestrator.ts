@@ -322,6 +322,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
     private _activePlexSession: { sessionId: string; itemKey: string } | null = null;
+    private _lastEndedPlexSessionKey: string | null = null;
 
     // Plex timeline reporting state
     private _plexTimelineIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -1765,11 +1766,12 @@ export class AppOrchestrator implements IAppOrchestrator {
             // End session (which already sends stopped timeline - no need for duplicate updateProgress)
             const activeSession = this._activePlexSession;
             if (activeSession && this._plexStreamResolver) {
+                const sessionKey = `${activeSession.sessionId}:${activeSession.itemKey}`;
+                this._activePlexSession = null;
+                this._lastEndedPlexSessionKey = sessionKey;
                 this._plexStreamResolver.endSession(activeSession.sessionId, activeSession.itemKey)
                     .catch(() => { /* swallow */ })
-                    .finally(() => {
-                        this._activePlexSession = null;
-                    });
+                    .finally(() => { /* swallow */ });
                 return;
             }
             if (activeSession) {
@@ -1777,7 +1779,17 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
             const decision = this._currentStreamDecision;
             const program = this._currentProgramForPlayback;
+            const fallbackSessionKey = decision?.sessionId && program?.item.ratingKey
+                ? `${decision.sessionId}:${program.item.ratingKey}`
+                : null;
+            // Defensive fallback for cases where active session wasn't captured.
+            if (fallbackSessionKey === this._lastEndedPlexSessionKey) {
+                return;
+            }
             if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
+                if (fallbackSessionKey) {
+                    this._lastEndedPlexSessionKey = fallbackSessionKey;
+                }
                 this._plexStreamResolver.endSession(decision.sessionId, program.item.ratingKey)
                     .catch(() => { /* swallow */ });
             }
@@ -1828,6 +1840,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             sessionId: decision.sessionId,
             itemKey: program.item.ratingKey,
         };
+        this._lastEndedPlexSessionKey = null;
     }
 
     /**

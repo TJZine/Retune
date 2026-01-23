@@ -614,6 +614,7 @@ export class ChannelSetupScreen {
         this._contentEl.appendChild(previewPanel);
         if (this._preview) {
             requestAnimationFrame(() => {
+                if (this._step !== 2) return;
                 const measuredHeight = previewPanel.getBoundingClientRect().height;
                 if (Number.isFinite(measuredHeight)) {
                     this._previewPanelHeightPx = Math.max(measuredHeight, 180);

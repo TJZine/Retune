@@ -6,7 +6,7 @@
 
 import type { INavigationManager, FocusableElement } from '../../navigation';
 import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from '../settings/constants';
-import { safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
+import { safeLocalStorageSet, readStoredBoolean } from '../../../utils/storage';
 
 /**
  * Audio choice configuration.
@@ -53,7 +53,7 @@ export class AudioSetupScreen {
         this._container = container;
         this._getNavigation = getNavigation;
         this._onComplete = onComplete;
-        this._directPlayFallbackEnabled = this._loadBoolSetting(
+        this._directPlayFallbackEnabled = readStoredBoolean(
             SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
             DEFAULT_SETTINGS.audio.directPlayAudioFallback
         );
@@ -224,7 +224,7 @@ export class AudioSetupScreen {
      * Check if audio setup is already complete.
      */
     public static isSetupComplete(): boolean {
-        return safeLocalStorageGet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE) === '1';
+        return readStoredBoolean(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, false);
     }
 
     /**
@@ -297,11 +297,6 @@ export class AudioSetupScreen {
         }
     }
 
-    private _loadBoolSetting(key: string, defaultValue: boolean): boolean {
-        const raw = safeLocalStorageGet(key);
-        if (raw === null) return defaultValue;
-        return raw === '1';
-    }
 
     /**
      * Unregister focusable elements.

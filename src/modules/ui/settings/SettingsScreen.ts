@@ -10,7 +10,7 @@ import { createSettingsSelect } from './SettingsSelect';
 import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from './constants';
 import type { SettingsSectionConfig, SettingsItemConfig, SettingsSelectConfig } from './types';
 import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from '../now-playing-info';
-import { parseStoredBoolean, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../../../utils/storage';
+import { readStoredBoolean, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../../../utils/storage';
 import { ThemeManager } from '../theme';
 
 const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> = [
@@ -407,8 +407,7 @@ export class SettingsScreen {
      * Load a boolean setting from localStorage.
      */
     private _loadBoolSetting(key: string, defaultValue: boolean): boolean {
-        const parsed = parseStoredBoolean(safeLocalStorageGet(key));
-        return parsed === null ? defaultValue : parsed;
+        return readStoredBoolean(key, defaultValue);
     }
 
     private _loadNumberSetting(key: string, defaultValue: number): number {

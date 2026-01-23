@@ -37,7 +37,7 @@ import {
 } from './constants';
 import { generateUUID } from './utils';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
-import { isStoredTrue, safeLocalStorageGet } from '../../../utils/storage';
+import { isStoredTrue, readStoredBoolean, safeLocalStorageGet } from '../../../utils/storage';
 import { redactSensitiveTokens } from '../../../utils/redact';
 
 // Re-export types for consumers
@@ -991,13 +991,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             ? itemKey
             : `/library/metadata/${itemKey}`;
 
-        const compatMode = ((): boolean => {
-            try {
-                return safeLocalStorageGet(RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT) === '1';
-            } catch {
-                return false;
-            }
-        })();
+        const compatMode = readStoredBoolean(RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT, false);
 
         const getOverride = (key: string): string | null => {
             try {

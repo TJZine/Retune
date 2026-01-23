@@ -544,7 +544,9 @@ export class ContentResolver {
         const videoStream = streams.find((stream) => stream.streamType === 1);
         const hdr = this._detectHdrFromStream(videoStream);
         if (hdr) mediaInfo.hdr = hdr;
-        if (videoStream?.profile) mediaInfo.dvProfile = videoStream.profile;
+        if (hdr === 'Dolby Vision' && videoStream?.profile) {
+            mediaInfo.dvProfile = videoStream.profile;
+        }
 
         const audioStream = this._selectAudioStream(streams);
         if (audioStream?.codec) mediaInfo.audioCodec = audioStream.codec;
