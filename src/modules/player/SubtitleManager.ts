@@ -310,15 +310,16 @@ export class SubtitleManager {
 
     private _buildDirectTrackUrl(track: SubtitleTrack): string | null {
         if (!this._subtitleContext) return null;
-        const token = this._getAuthTokenFromHeaders(this._subtitleContext.authHeaders);
-        if (!token) return null;
         const baseUri = this._subtitleContext.serverUri;
         // Use key if available, otherwise fall back to ID-based endpoint
         const path = track.key ?? `/library/streams/${encodeURIComponent(track.id)}`;
         try {
             const url = new URL(path, baseUri ?? undefined);
+            const token = this._getAuthTokenFromHeaders(this._subtitleContext.authHeaders);
             if (!url.searchParams.has('X-Plex-Token')) {
-                url.searchParams.set('X-Plex-Token', token);
+                if (token) {
+                    url.searchParams.set('X-Plex-Token', token);
+                }
             }
             return url.toString();
         } catch {

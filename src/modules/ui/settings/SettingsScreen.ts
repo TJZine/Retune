@@ -450,12 +450,17 @@ export class SettingsScreen {
         const raw = safeLocalStorageGet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
         if (!raw) return 0;
         const normalized = raw.trim().toLowerCase();
-        if (!normalized) return 0;
+        if (!normalized) {
+            safeLocalStorageRemove(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
+            return 0;
+        }
         const index = SUBTITLE_LANGUAGE_OPTIONS.findIndex((option) => {
             if (!option.code) return false;
             return option.code.toLowerCase() === normalized;
         });
-        return index >= 0 ? index : 0;
+        if (index >= 0) return index;
+        safeLocalStorageRemove(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
+        return 0;
     }
 
     /**
