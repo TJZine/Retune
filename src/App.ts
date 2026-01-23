@@ -402,7 +402,11 @@ export class App {
         if (this._settingsContainer && this._orchestrator) {
             this._settingsScreen = new SettingsScreen(
                 this._settingsContainer,
-                () => this._orchestrator?.getNavigation() ?? null
+                () => this._orchestrator?.getNavigation() ?? null,
+                (enabled): void => {
+                    if (enabled) return;
+                    void this._orchestrator?.setSubtitleTrack(null).catch(() => undefined);
+                }
             );
         }
         if (this._audioSetupContainer && this._orchestrator) {

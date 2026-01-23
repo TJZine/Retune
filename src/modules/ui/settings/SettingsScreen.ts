@@ -34,6 +34,7 @@ const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> =
 export class SettingsScreen {
     private _container: HTMLElement;
     private _getNavigation: () => INavigationManager | null;
+    private _onSubtitlesEnabledChange: ((enabled: boolean) => void) | null = null;
     private _focusableIds: string[] = [];
     private _toggleElements: Map<string, ReturnType<typeof createSettingsToggle>> = new Map();
     private _selectElements: Map<string, ReturnType<typeof createSettingsSelect>> = new Map();
@@ -49,10 +50,12 @@ export class SettingsScreen {
 
     constructor(
         container: HTMLElement,
-        getNavigation: () => INavigationManager | null
+        getNavigation: () => INavigationManager | null,
+        onSubtitlesEnabledChange?: (enabled: boolean) => void
     ) {
         this._container = container;
         this._getNavigation = getNavigation;
+        this._onSubtitlesEnabledChange = onSubtitlesEnabledChange ?? null;
         this._buildUI();
     }
 
@@ -153,6 +156,7 @@ export class SettingsScreen {
                         onChange: (value: boolean): void => {
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED, value);
                             this._updateSubtitleDependentControls(value);
+                            this._onSubtitlesEnabledChange?.(value);
                         },
                     },
                     {
@@ -522,6 +526,16 @@ export class SettingsScreen {
                 return {
                     storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_DEBUG_LOGGING,
                     defaultValue: DEFAULT_SETTINGS.developer.subtitleDebugLogging,
+                };
+            case 'settings-subtitles-enabled':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
+                    defaultValue: DEFAULT_SETTINGS.subtitles.enabled,
+                };
+            case 'settings-subtitles-global':
+                return {
+                    storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
+                    defaultValue: DEFAULT_SETTINGS.subtitles.useGlobalPreference,
                 };
             case 'settings-subtitles-prefer-forced':
                 return {

@@ -83,7 +83,8 @@ export class PlaybackOptionsCoordinator {
     private buildViewModel(): PlaybackOptionsViewModel {
         const player = this.deps.getVideoPlayer();
         const subtitlesEnabled = this.isSubtitlesEnabled();
-        const subtitleTracks = subtitlesEnabled ? player?.getAvailableSubtitles() ?? [] : [];
+        const subtitleTracks = player?.getAvailableSubtitles() ?? [];
+        const enabledSubtitleTracks = subtitlesEnabled ? subtitleTracks : [];
         const audioTracks = player?.getAvailableAudio() ?? [];
         const state = player?.getState();
         // Force activeSubtitleId to null when subtitles are disabled
@@ -102,7 +103,7 @@ export class PlaybackOptionsCoordinator {
         ];
 
         // Include tracks fetchable via key or ID-based fallback
-        const eligibleSubtitles = subtitleTracks.filter(
+        const eligibleSubtitles = enabledSubtitleTracks.filter(
             (track) => track.isTextCandidate && (track.fetchableViaKey || track.id)
         );
 
@@ -117,8 +118,12 @@ export class PlaybackOptionsCoordinator {
             });
         }
 
-        const subtitleEmptyMessage =
-            eligibleSubtitles.length === 0 ? 'No compatible subtitles available' : undefined;
+        const hasAnyTracks = subtitleTracks.length > 0;
+        const subtitleEmptyMessage = !hasAnyTracks
+            ? 'No compatible subtitles available'
+            : (subtitlesEnabled && eligibleSubtitles.length === 0
+                ? 'No compatible subtitles available'
+                : undefined);
 
         const audioOptions = audioTracks.map((track) => ({
             id: `playback-audio-${track.id}`,

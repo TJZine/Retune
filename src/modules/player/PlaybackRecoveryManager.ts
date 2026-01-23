@@ -424,14 +424,15 @@ export class PlaybackRecoveryManager {
         }
 
         const audioTracks = this._mapAudioTracks(decision.availableAudioStreams ?? []);
-        const subtitleTracks = this._isSubtitlesEnabled()
+        const subtitlesEnabled = this._isSubtitlesEnabled();
+        const subtitleTracks = subtitlesEnabled
             ? this._mapSubtitleTracks(decision.availableSubtitleStreams ?? [])
             : [];
         const channelId = this._getCurrentChannelId();
-        const preferredSubtitleTrackId = this._isSubtitlesEnabled()
+        const preferredSubtitleTrackId = subtitlesEnabled
             ? this._resolvePreferredSubtitleId(channelId, subtitleTracks)
             : null;
-        const subtitleContext = this._isSubtitlesEnabled()
+        const subtitleContext = subtitlesEnabled
             ? {
                 serverUri: this.deps.getServerUri(),
                 authHeaders: this.deps.getAuthHeaders(),

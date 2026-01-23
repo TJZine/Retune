@@ -127,6 +127,7 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
 
     private createOption(item: PlaybackOptionsItem): HTMLButtonElement {
         const button = document.createElement('button');
+        button.type = 'button';
         button.id = item.id;
         button.className = `setup-toggle ${PLAYBACK_OPTIONS_CLASSES.ITEM}${item.selected ? ' selected' : ''}`;
         if (item.disabled) {

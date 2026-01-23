@@ -278,9 +278,13 @@ describe('SubtitleManager', () => {
             }
             if (originalCreateObjectUrl) {
                 global.URL.createObjectURL = originalCreateObjectUrl;
+            } else {
+                delete (global.URL as { createObjectURL?: unknown }).createObjectURL;
             }
             if (originalRevokeObjectUrl) {
                 global.URL.revokeObjectURL = originalRevokeObjectUrl;
+            } else {
+                delete (global.URL as { revokeObjectURL?: unknown }).revokeObjectURL;
             }
         });
 
@@ -298,6 +302,34 @@ describe('SubtitleManager', () => {
             await Promise.resolve();
 
             expect(global.fetch).toHaveBeenCalled();
+        });
+
+        it('marks track ready when cues appear after timeout', () => {
+            const tracks: SubtitleTrack[] = [
+                createMockSubtitleTrack({ id: 'en', fetchableViaKey: false }),
+            ];
+
+            manager.loadTracks(tracks, {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
+
+            const trackElement = (manager as unknown as { _trackElements: Map<string, HTMLTrackElement> })
+                ._trackElements.get('en');
+            expect(trackElement).toBeTruthy();
+            if (!trackElement) {
+                throw new Error('Expected track element to exist');
+            }
+
+            Object.defineProperty(trackElement, 'track', {
+                value: { cues: [{}], mode: 'hidden' },
+                configurable: true,
+            });
+
+            jest.advanceTimersByTime(3000);
+
+            const readyTracks = (manager as unknown as { _readyTracks: Set<string> })._readyTracks;
+            expect(readyTracks.has('en')).toBe(true);
         });
 
         it('redacts tokenized URLs in debug logs', () => {

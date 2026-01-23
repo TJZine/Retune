@@ -367,7 +367,10 @@ export class SubtitleManager {
             const cuesLength = trackElement.track?.cues?.length ?? 0;
             if (cuesLength === 0) {
                 void this._triggerFallback(track, 'no_cues', loadToken);
+                return;
             }
+            const textTracksLength = this._videoElement?.textTracks.length ?? 0;
+            this._markTrackReady(track, path, textTracksLength, cuesLength);
         }, 3000);
         this._storeTrackTimer(track.id, cueTimeoutId);
     }

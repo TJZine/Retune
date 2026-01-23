@@ -233,6 +233,7 @@ export interface IAppOrchestrator {
     onScreenChange(handler: (from: string, to: string) => void): IDisposable;
     getPlaybackInfoSnapshot(): PlaybackInfoSnapshot;
     refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot>;
+    setSubtitleTrack(trackId: string | null): Promise<void>;
     switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void>;
     switchToChannelByNumber(number: number): Promise<void>;
     openEPG(): void;
@@ -902,6 +903,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         await this._nowPlayingDebugManager?.ensureServerDecisionForPlaybackInfoSnapshot();
 
         return this.getPlaybackInfoSnapshot();
+    }
+
+    async setSubtitleTrack(trackId: string | null): Promise<void> {
+        if (!this._videoPlayer) return;
+        try {
+            await this._videoPlayer.setSubtitleTrack(trackId);
+        } catch (error) {
+            console.warn('[Orchestrator] setSubtitleTrack failed:', error);
+        }
     }
 
     /**

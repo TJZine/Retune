@@ -111,8 +111,13 @@ describe('NavigationCoordinator', () => {
     });
 
     it('opens playback options when OK pressed in now playing modal', () => {
+        const focus = {
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        };
         const { handlers, navigation, deps } = setup({
             isNowPlayingModalOpen: jest.fn().mockReturnValue(true),
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue(focus),
         });
         const event = makeKeyEvent('ok');
 
@@ -122,7 +127,7 @@ describe('NavigationCoordinator', () => {
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
         expect(navigation.openModal).toHaveBeenCalledWith(
             PLAYBACK_OPTIONS_MODAL_ID,
-            ['playback-subtitle-off']
+            focus.focusableIds
         );
         expect(event.handled).toBe(true);
     });
