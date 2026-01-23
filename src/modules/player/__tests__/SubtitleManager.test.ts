@@ -305,6 +305,11 @@ describe('SubtitleManager', () => {
         });
 
         it('marks track ready when cues appear after timeout', () => {
+            const timeoutCalls: Array<{ cb: () => void; delay: number }> = [];
+            const setTimeoutSpy = jest.spyOn(window, 'setTimeout').mockImplementation((cb, delay) => {
+                timeoutCalls.push({ cb: cb as () => void, delay: Number(delay) });
+                return 1 as unknown as ReturnType<typeof window.setTimeout>;
+            });
             const tracks: SubtitleTrack[] = [
                 createMockSubtitleTrack({ id: 'en', fetchableViaKey: false }),
             ];
@@ -318,6 +323,7 @@ describe('SubtitleManager', () => {
                 ._trackElements.get('en');
             expect(trackElement).toBeTruthy();
             if (!trackElement) {
+                setTimeoutSpy.mockRestore();
                 throw new Error('Expected track element to exist');
             }
 
@@ -326,10 +332,13 @@ describe('SubtitleManager', () => {
                 configurable: true,
             });
 
-            jest.advanceTimersByTime(3000);
+            const cueTimeout = timeoutCalls.find((call) => call.delay === 3000);
+            expect(cueTimeout).toBeTruthy();
+            cueTimeout?.cb();
 
             const readyTracks = (manager as unknown as { _readyTracks: Set<string> })._readyTracks;
             expect(readyTracks.has('en')).toBe(true);
+            setTimeoutSpy.mockRestore();
         });
 
         it('redacts tokenized URLs in debug logs', () => {

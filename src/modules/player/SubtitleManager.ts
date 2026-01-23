@@ -424,7 +424,6 @@ export class SubtitleManager {
         if (this._fallbackInProgress.has(track.id)) return;
         if (this._readyTracks.has(track.id)) return;
         if (loadToken !== this._loadToken) return;
-        if (!track.fetchableViaKey) return;
         this._fallbackInProgress.add(track.id);
         // Prevent stale timers from triggering duplicate fallback attempts.
         this._clearTrackTimers(track.id);
@@ -452,17 +451,17 @@ export class SubtitleManager {
         track: SubtitleTrack,
         loadToken: number
     ): Promise<string | null> {
-        if (!this._subtitleContext || !track.key) {
+        const urlString = this._buildDirectTrackUrl(track);
+        if (!urlString) {
             this._logSubtitleDebug('subtitle_fetch_error', () => ({
                 id: track.id,
                 error: 'missing_context',
             }));
             return null;
         }
-        const baseUri = this._subtitleContext.serverUri;
         let url: URL;
         try {
-            url = new URL(track.key, baseUri ?? undefined);
+            url = new URL(urlString);
         } catch {
             this._logSubtitleDebug('subtitle_fetch_error', () => ({
                 id: track.id,
@@ -478,7 +477,7 @@ export class SubtitleManager {
             const response = await fetch(url.toString(), {
                 headers: {
                     Accept: 'text/vtt, text/plain, */*',
-                    ...this._subtitleContext.authHeaders,
+                    ...(this._subtitleContext?.authHeaders ?? {}),
                 },
                 signal: controller.signal,
             });
