@@ -37,6 +37,13 @@ type PlexStreamMinimal = {
     languageCode?: string;
     codec?: string;
     channels?: number;
+    profile?: string;
+    hdr?: string;
+    colorTrc?: string;
+    colorSpace?: string;
+    colorPrimaries?: string;
+    bitDepth?: number;
+    dynamicRange?: string;
 };
 
 /**
@@ -535,8 +542,9 @@ export class ContentResolver {
 
         const streams = media.parts?.[0]?.streams ?? [];
         const videoStream = streams.find((stream) => stream.streamType === 1);
-        const hdr = this._detectHdrFromStreamTitle(videoStream?.title);
+        const hdr = this._detectHdrFromStream(videoStream);
         if (hdr) mediaInfo.hdr = hdr;
+        if (videoStream?.profile) mediaInfo.dvProfile = videoStream.profile;
 
         const audioStream = this._selectAudioStream(streams);
         if (audioStream?.codec) mediaInfo.audioCodec = audioStream.codec;
@@ -566,12 +574,16 @@ export class ContentResolver {
         return resolution;
     }
 
-    private _detectHdrFromStreamTitle(title?: string): string | undefined {
-        if (!title) return undefined;
-        const normalized = title.toLowerCase();
-        if (normalized.includes('dolby vision')) return 'Dolby Vision';
-        if (normalized.includes('hdr10+')) return 'HDR10+';
-        if (normalized.includes('hdr10')) return 'HDR10';
+    private _detectHdrFromStream(stream?: PlexStreamMinimal): string | undefined {
+        if (!stream) return undefined;
+        const normalizedTitle = stream.title?.toLowerCase() ?? '';
+        const normalizedHdr = stream.hdr?.toLowerCase() ?? '';
+        const normalizedColorTrc = stream.colorTrc?.toLowerCase() ?? '';
+
+        if (normalizedTitle.includes('dolby vision')) return 'Dolby Vision';
+        if (normalizedTitle.includes('hdr10+') || normalizedHdr.includes('hdr10+')) return 'HDR10+';
+        if (normalizedTitle.includes('hdr10') || normalizedColorTrc === 'smpte2084') return 'HDR10';
+        if (normalizedColorTrc === 'arib-std-b67') return 'HLG';
         return undefined;
     }
 

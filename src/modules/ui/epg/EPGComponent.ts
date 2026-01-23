@@ -62,6 +62,13 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
+    private _onVisibilityChange = (): void => {
+        if (!this.state.isVisible) return;
+        if (document.visibilityState === 'visible') {
+            this.refreshCurrentTime();
+            this.renderGrid();
+        }
+    };
 
     // Throttled render function for 60fps performance
     private throttledRenderGrid = rafThrottle(() => this.renderGridInternal());
@@ -128,6 +135,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     destroy(): void {
         this.stopTimeUpdateInterval();
+        document.removeEventListener('visibilitychange', this._onVisibilityChange);
 
         this.virtualizer.destroy();
         this.infoPanel.destroy();
@@ -280,6 +288,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         // Start time indicator updates (paused when hidden)
         this.startTimeUpdateInterval();
+        document.addEventListener('visibilitychange', this._onVisibilityChange);
 
         const shouldPreserveFocus = Boolean(options?.preserveFocus && this.state.focusedCell);
         if (this.config.autoScrollToNow && !shouldPreserveFocus) {
@@ -335,6 +344,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         // Stop time updates when hidden (CPU optimization)
         this.stopTimeUpdateInterval();
+        document.removeEventListener('visibilitychange', this._onVisibilityChange);
 
         this.infoPanel.hide();
         this.emit('close', undefined);
@@ -1040,6 +1050,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (!this.state.isVisible || !this.state.isInitialized) return;
 
         this.errorBoundary.wrap('RENDER_ERROR', 'renderGrid', () => {
+            this.refreshCurrentTime();
             this.timeHeader.updateScrollPosition(this.state.scrollPosition.timeOffset);
             this.virtualizer.updateScrollPosition(this.state.scrollPosition.timeOffset);
             const range = this.virtualizer.calculateVisibleRange(this.state.scrollPosition);

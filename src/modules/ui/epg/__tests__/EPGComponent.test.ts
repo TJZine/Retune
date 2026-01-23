@@ -146,6 +146,31 @@ describe('EPGComponent', () => {
             expect(closeHandler).toHaveBeenCalledTimes(1);
         });
 
+        it('refreshes the time indicator on visibilitychange when visible', () => {
+            const nowSpy = jest.spyOn(Date, 'now');
+            nowSpy.mockReturnValue(1_000_000);
+
+            epg.show();
+            epg.refreshCurrentTime();
+
+            const indicator = container.querySelector('.epg-time-indicator') as HTMLElement;
+            const initialLeft = indicator.style.left;
+
+            let visibilityState = 'visible';
+            Object.defineProperty(document, 'visibilityState', {
+                configurable: true,
+                get: () => visibilityState,
+            });
+
+            nowSpy.mockReturnValue(1_060_000);
+            visibilityState = 'visible';
+            document.dispatchEvent(new Event('visibilitychange'));
+
+            expect(indicator.style.left).not.toBe(initialLeft);
+
+            nowSpy.mockRestore();
+        });
+
         it('renders placeholders on open when schedules are missing', () => {
             const channels = [createMockChannel(0)];
             epg.loadChannels(channels);

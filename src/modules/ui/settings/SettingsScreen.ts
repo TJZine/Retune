@@ -27,14 +27,6 @@ const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> =
     { label: 'Chinese', code: 'zh' },
 ];
 
-function applyScanlineEffect(enabled: boolean): void {
-    if (enabled) {
-        document.body.classList.add('scanline-effect');
-    } else {
-        document.body.classList.remove('scanline-effect');
-    }
-}
-
 type ToggleMetadata = {
     storageKey: string;
     defaultValue: boolean;
@@ -55,11 +47,6 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
     'settings-direct-play-audio-fallback': {
         storageKey: SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
         defaultValue: DEFAULT_SETTINGS.audio.directPlayAudioFallback,
-    },
-    'settings-scanline-effect': {
-        storageKey: SETTINGS_STORAGE_KEYS.SCANLINE_EFFECT,
-        defaultValue: DEFAULT_SETTINGS.display.scanlineEffect,
-        onRefresh: (value) => applyScanlineEffect(value),
     },
     'settings-debug-logging': {
         storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
@@ -160,11 +147,6 @@ export class SettingsScreen {
      * Build section configurations from current settings.
      */
     private _buildSections(): SettingsSectionConfig[] {
-        const scanlineEnabled = this._loadBoolSetting(
-            SETTINGS_STORAGE_KEYS.SCANLINE_EFFECT,
-            DEFAULT_SETTINGS.display.scanlineEffect
-        );
-        applyScanlineEffect(scanlineEnabled);
         const nowPlayingAutoHide = this._loadClampedNowPlayingAutoHide();
         const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
         const subtitlesEnabled = this._loadBoolSetting(
@@ -280,16 +262,6 @@ export class SettingsScreen {
                         onChange: (value: number): void => {
                             const theme = value === 1 ? 'retro' : 'default';
                             ThemeManager.getInstance().setTheme(theme);
-                        },
-                    },
-                    {
-                        id: 'settings-scanline-effect',
-                        label: 'Scanline Effect',
-                        description: 'Subtle CRT-style scanline overlay',
-                        value: scanlineEnabled,
-                        onChange: (value: boolean): void => {
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SCANLINE_EFFECT, value);
-                            applyScanlineEffect(value);
                         },
                     },
                     {
@@ -483,9 +455,6 @@ export class SettingsScreen {
         safeLocalStorageSet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE, option.code);
     }
 
-    /**
-     * Apply or remove scanline effect on body.
-     */
     private _refreshValues(): void {
         for (const [id, meta] of this._toggleMetadata.entries()) {
             const toggle = this._toggleElements.get(id);

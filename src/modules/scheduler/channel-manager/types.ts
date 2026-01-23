@@ -284,6 +284,7 @@ export interface ResolvedContentItem {
     mediaInfo?: {
         resolution?: string;
         hdr?: string;
+        dvProfile?: string;
         audioCodec?: string;
         audioChannels?: number;
         audioTrackTitle?: string;

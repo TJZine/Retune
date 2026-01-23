@@ -5,7 +5,7 @@
  */
 
 import type { INavigationManager, FocusableElement } from '../../navigation';
-import { SETTINGS_STORAGE_KEYS } from '../settings/constants';
+import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from '../settings/constants';
 import { safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
 
 /**
@@ -43,6 +43,7 @@ export class AudioSetupScreen {
     private _onComplete: () => void;
     private _focusableIds: string[] = [];
     private _selectedChoice: AudioChoice['id'] | null = null;
+    private _directPlayFallbackEnabled: boolean;
 
     constructor(
         container: HTMLElement,
@@ -52,6 +53,10 @@ export class AudioSetupScreen {
         this._container = container;
         this._getNavigation = getNavigation;
         this._onComplete = onComplete;
+        this._directPlayFallbackEnabled = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+            DEFAULT_SETTINGS.audio.directPlayAudioFallback
+        );
         this._buildUI();
     }
 
@@ -106,6 +111,33 @@ export class AudioSetupScreen {
         }
 
         panel.appendChild(choicesList);
+
+        const fallbackButton = document.createElement('button');
+        fallbackButton.id = 'audio-direct-play-fallback';
+        fallbackButton.className = `setup-toggle${this._directPlayFallbackEnabled ? ' selected' : ''}`;
+
+        const fallbackLabel = document.createElement('span');
+        fallbackLabel.className = 'setup-toggle-label';
+        fallbackLabel.textContent = 'Direct Play Audio Fallback';
+
+        const fallbackMeta = document.createElement('span');
+        fallbackMeta.className = 'setup-toggle-meta';
+        fallbackMeta.textContent = 'Allow Direct Play using a compatible fallback audio track';
+
+        const fallbackState = document.createElement('span');
+        fallbackState.className = 'setup-toggle-state';
+        fallbackState.textContent = this._directPlayFallbackEnabled ? 'On' : 'Off';
+
+        fallbackButton.addEventListener('click', () => {
+            this._directPlayFallbackEnabled = !this._directPlayFallbackEnabled;
+            fallbackButton.classList.toggle('selected', this._directPlayFallbackEnabled);
+            fallbackState.textContent = this._directPlayFallbackEnabled ? 'On' : 'Off';
+        });
+
+        fallbackButton.appendChild(fallbackLabel);
+        fallbackButton.appendChild(fallbackMeta);
+        fallbackButton.appendChild(fallbackState);
+        panel.appendChild(fallbackButton);
 
         // Hint
         const hint = document.createElement('p');
@@ -180,6 +212,10 @@ export class AudioSetupScreen {
         // Mark audio setup as complete
         // Store as '1'
         safeLocalStorageSet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, '1');
+        safeLocalStorageSet(
+            SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+            this._directPlayFallbackEnabled ? '1' : '0'
+        );
 
         this._onComplete();
     }
@@ -219,6 +255,10 @@ export class AudioSetupScreen {
             const btn = this._container.querySelector(`#audio-choice-${choice.id}`) as HTMLButtonElement | null;
             if (btn) buttons.push(btn);
         }
+        const fallbackBtn = this._container.querySelector('#audio-direct-play-fallback') as HTMLButtonElement | null;
+        if (fallbackBtn) {
+            buttons.push(fallbackBtn);
+        }
         const continueBtn = this._container.querySelector('#audio-setup-continue') as HTMLButtonElement | null;
         if (continueBtn && !continueBtn.disabled) {
             buttons.push(continueBtn);
@@ -255,6 +295,12 @@ export class AudioSetupScreen {
         if (focusId) {
             nav.setFocus(focusId);
         }
+    }
+
+    private _loadBoolSetting(key: string, defaultValue: boolean): boolean {
+        const raw = safeLocalStorageGet(key);
+        if (raw === null) return defaultValue;
+        return raw === '1';
     }
 
     /**

@@ -285,6 +285,13 @@ export function parseStream(data: RawStream): PlexStream {
     if (data.samplingRate !== undefined) stream.samplingRate = data.samplingRate;
     if (data.format !== undefined) stream.format = data.format;
     if (data.key !== undefined) stream.key = data.key;
+    if (data.profile !== undefined) stream.profile = data.profile;
+    if (data.colorTrc !== undefined) stream.colorTrc = data.colorTrc;
+    if (data.colorSpace !== undefined) stream.colorSpace = data.colorSpace;
+    if (data.colorPrimaries !== undefined) stream.colorPrimaries = data.colorPrimaries;
+    if (data.bitDepth !== undefined) stream.bitDepth = data.bitDepth;
+    if (data.hdr !== undefined) stream.hdr = data.hdr;
+    if (data.dynamicRange !== undefined) stream.dynamicRange = data.dynamicRange;
 
     return stream;
 }

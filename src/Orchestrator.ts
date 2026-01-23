@@ -321,6 +321,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
+    private _activePlexSession: { sessionId: string; itemKey: string } | null = null;
 
     // Plex timeline reporting state
     private _plexTimelineIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -585,6 +586,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             resetPlaybackGuardsForNewChannel: (): void => {
                 this._playbackRecovery?.resetPlaybackFailureGuard();
                 this._playbackRecovery?.resetDirectFallbackAttempts();
+            },
+            stopPlexTimelineReporting: (finalState: 'paused' | 'stopped'): void => {
+                this._stopPlexTimelineReporting(finalState);
             },
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
@@ -1732,6 +1736,8 @@ export class AppOrchestrator implements IAppOrchestrator {
             return;
         }
 
+        this._setActivePlexSessionFromCurrent();
+
         // Report immediately on start
         this._reportPlexTimeline('playing').catch(() => { /* swallow */ });
 
@@ -1757,6 +1763,18 @@ export class AppOrchestrator implements IAppOrchestrator {
             this._reportPlexTimeline(finalState).catch(() => { /* swallow */ });
         } else if (finalState === 'stopped') {
             // End session (which already sends stopped timeline - no need for duplicate updateProgress)
+            const activeSession = this._activePlexSession;
+            if (activeSession && this._plexStreamResolver) {
+                this._plexStreamResolver.endSession(activeSession.sessionId, activeSession.itemKey)
+                    .catch(() => { /* swallow */ })
+                    .finally(() => {
+                        this._activePlexSession = null;
+                    });
+                return;
+            }
+            if (activeSession) {
+                this._activePlexSession = null;
+            }
             const decision = this._currentStreamDecision;
             const program = this._currentProgramForPlayback;
             if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
@@ -1771,13 +1789,16 @@ export class AppOrchestrator implements IAppOrchestrator {
      * Best-effort: errors are swallowed, never blocks playback.
      */
     private async _reportPlexTimeline(state: 'playing' | 'paused' | 'stopped'): Promise<void> {
+        const activeSession = this._activePlexSession;
         const decision = this._currentStreamDecision;
         const program = this._currentProgramForPlayback;
+        const sessionId = activeSession?.sessionId ?? decision?.sessionId ?? null;
+        const itemKey = activeSession?.itemKey ?? program?.item.ratingKey ?? null;
 
         // Guard: must have all required data
         if (!this._plexStreamResolver) return;
-        if (!decision?.sessionId) return;
-        if (!program?.item.ratingKey) return;
+        if (!sessionId) return;
+        if (!itemKey) return;
 
         // Get current position from VideoPlayer
         let positionMs = this._videoPlayer?.getCurrentTimeMs() ?? 0;
@@ -1787,14 +1808,26 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         try {
             await this._plexStreamResolver.updateProgress(
-                decision.sessionId,
-                program.item.ratingKey,
+                sessionId,
+                itemKey,
                 positionMs,
                 state
             );
         } catch {
             // Best-effort: swallow errors to never stall playback
         }
+    }
+
+    private _setActivePlexSessionFromCurrent(): void {
+        const decision = this._currentStreamDecision;
+        const program = this._currentProgramForPlayback;
+        if (!decision?.sessionId || !program?.item.ratingKey) {
+            return;
+        }
+        this._activePlexSession = {
+            sessionId: decision.sessionId,
+            itemKey: program.item.ratingKey,
+        };
     }
 
     /**

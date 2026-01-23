@@ -82,6 +82,8 @@ export class ChannelSetupScreen {
     private _reviewError: string | null = null;
     private _lastPreviewKey: string | null = null;
     private _pendingPreviewKey: string | null = null;
+    private _previewPanelHeightPx: number | null = null;
+    private _previewPanelId = 'setup-preview-panel';
 
     private _toDomId(raw: string): string {
         return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -192,6 +194,7 @@ export class ChannelSetupScreen {
         this._reviewError = null;
         this._lastPreviewKey = null;
         this._pendingPreviewKey = null;
+        this._previewPanelHeightPx = null;
         this._errorEl.textContent = '';
     }
 
@@ -535,7 +538,11 @@ export class ChannelSetupScreen {
         this._contentEl.appendChild(list);
 
         const previewPanel = document.createElement('div');
+        previewPanel.id = this._previewPanelId;
         previewPanel.className = 'setup-preview';
+        if (this._previewPanelHeightPx !== null) {
+            previewPanel.style.minHeight = `${this._previewPanelHeightPx}px`;
+        }
 
         const previewTitle = document.createElement('div');
         previewTitle.className = 'setup-preview-title';
@@ -605,6 +612,14 @@ export class ChannelSetupScreen {
         }
 
         this._contentEl.appendChild(previewPanel);
+        if (this._preview) {
+            requestAnimationFrame(() => {
+                const measuredHeight = previewPanel.getBoundingClientRect().height;
+                if (Number.isFinite(measuredHeight)) {
+                    this._previewPanelHeightPx = Math.max(measuredHeight, 180);
+                }
+            });
+        }
 
         const actions = document.createElement('div');
         actions.className = 'button-row';
@@ -831,7 +846,7 @@ export class ChannelSetupScreen {
         doneButton.addEventListener('click', () => {
             const nav = this._orchestrator.getNavigation();
             if (nav) {
-                nav.goTo('player');
+                nav.replaceScreen('player');
             }
             this._orchestrator.switchToChannelByNumber(1)
                 .then(() => this._orchestrator.openEPG())
@@ -1000,6 +1015,13 @@ export class ChannelSetupScreen {
     private async _refreshPreview(): Promise<void> {
         if (this._step !== 2) return;
         const token = this._visibilityToken;
+        const panel = document.getElementById(this._previewPanelId);
+        if (panel) {
+            const measuredHeight = panel.getBoundingClientRect().height;
+            if (Number.isFinite(measuredHeight)) {
+                this._previewPanelHeightPx = Math.max(measuredHeight, 180);
+            }
+        }
         const serverId = this._getSelectedServerId();
         if (!serverId) {
             this._previewError = 'No server selected.';

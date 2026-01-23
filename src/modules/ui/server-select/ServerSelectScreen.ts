@@ -112,20 +112,21 @@ export class ServerSelectScreen {
         this._container.appendChild(panel);
     }
 
-    show(): void {
+    show(options?: { allowAutoConnect?: boolean }): void {
         this._container.style.display = 'flex';
         this._container.classList.add('visible');
         this._clearError();
         this._setStatus('', '');
         this._registerFocusables();
-        this._attemptAutoConnect().catch(console.error);
+        const allowAutoConnect = options?.allowAutoConnect !== false;
+        this._loadServers({ autoSelect: allowAutoConnect, forceRefresh: false }).catch(console.error);
     }
 
-    private async _attemptAutoConnect(): Promise<void> {
+    private async _loadServers(options: { autoSelect: boolean; forceRefresh: boolean }): Promise<void> {
         if (this._isLoading) return;
         this._isLoading = true;
         this._listEl.innerHTML = '';
-        this._setStatus('Connecting…', '');
+        this._setStatus(options.autoSelect ? 'Connecting…' : 'Discovering servers…', '');
 
         // Disable controls
         this._refreshButton.disabled = true;
@@ -133,23 +134,21 @@ export class ServerSelectScreen {
         this._clearButton.disabled = true;
 
         try {
-            const servers = await this._orchestrator.discoverServers(false);
-            const savedId = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+            const servers = await this._orchestrator.discoverServers(options.forceRefresh);
             let autoSelectError: unknown | null = null;
 
-            if (savedId && servers.some(s => s.id === savedId)) {
-                try {
-                    const success = await this._orchestrator.selectServer(savedId);
-                    if (success) {
-                        this._setStatus('Connected…', 'Continuing startup…');
-                        this._isLoading = false;
-                        this._refreshButton.disabled = false;
-                        this._setupButton.disabled = false;
-                        this._clearButton.disabled = false;
-                        return;
+            if (options.autoSelect) {
+                const savedId = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SELECTED_SERVER_KEY);
+                if (savedId && servers.some(s => s.id === savedId)) {
+                    try {
+                        const success = await this._orchestrator.selectServer(savedId);
+                        if (success) {
+                            this._setStatus('Connected…', 'Continuing startup…');
+                            return;
+                        }
+                    } catch (error) {
+                        autoSelectError = error;
                     }
-                } catch (error) {
-                    autoSelectError = error;
                 }
             }
 
@@ -206,31 +205,8 @@ export class ServerSelectScreen {
         if (this._isLoading) {
             return;
         }
-        this._isLoading = true;
         this._clearError();
-        this._setStatus('Discovering servers…', '');
-        this._refreshButton.disabled = true;
-        this._setupButton.disabled = true;
-        this._clearButton.disabled = true;
-
-        try {
-            const servers = await this._orchestrator.discoverServers(true);
-            this._renderServers(servers);
-            if (servers.length === 0) {
-                this._setStatus('No servers found.', 'Ensure your Plex server is reachable.');
-            } else {
-                this._setStatus('Select a server from the list.', '');
-            }
-        } catch (error) {
-            this._handleError(error, 'Failed to discover servers.');
-            this._setStatus('Discovery failed.', '');
-        } finally {
-            this._refreshButton.disabled = false;
-            this._setupButton.disabled = false;
-            this._clearButton.disabled = false;
-            this._isLoading = false;
-            this._restoreFocus();
-        }
+        await this._loadServers({ autoSelect: false, forceRefresh: true });
     }
 
 
