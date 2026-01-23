@@ -80,6 +80,13 @@
   color: var(--color-text-muted);
 }
 
+.now-playing-info-actions {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .now-playing-info-debug {
   margin: 6px 0 0 0;
   padding: 10px 12px;

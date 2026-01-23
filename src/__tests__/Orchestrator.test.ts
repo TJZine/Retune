@@ -77,12 +77,17 @@ const mockNowPlayingInfoConfig = {
     posterHeight: 222,
 };
 
+const mockPlaybackOptionsConfig = {
+    containerId: 'playback-options-container',
+};
+
 const mockConfig: OrchestratorConfig = {
     plexConfig: mockPlexConfig,
     navConfig: mockNavConfig,
     playerConfig: mockPlayerConfig,
     epgConfig: mockEpgConfig,
     nowPlayingInfoConfig: mockNowPlayingInfoConfig,
+    playbackOptionsConfig: mockPlaybackOptionsConfig,
 };
 
 // ============================================

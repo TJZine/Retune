@@ -42,6 +42,7 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
           <div class="${NOW_PLAYING_INFO_CLASSES.SUBTITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.DESCRIPTION}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.CONTEXT}"></div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.ACTIONS}">OK • Playback Options</div>
           <pre class="${NOW_PLAYING_INFO_CLASSES.DEBUG}"></pre>
           <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS}">
             <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS_BAR}">

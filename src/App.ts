@@ -15,6 +15,7 @@ import type { NavigationConfig } from './modules/navigation';
 import type { VideoPlayerConfig } from './modules/player';
 import type { EPGConfig } from './modules/ui/epg';
 import type { NowPlayingInfoConfig } from './modules/ui/now-playing-info';
+import type { PlaybackOptionsConfig } from './modules/ui/playback-options';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
 import { ChannelSetupScreen } from './modules/ui/channel-setup';
@@ -79,6 +80,10 @@ const DEFAULT_EPG_CONFIG: EPGConfig = {
 const DEFAULT_NOW_PLAYING_INFO_CONFIG: NowPlayingInfoConfig = {
     containerId: 'now-playing-info-container',
     autoHideMs: 10_000,
+};
+
+const DEFAULT_PLAYBACK_OPTIONS_CONFIG: PlaybackOptionsConfig = {
+    containerId: 'playback-options-container',
 };
 
 // ============================================
@@ -259,6 +264,11 @@ export class App {
         nowPlayingContainer.id = 'now-playing-info-container';
         root.appendChild(nowPlayingContainer);
 
+        // Playback Options modal container
+        const playbackOptionsContainer = document.createElement('div');
+        playbackOptionsContainer.id = 'playback-options-container';
+        root.appendChild(playbackOptionsContainer);
+
         // Splash container (startup screen)
         const splashContainer = document.createElement('div');
         splashContainer.id = 'splash-container';
@@ -392,7 +402,11 @@ export class App {
         if (this._settingsContainer && this._orchestrator) {
             this._settingsScreen = new SettingsScreen(
                 this._settingsContainer,
-                () => this._orchestrator?.getNavigation() ?? null
+                () => this._orchestrator?.getNavigation() ?? null,
+                (enabled): void => {
+                    if (enabled) return;
+                    void this._orchestrator?.setSubtitleTrack(null).catch(() => undefined);
+                }
             );
         }
         if (this._audioSetupContainer && this._orchestrator) {
@@ -520,6 +534,7 @@ export class App {
             playerConfig: DEFAULT_PLAYER_CONFIG,
             epgConfig: DEFAULT_EPG_CONFIG,
             nowPlayingInfoConfig: DEFAULT_NOW_PLAYING_INFO_CONFIG,
+            playbackOptionsConfig: DEFAULT_PLAYBACK_OPTIONS_CONFIG,
         };
     }
 

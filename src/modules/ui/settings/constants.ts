@@ -29,6 +29,14 @@ export const SETTINGS_STORAGE_KEYS = {
     NOW_PLAYING_INFO_AUTO_HIDE_MS: RETUNE_STORAGE_KEYS.NOW_PLAYING_INFO_AUTO_HIDE_MS,
     /** Audio setup completed flag */
     AUDIO_SETUP_COMPLETE: RETUNE_STORAGE_KEYS.AUDIO_SETUP_COMPLETE,
+    /** Subtitle feature flag (beta) */
+    SUBTITLES_ENABLED: RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED,
+    /** Use global subtitle preference override */
+    SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE: RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE,
+    /** Preferred subtitle language (app override) */
+    SUBTITLE_LANGUAGE: RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE,
+    /** Prefer forced subtitles over full subtitles */
+    SUBTITLE_PREFER_FORCED: RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
 } as const;
 
 /**
@@ -48,6 +56,12 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         debugLogging: false,
         subtitleDebugLogging: false,
         showFps: false,
+    },
+    subtitles: {
+        enabled: false,
+        useGlobalPreference: false,
+        language: null,
+        preferForced: false,
     },
 };
 

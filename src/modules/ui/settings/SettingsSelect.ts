@@ -8,6 +8,8 @@ import type { SettingsSelectConfig } from './types';
 export function createSettingsSelect(config: SettingsSelectConfig): {
     element: HTMLButtonElement;
     update: (value: number) => void;
+    setDisabled: (disabled: boolean) => void;
+    isDisabled: () => boolean;
     getId: () => string;
 } {
     const button = document.createElement('button');
@@ -45,9 +47,24 @@ export function createSettingsSelect(config: SettingsSelectConfig): {
         state.textContent = resolveOptionLabel(config.options, value);
     }
 
+    function setDisabled(disabled: boolean): void {
+        config.disabled = disabled;
+        button.disabled = disabled;
+        if (disabled) {
+            button.classList.add('disabled');
+        } else {
+            button.classList.remove('disabled');
+        }
+        meta.textContent = disabled && config.disabledReason
+            ? config.disabledReason
+            : config.description ?? '';
+    }
+
     return {
         element: button,
         update,
+        setDisabled,
+        isDisabled: (): boolean => config.disabled ?? false,
         getId: (): string => config.id,
     };
 }

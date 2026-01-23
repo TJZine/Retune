@@ -4,6 +4,7 @@ import type { IEPGComponent } from '../../ui/epg';
 import type { IVideoPlayer } from '../../player';
 import type { IPlexAuth } from '../../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../../ui/now-playing-info';
+import { PLAYBACK_OPTIONS_MODAL_ID } from '../../ui/playback-options/constants';
 
 type HandlerMap = Partial<{
     [K in keyof NavigationEventMap]: (payload: NavigationEventMap[K]) => void;
@@ -21,6 +22,7 @@ const makeNavigation = (): {
         closeModal: jest.fn(),
         goTo: jest.fn(),
         replaceScreen: jest.fn(),
+        setFocus: jest.fn(),
         on: jest.fn(<K extends keyof NavigationEventMap>(
             event: K,
             handler: (payload: NavigationEventMap[K]) => void
@@ -75,6 +77,10 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
         hideNowPlayingInfoOverlay: jest.fn(),
+        playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({ focusableIds: ['playback-subtitle-off'], preferredFocusId: 'playback-subtitle-off' }),
+        showPlaybackOptionsModal: jest.fn(),
+        hidePlaybackOptionsModal: jest.fn(),
         setLastChannelChangeSourceRemote: jest.fn(),
         setLastChannelChangeSourceNumber: jest.fn(),
         switchToNextChannel: jest.fn(),
@@ -102,6 +108,28 @@ describe('NavigationCoordinator', () => {
 
         expect(epg.handleBack).not.toHaveBeenCalled();
         expect(event.originalEvent.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it('opens playback options when OK pressed in now playing modal', () => {
+        const focus = {
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        };
+        const { handlers, navigation, deps } = setup({
+            isNowPlayingModalOpen: jest.fn().mockReturnValue(true),
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue(focus),
+        });
+        const event = makeKeyEvent('ok');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalled();
+        expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
+        expect(navigation.openModal).toHaveBeenCalledWith(
+            PLAYBACK_OPTIONS_MODAL_ID,
+            focus.focusableIds
+        );
+        expect(event.handled).toBe(true);
     });
 
     it('routes EPG key handling and marks handled', () => {

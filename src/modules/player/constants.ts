@@ -98,12 +98,5 @@ export const PROTOCOL_MIME_TYPES: Record<string, string> = {
 // Subtitle Formats
 // ============================================
 
-/**
- * Subtitle formats that require burn-in (cannot be rendered natively).
- */
-export const BURN_IN_SUBTITLE_FORMATS = ['pgs', 'ass', 'ssa'];
-
-/**
- * Subtitle formats that can be rendered as text tracks.
- */
-export const TEXT_SUBTITLE_FORMATS = ['srt', 'vtt', 'webvtt'];
+// Re-export from shared module for backward compatibility
+export { BURN_IN_SUBTITLE_FORMATS, TEXT_SUBTITLE_FORMATS } from '../../shared/subtitle-formats';

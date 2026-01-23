@@ -39,12 +39,27 @@ export interface DeveloperSettings {
 }
 
 /**
+ * Subtitle settings configuration.
+ */
+export interface SubtitleSettings {
+    /** Enable subtitle track support */
+    enabled: boolean;
+    /** Use global subtitle preference override */
+    useGlobalPreference: boolean;
+    /** Preferred subtitle language code (app override) */
+    language: string | null;
+    /** Prefer forced subtitles over full subtitles when auto-selecting */
+    preferForced: boolean;
+}
+
+/**
  * Complete settings configuration.
  */
 export interface SettingsConfig {
     audio: AudioSettings;
     display: DisplaySettings;
     developer: DeveloperSettings;
+    subtitles: SubtitleSettings;
 }
 
 /**

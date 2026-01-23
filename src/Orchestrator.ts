@@ -90,6 +90,12 @@ import {
     NOW_PLAYING_INFO_MODAL_ID,
 } from './modules/ui/now-playing-info';
 import {
+    PlaybackOptionsModal,
+    type IPlaybackOptionsModal,
+    type PlaybackOptionsConfig,
+    PLAYBACK_OPTIONS_MODAL_ID,
+} from './modules/ui/playback-options';
+import {
     InitializationCoordinator,
     ChannelTuningCoordinator,
     type IInitializationCoordinator,
@@ -108,6 +114,7 @@ import {
     NowPlayingInfoCoordinator,
     getNowPlayingInfoAutoHideMs,
 } from './modules/ui/now-playing-info/NowPlayingInfoCoordinator';
+import { PlaybackOptionsCoordinator } from './modules/ui/playback-options';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
 import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
@@ -208,6 +215,7 @@ export interface OrchestratorConfig {
     navConfig: NavigationConfig;
     epgConfig: EPGConfig;
     nowPlayingInfoConfig: NowPlayingInfoConfig;
+    playbackOptionsConfig: PlaybackOptionsConfig;
 }
 
 export type { ErrorRecoveryAction } from './core/error-recovery/types';
@@ -225,6 +233,7 @@ export interface IAppOrchestrator {
     onScreenChange(handler: (from: string, to: string) => void): IDisposable;
     getPlaybackInfoSnapshot(): PlaybackInfoSnapshot;
     refreshPlaybackInfoSnapshot(): Promise<PlaybackInfoSnapshot>;
+    setSubtitleTrack(trackId: string | null): Promise<void>;
     switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void>;
     switchToChannelByNumber(number: number): Promise<void>;
     openEPG(): void;
@@ -287,6 +296,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _epgCoordinator: EPGCoordinator | null = null;
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
     private _nowPlayingInfoCoordinator: NowPlayingInfoCoordinator | null = null;
+    private _playbackOptionsModal: IPlaybackOptionsModal | null = null;
+    private _playbackOptionsCoordinator: PlaybackOptionsCoordinator | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
     private _playbackRecovery: PlaybackRecoveryManager | null = null;
     private _channelTuning: ChannelTuningCoordinator | null = null;
@@ -435,6 +446,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Now Playing Info overlay - no constructor args, initialize later
         this._nowPlayingInfo = new NowPlayingInfoOverlay();
 
+        // Playback Options modal - no constructor args, initialize later
+        this._playbackOptionsModal = new PlaybackOptionsModal();
+
         this._epgCoordinator = new EPGCoordinator({
             getEpg: (): IEPGComponent | null => this._epg,
             getChannelManager: (): IChannelManager | null => this._channelManager,
@@ -508,6 +522,14 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._currentProgramForPlayback,
         });
 
+        this._playbackOptionsCoordinator = new PlaybackOptionsCoordinator({
+            playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getPlaybackOptionsModal: (): IPlaybackOptionsModal | null => this._playbackOptionsModal,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+        });
+
         this._playbackRecovery = new PlaybackRecoveryManager({
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
             getStreamResolver: (): IPlexStreamResolver | null => this._plexStreamResolver,
@@ -523,6 +545,19 @@ export class AppOrchestrator implements IAppOrchestrator {
             buildPlexResourceUrl: (pathOrUrl: string): string | null =>
                 this._buildPlexResourceUrl(pathOrUrl),
             getMimeType: (decision: StreamDecision): string => this._getMimeType(decision),
+            getAuthHeaders: (): Record<string, string> =>
+                this._plexAuth?.getAuthHeaders() ?? {},
+            getServerUri: (): string | null =>
+                this._plexDiscovery?.getServerUri() ?? null,
+            getPreferredSubtitleLanguage: (): string | null =>
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE),
+            getPlexPreferredSubtitleLanguage: (): string | null =>
+                this._plexAuth?.getCurrentUser()?.preferredSubtitleLanguage ?? null,
+            notifySubtitleUnavailable: (): void => {
+                if (this._nowPlayingHandler) {
+                    this._nowPlayingHandler('Subtitles unavailable for this item');
+                }
+            },
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
         });
@@ -577,6 +612,13 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._nowPlayingInfoCoordinator?.handleModalOpen(NOW_PLAYING_INFO_MODAL_ID),
             hideNowPlayingInfoOverlay: (): void =>
                 this._nowPlayingInfoCoordinator?.handleModalClose(NOW_PLAYING_INFO_MODAL_ID),
+            playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
+            preparePlaybackOptionsModal: (): { focusableIds: string[]; preferredFocusId: string | null } =>
+                this._playbackOptionsCoordinator?.prepareModal() ?? { focusableIds: [], preferredFocusId: null },
+            showPlaybackOptionsModal: (): void =>
+                this._playbackOptionsCoordinator?.handleModalOpen(PLAYBACK_OPTIONS_MODAL_ID),
+            hidePlaybackOptionsModal: (): void =>
+                this._playbackOptionsCoordinator?.handleModalClose(PLAYBACK_OPTIONS_MODAL_ID),
             setLastChannelChangeSourceRemote: (): void => {
                 this._lastChannelChangeSource = 'remote';
             },
@@ -605,6 +647,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 videoPlayer: this._videoPlayer,
                 epg: this._epg,
                 nowPlayingInfo: this._nowPlayingInfo,
+                playbackOptions: this._playbackOptionsModal,
             },
             {
                 updateModuleStatus: this._updateModuleStatus.bind(this),
@@ -621,6 +664,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                 buildPlexResourceUrl: (pathOrUrl: string | null): string | null => {
                     if (!pathOrUrl) return null;
                     return this._buildPlexResourceUrl(pathOrUrl);
+                },
+                seedSubtitleLanguageFromPlexUser: (): void => {
+                    this._seedSubtitleLanguageFromPlexUser();
                 },
             }
         );
@@ -704,6 +750,10 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._nowPlayingInfoCoordinator?.dispose();
         if (this._nowPlayingInfo) {
             this._nowPlayingInfo.destroy();
+        }
+        this._playbackOptionsCoordinator?.dispose();
+        if (this._playbackOptionsModal) {
+            this._playbackOptionsModal.destroy();
         }
         if (this._videoPlayer) {
             this._videoPlayer.destroy();
@@ -853,6 +903,15 @@ export class AppOrchestrator implements IAppOrchestrator {
         await this._nowPlayingDebugManager?.ensureServerDecisionForPlaybackInfoSnapshot();
 
         return this.getPlaybackInfoSnapshot();
+    }
+
+    async setSubtitleTrack(trackId: string | null): Promise<void> {
+        if (!this._videoPlayer) return;
+        try {
+            await this._videoPlayer.setSubtitleTrack(trackId);
+        } catch (error) {
+            console.warn('[Orchestrator] setSubtitleTrack failed:', error);
+        }
     }
 
     /**
@@ -1189,6 +1248,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             'video-player',
             'epg-ui',
             'now-playing-info-ui',
+            'playback-options-ui',
         ];
 
         for (const id of modules) {
@@ -1235,6 +1295,22 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
         const server = this._plexDiscovery.getSelectedServer();
         return server ? server.id : null;
+    }
+
+    private _seedSubtitleLanguageFromPlexUser(): void {
+        const existing = safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE);
+        if (typeof existing === 'string' && existing.trim().length > 0) {
+            return;
+        }
+        const plexPreferred = this._plexAuth?.getCurrentUser()?.preferredSubtitleLanguage ?? null;
+        if (typeof plexPreferred !== 'string') {
+            return;
+        }
+        const normalized = plexPreferred.trim();
+        if (normalized.length === 0) {
+            return;
+        }
+        safeLocalStorageSet(RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE, normalized);
     }
 
     private _getPerServerChannelsStorageKey(serverId: string): string {
@@ -1481,6 +1557,16 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._eventUnsubscribers.push(() => {
             if (this._videoPlayer) {
                 this._videoPlayer.off('ended', endedHandler);
+            }
+        });
+
+        const trackHandler = (): void => {
+            this._playbackOptionsCoordinator?.refreshIfOpen();
+        };
+        this._videoPlayer.on('trackChange', trackHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('trackChange', trackHandler);
             }
         });
 

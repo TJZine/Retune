@@ -4,9 +4,14 @@ import {
     type IPlexStreamResolver,
     type StreamDecision,
     type StreamResolverError,
+    type PlexStream,
 } from '../plex/stream';
 import type { IChannelScheduler, ScheduledProgram } from '../scheduler/scheduler';
 import type { IVideoPlayer, StreamDescriptor } from './index';
+import type { AudioTrack, SubtitleTrack } from './types';
+import { TEXT_SUBTITLE_FORMATS } from './constants';
+import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
+import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
 
 export interface PlaybackRecoveryDeps {
     getVideoPlayer: () => IVideoPlayer | null;
@@ -21,6 +26,11 @@ export interface PlaybackRecoveryDeps {
 
     buildPlexResourceUrl: (pathOrUrl: string) => string | null;
     getMimeType: (decision: StreamDecision) => string;
+    getAuthHeaders: () => Record<string, string>;
+    getServerUri: () => string | null;
+    getPreferredSubtitleLanguage: () => string | null;
+    getPlexPreferredSubtitleLanguage?: () => string | null;
+    notifySubtitleUnavailable: () => void;
 
     handleGlobalError: (error: AppError, context: string) => void;
 }
@@ -37,7 +47,240 @@ export class PlaybackRecoveryManager {
     private _directFallbackAttemptedForItemKey: Set<string> = new Set();
     private _streamRecoveryInProgress: boolean = false;
 
-    constructor(private readonly deps: PlaybackRecoveryDeps) {}
+    constructor(private readonly deps: PlaybackRecoveryDeps) { }
+
+    private _isSubtitlesEnabled(): boolean {
+        try {
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED));
+        } catch {
+            return false;
+        }
+    }
+
+    private _useGlobalSubtitlePreference(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    private _preferForcedSubtitles(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    private _getCurrentChannelId(): string | null {
+        const scheduler = this.deps.getScheduler();
+        if (!scheduler) return null;
+        try {
+            return scheduler.getState().channelId ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _getPreferredSubtitleLanguage(): string | null {
+        try {
+            const value = this.deps.getPreferredSubtitleLanguage();
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _getPlexPreferredSubtitleLanguage(): string | null {
+        try {
+            const getter = this.deps.getPlexPreferredSubtitleLanguage;
+            if (!getter) return null;
+            const value = getter();
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _getSubtitlePreferenceKey(channelId: string): string {
+        return `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX}${channelId}`;
+    }
+
+    private _readStoredPreference(key: string): { trackId: string; language: string; codec: string } | null {
+        const raw = safeLocalStorageGet(key);
+        if (!raw) return null;
+        try {
+            const parsed = JSON.parse(raw) as { trackId?: unknown; language?: unknown; codec?: unknown };
+            if (
+                typeof parsed.trackId === 'string' &&
+                typeof parsed.language === 'string' &&
+                typeof parsed.codec === 'string'
+            ) {
+                return {
+                    trackId: parsed.trackId,
+                    language: parsed.language,
+                    codec: parsed.codec,
+                };
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    }
+
+    private _resolvePreferredSubtitleId(
+        channelId: string | null,
+        tracks: SubtitleTrack[]
+    ): string | null {
+        const eligible = tracks.filter(
+            (t) => t.isTextCandidate && (t.fetchableViaKey || Boolean(t.id))
+        );
+        if (eligible.length === 0) {
+            return null;
+        }
+
+        const useGlobal = this._useGlobalSubtitlePreference() || !channelId;
+        const storedPreference = useGlobal
+            ? this._readStoredPreference(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL)
+            : this._readStoredPreference(this._getSubtitlePreferenceKey(channelId));
+        if (storedPreference) {
+            const byId = eligible.find((t) => t.id === storedPreference.trackId);
+            if (byId) return byId.id;
+            const byLangCodec = eligible.find(
+                (t) =>
+                    t.codec.toLowerCase() === storedPreference.codec.toLowerCase() &&
+                    (t.languageCode.toLowerCase() === storedPreference.language.toLowerCase() ||
+                        t.language.toLowerCase() === storedPreference.language.toLowerCase())
+            );
+            if (byLangCodec) return byLangCodec.id;
+        }
+
+        const appPreferredLanguage = this._getPreferredSubtitleLanguage();
+        if (appPreferredLanguage) {
+            const preferred = this._findSubtitleByLanguage(eligible, appPreferredLanguage);
+            if (preferred) return preferred.id;
+        } else {
+            const plexPreferredLanguage = this._getPlexPreferredSubtitleLanguage();
+            if (plexPreferredLanguage) {
+                const preferred = this._findSubtitleByLanguage(eligible, plexPreferredLanguage);
+                if (preferred) return preferred.id;
+            }
+        }
+
+        const defaultLanguage =
+            eligible.find((t) => t.default)?.languageCode ||
+            eligible.find((t) => t.default)?.language ||
+            null;
+        if (defaultLanguage) {
+            const preferred = this._findSubtitleByLanguage(eligible, defaultLanguage);
+            if (preferred) return preferred.id;
+        }
+
+        const english = this._findSubtitleByLanguage(eligible, 'en') ??
+            this._findSubtitleByLanguage(eligible, 'english');
+        if (english) return english.id;
+
+        return null;
+    }
+
+    private _findSubtitleByLanguage(tracks: SubtitleTrack[], language: string): SubtitleTrack | null {
+        const normalized = language.trim().toLowerCase();
+        const matches = tracks.filter((t) => {
+            return (
+                t.languageCode.toLowerCase() === normalized ||
+                t.language.toLowerCase() === normalized
+            );
+        });
+        if (matches.length === 0) return null;
+
+        // Use setting to determine forced/full preference
+        const preferForced = this._preferForcedSubtitles();
+        if (preferForced) {
+            const forced = matches.find((t) => t.forced);
+            return forced ?? matches[0] ?? null;
+        } else {
+            const nonForced = matches.find((t) => !t.forced);
+            return nonForced ?? matches[0] ?? null;
+        }
+    }
+
+    private _mapAudioTracks(streams: PlexStream[]): AudioTrack[] {
+        return streams.map((stream, index) => ({
+            id: stream.id,
+            title: stream.title ?? stream.language ?? 'Unknown',
+            languageCode: (stream.languageCode ?? '').toLowerCase(),
+            language: stream.language ?? 'Unknown',
+            codec: (stream.codec ?? 'unknown').toLowerCase(),
+            channels: typeof stream.channels === 'number' ? stream.channels : 0,
+            index,
+            default: stream.default ?? false,
+        }));
+    }
+
+    private _mapSubtitleTracks(streams: PlexStream[]): SubtitleTrack[] {
+        const baseTracks = streams.map((stream) => {
+            const codec = (stream.codec ?? stream.format ?? 'unknown').toLowerCase();
+            const format = (stream.format ?? stream.codec ?? 'unknown').toLowerCase();
+            const languageCode = (stream.languageCode ?? '').toLowerCase();
+            const language = (stream.language ?? languageCode) || 'Unknown';
+            const isTextCandidate = TEXT_SUBTITLE_FORMATS.includes(codec);
+            const fetchableViaKey = typeof stream.key === 'string' && stream.key.length > 0;
+            const codecLabel = codec ? codec.toUpperCase() : 'Unknown';
+            const languageLabel = language || 'Unknown';
+            const key = typeof stream.key === 'string' && stream.key.length > 0 ? stream.key : undefined;
+            return {
+                id: stream.id,
+                label: `${languageLabel} (${codecLabel})`,
+                languageCode,
+                language: languageLabel,
+                codec,
+                format,
+                ...(key ? { key } : {}),
+                forced: stream.forced ?? false,
+                default: stream.default ?? false,
+                isTextCandidate,
+                fetchableViaKey,
+                title: stream.title ?? '',
+            };
+        });
+
+        const labelCounts = baseTracks.reduce<Record<string, number>>((acc, track) => {
+            acc[track.label] = (acc[track.label] ?? 0) + 1;
+            return acc;
+        }, {});
+
+        return baseTracks.map((track) => {
+            let label = track.label;
+            if ((labelCounts[label] ?? 0) > 1 && track.title) {
+                label = `${label} • ${track.title}`;
+            }
+            if (track.forced) {
+                label = `${label} • Forced`;
+            }
+            return {
+                id: track.id,
+                label,
+                languageCode: track.languageCode,
+                language: track.language,
+                codec: track.codec,
+                format: track.format,
+                ...(track.key ? { key: track.key } : {}),
+                forced: track.forced,
+                default: track.default,
+                isTextCandidate: track.isTextCandidate,
+                fetchableViaKey: track.fetchableViaKey,
+            };
+        });
+    }
 
     resetPlaybackFailureGuard(): void {
         this._playbackFailureWindowStartMs = 0;
@@ -152,6 +395,18 @@ export class PlaybackRecoveryManager {
         });
         this.deps.setCurrentStreamDecision(decision);
 
+        return this._buildStreamDescriptor(program, decision, clampedOffset);
+    }
+
+    /**
+     * Build a StreamDescriptor from a StreamDecision and ScheduledProgram.
+     * Shared helper to reduce duplication between normal playback and transcode fallback.
+     */
+    private _buildStreamDescriptor(
+        program: ScheduledProgram,
+        decision: StreamDecision,
+        startOffsetMs: number
+    ): StreamDescriptor {
         // Build mediaMetadata carefully for exactOptionalPropertyTypes
         const metadata: StreamDescriptor['mediaMetadata'] = {
             title: program.item.title,
@@ -170,14 +425,33 @@ export class PlaybackRecoveryManager {
             metadata.year = program.item.year;
         }
 
+        const audioTracks = this._mapAudioTracks(decision.availableAudioStreams ?? []);
+        const subtitlesEnabled = this._isSubtitlesEnabled();
+        const subtitleTracks = subtitlesEnabled
+            ? this._mapSubtitleTracks(decision.availableSubtitleStreams ?? [])
+            : [];
+        const channelId = this._getCurrentChannelId();
+        const preferredSubtitleTrackId = subtitlesEnabled
+            ? this._resolvePreferredSubtitleId(channelId, subtitleTracks)
+            : null;
+        const subtitleContext = subtitlesEnabled
+            ? {
+                serverUri: this.deps.getServerUri(),
+                authHeaders: this.deps.getAuthHeaders(),
+                onUnavailable: this.deps.notifySubtitleUnavailable,
+            }
+            : null;
+
         return {
             url: decision.playbackUrl,
             protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
             mimeType: this.deps.getMimeType(decision),
-            startPositionMs: clampedOffset,
+            startPositionMs: startOffsetMs,
             mediaMetadata: metadata,
-            subtitleTracks: [],
-            audioTracks: [],
+            subtitleTracks,
+            audioTracks,
+            ...(subtitleContext ? { subtitleContext } : {}),
+            ...(preferredSubtitleTrackId !== undefined ? { preferredSubtitleTrackId } : {}),
             durationMs: program.item.durationMs,
             isLive: false,
         };
@@ -223,37 +497,14 @@ export class PlaybackRecoveryManager {
             }
             this.deps.setCurrentStreamDecision(decision);
 
-            const metadata: StreamDescriptor['mediaMetadata'] = {
-                title: program.item.title,
-                durationMs: program.item.durationMs,
-            };
-            if (program.item.type === 'episode' && program.item.fullTitle) {
-                metadata.subtitle = program.item.fullTitle;
-            }
-            if (program.item.thumb) {
-                const thumbUrl = this.deps.buildPlexResourceUrl(program.item.thumb);
-                if (thumbUrl) {
-                    metadata.thumb = thumbUrl;
-                }
-            }
-            if (program.item.year !== undefined) {
-                metadata.year = program.item.year;
-            }
-
-            const descriptor: StreamDescriptor = {
-                url: decision.playbackUrl,
-                protocol: decision.protocol === 'hls' ? 'hls' : 'direct',
-                mimeType: this.deps.getMimeType(decision),
-                startPositionMs: clampedOffset,
-                mediaMetadata: metadata,
-                subtitleTracks: [],
-                audioTracks: [],
-                durationMs: program.item.durationMs,
-                isLive: false,
-            };
+            const descriptor = this._buildStreamDescriptor(program, decision, clampedOffset);
+            const preferredSubtitleTrackId = descriptor.preferredSubtitleTrackId;
 
             this.deps.setCurrentStreamDescriptor(descriptor);
             await player.loadStream(descriptor);
+            if (preferredSubtitleTrackId) {
+                await player.setSubtitleTrack(preferredSubtitleTrackId);
+            }
             await player.play();
             this.resetPlaybackFailureGuard();
             return true;

@@ -286,13 +286,20 @@ describe('VideoPlayer', () => {
                 subtitleTracks: [
                     {
                         id: 'en',
-                        title: 'English',
+                        label: 'English (SRT)',
                         languageCode: 'en',
                         language: 'English',
+                        codec: 'srt',
                         format: 'srt',
-                        url: 'http://test.srt',
+                        key: '/library/streams/1',
+                        isTextCandidate: true,
+                        fetchableViaKey: true,
                     },
                 ],
+                subtitleContext: {
+                    serverUri: 'http://example.com',
+                    authHeaders: { 'X-Plex-Token': 'token' },
+                },
             });
 
             await player.loadStream(descriptor);
