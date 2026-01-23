@@ -18,6 +18,8 @@ import {
 interface SubtitleTrackContext {
     serverUri: string | null;
     authHeaders: Record<string, string>;
+    itemKey?: string;
+    sessionId?: string;
     onUnavailable?: () => void;
     onDeactivate?: (reason: string) => void;
 }
@@ -218,6 +220,17 @@ export class SubtitleManager {
 
         if (trackId && this._readyTracks.has(trackId)) {
             this._applyTrackModeShowing(trackId);
+        } else if (trackId) {
+            // Avoid prefetching/transforming every subtitle track on load.
+            // Only attempt the expensive fetch+convert fallback for the user-selected track.
+            const selected = this._tracks.find((t) => t.id === trackId) ?? null;
+            if (selected && selected.isTextCandidate) {
+                const codec = (selected.codec || selected.format || '').toLowerCase();
+                // Native track rendering expects WebVTT; SRT/other text formats require conversion.
+                if (codec !== 'vtt' && codec !== 'webvtt') {
+                    void this._triggerFallback(selected, 'selected', this._loadToken);
+                }
+            }
         }
 
         this._logSubtitleDebug('setActiveTrack', () => ({
@@ -421,6 +434,9 @@ export class SubtitleManager {
         reason: string,
         loadToken: number
     ): Promise<void> {
+        // Only fetch/convert subtitles for the currently selected track.
+        // Otherwise, loadTracks() would eagerly fetch+convert every available language track.
+        if (this._activeTrackId !== track.id) return;
         if (this._fallbackInProgress.has(track.id)) return;
         if (this._readyTracks.has(track.id)) return;
         if (loadToken !== this._loadToken) return;
@@ -474,27 +490,102 @@ export class SubtitleManager {
         this._fallbackControllers.set(track.id, controller);
 
         try {
-            const response = await fetch(url.toString(), {
-                headers: {
-                    Accept: 'text/vtt, text/plain, */*',
-                    ...(this._subtitleContext?.authHeaders ?? {}),
-                },
-                signal: controller.signal,
-            });
-            if (loadToken !== this._loadToken) return null;
-            if (!response.ok) {
-                this._logSubtitleDebug('subtitle_fetch_error', () => ({
-                    id: track.id,
-                    status: response.status,
-                    url: redactSensitiveTokens(url.toString()),
-                }));
-                return null;
+            const tokenFromHeaders = ((): string | null => {
+                const headers = this._subtitleContext?.authHeaders ?? null;
+                if (!headers) return null;
+                return this._getAuthTokenFromHeaders(headers);
+            })();
+
+            const baseAcceptHeader = { Accept: 'text/vtt, text/plain, */*' };
+
+            const attempts: Array<{
+                name: 'query' | 'header' | 'query_download' | 'header_download';
+                url: URL;
+                headers: Record<string, string>;
+            }> = [
+                { name: 'query', url, headers: baseAcceptHeader },
+            ];
+
+            if (tokenFromHeaders) {
+                // Some PMS setups accept token-in-header but reject token-in-query for /library/streams/*.
+                // Keep query-first to avoid extra preflight work, then retry with token header.
+                const headerUrl = new URL(url.toString());
+                headerUrl.searchParams.delete('X-Plex-Token');
+                headerUrl.searchParams.delete('X-Plex-token');
+                attempts.push({
+                    name: 'header',
+                    url: headerUrl,
+                    headers: { ...baseAcceptHeader, 'X-Plex-Token': tokenFromHeaders },
+                });
+
+                const queryDownloadUrl = new URL(url.toString());
+                if (!queryDownloadUrl.searchParams.has('download')) {
+                    queryDownloadUrl.searchParams.set('download', '1');
+                }
+                attempts.push({ name: 'query_download', url: queryDownloadUrl, headers: baseAcceptHeader });
+
+                const headerDownloadUrl = new URL(headerUrl.toString());
+                if (!headerDownloadUrl.searchParams.has('download')) {
+                    headerDownloadUrl.searchParams.set('download', '1');
+                }
+                attempts.push({
+                    name: 'header_download',
+                    url: headerDownloadUrl,
+                    headers: { ...baseAcceptHeader, 'X-Plex-Token': tokenFromHeaders },
+                });
             }
-            const raw = await response.text();
+
+            let raw: string | null = null;
+            for (const attempt of attempts) {
+                const response = await fetch(attempt.url.toString(), {
+                    headers: attempt.headers,
+                    signal: controller.signal,
+                });
+                if (loadToken !== this._loadToken) return null;
+                if (!response.ok) {
+                    this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                        id: track.id,
+                        status: response.status,
+                        attempt: attempt.name,
+                        url: redactSensitiveTokens(attempt.url.toString()),
+                    }));
+                    continue;
+                }
+                raw = await response.text();
+                if (loadToken !== this._loadToken) return null;
+                break;
+            }
+
+            // Some PMS setups return 501 for keyless subtitle streams via /library/streams/{id}.
+            // As a last resort, ask PMS to extract/transcode the selected subtitle stream.
+            if (!raw) {
+                const transcodeUrl = this._buildSubtitleTranscodeUrl(track, tokenFromHeaders);
+                if (transcodeUrl) {
+                    const response = await fetch(transcodeUrl.toString(), {
+                        headers: baseAcceptHeader,
+                        signal: controller.signal,
+                    });
+                    if (loadToken !== this._loadToken) return null;
+                    if (!response.ok) {
+                        this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                            id: track.id,
+                            status: response.status,
+                            attempt: 'transcode_subtitles',
+                            url: redactSensitiveTokens(transcodeUrl.toString()),
+                        }));
+                        return null;
+                    }
+                    raw = await response.text();
+                    if (loadToken !== this._loadToken) return null;
+                }
+            }
+
+            if (!raw) return null;
             if (looksLikeHtml(raw)) {
                 this._logSubtitleDebug('subtitle_fetch_error', () => ({
                     id: track.id,
                     error: 'html_response',
+                    // Log the original direct URL here (not the transcode URL) to keep legacy debugging stable.
                     url: redactSensitiveTokens(url.toString()),
                 }));
                 return null;
@@ -536,6 +627,49 @@ export class SubtitleManager {
             return null;
         } finally {
             this._fallbackControllers.delete(track.id);
+        }
+    }
+
+    private _buildSubtitleTranscodeUrl(track: SubtitleTrack, token: string | null): URL | null {
+        try {
+            const ctx = this._subtitleContext;
+            const baseUri = ctx?.serverUri ?? null;
+            const itemKey = ctx?.itemKey ?? null;
+            if (!baseUri || !itemKey) return null;
+
+            const url = new URL('/video/:/transcode/universal/subtitles', baseUri);
+
+            // Minimal required request shape (best-effort). PMS may accept additional identity params.
+            url.searchParams.set('path', `/library/metadata/${itemKey}`);
+            url.searchParams.set('mediaIndex', '0');
+            url.searchParams.set('partIndex', '0');
+            url.searchParams.set('subtitleStreamID', track.id);
+
+            if (ctx?.sessionId) {
+                url.searchParams.set('X-Plex-Session-Identifier', ctx.sessionId);
+                url.searchParams.set('session', ctx.sessionId);
+            }
+
+            // Prefer token in query to avoid CORS preflight and to match <video>/<track> request constraints.
+            if (token) {
+                url.searchParams.set('X-Plex-Token', token);
+            }
+
+            // Carry through any X-Plex-* identity headers as query params (matches how direct-play URLs are built).
+            const headers = ctx?.authHeaders ?? {};
+            for (const [k, v] of Object.entries(headers)) {
+                if (!k.startsWith('X-Plex-')) continue;
+                if (typeof v !== 'string' || v.length === 0) continue;
+                // Avoid duplicating token in two casings.
+                if (k.toLowerCase() === 'x-plex-token') continue;
+                if (!url.searchParams.has(k)) {
+                    url.searchParams.set(k, v);
+                }
+            }
+
+            return url;
+        } catch {
+            return null;
         }
     }
 
