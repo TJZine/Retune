@@ -356,6 +356,13 @@ export interface RawStream {
     samplingRate?: number;
     format?: string;
     key?: string;
+    profile?: string;
+    colorTrc?: string;
+    colorSpace?: string;
+    colorPrimaries?: string;
+    bitDepth?: number;
+    hdr?: string;
+    dynamicRange?: string;
 }
 
 /**

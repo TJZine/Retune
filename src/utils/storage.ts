@@ -44,6 +44,11 @@ export function isStoredTrue(value: string | null): boolean {
     return value === '1';
 }
 
+export function readStoredBoolean(key: string, defaultValue: boolean): boolean {
+    const parsed = parseStoredBoolean(safeLocalStorageGet(key));
+    return parsed ?? defaultValue;
+}
+
 /**
  * Clear only Retune-owned keys (prefix-based).
  * Does not call localStorage.clear() to avoid clobbering unrelated app data.

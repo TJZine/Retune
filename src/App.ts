@@ -493,7 +493,12 @@ export class App {
 
         if (this._serverSelectScreen) {
             if (showServerSelect) {
-                this._serverSelectScreen.show();
+                const params = this._orchestrator?.getNavigation()?.getScreenParams() ?? {};
+                const allowAutoConnect = params.allowAutoConnect as boolean | undefined;
+                const showOptions = typeof allowAutoConnect === 'boolean'
+                    ? { allowAutoConnect }
+                    : undefined;
+                this._serverSelectScreen.show(showOptions);
             } else {
                 this._serverSelectScreen.hide();
             }

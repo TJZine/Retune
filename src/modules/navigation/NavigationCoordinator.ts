@@ -240,7 +240,7 @@ export class NavigationCoordinator {
                     if (plexAuth && !plexAuth.isAuthenticated()) {
                         navigation.goTo('auth');
                     } else {
-                        navigation.goTo('server-select');
+                        navigation.goTo('server-select', { allowAutoConnect: false });
                     }
                 }
                 break;

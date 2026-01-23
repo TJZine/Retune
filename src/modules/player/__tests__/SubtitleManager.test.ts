@@ -151,7 +151,8 @@ describe('SubtitleManager', () => {
     describe('setActiveTrack', () => {
         it('should update active track ID', () => {
             const tracks: SubtitleTrack[] = [
-                createMockSubtitleTrack({ id: 'en' }),
+                // Use a VTT track here to avoid triggering the SRT fallback fetch path.
+                createMockSubtitleTrack({ id: 'en', codec: 'vtt', format: 'vtt' }),
             ];
             manager.loadTracks(tracks, {
                 serverUri: 'http://example.com',
@@ -163,6 +164,215 @@ describe('SubtitleManager', () => {
 
             manager.setActiveTrack(null);
             expect(manager.getActiveTrackId()).toBeNull();
+        });
+    });
+
+    // ========================================
+    // fallback fetch path
+    // ========================================
+
+    describe('fallback fetch', () => {
+        let originalFetchDescriptor: PropertyDescriptor | undefined;
+        let originalCreateObjectUrlDescriptor: PropertyDescriptor | undefined;
+        let originalRevokeObjectUrlDescriptor: PropertyDescriptor | undefined;
+
+        beforeEach(() => {
+            // JSDOM doesn't implement createObjectURL by default.
+            // SubtitleManager uses it to attach converted VTT blobs.
+            originalFetchDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+            originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+            originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+            Object.defineProperty(globalThis, 'fetch', {
+                value: jest.fn(),
+                writable: true,
+                configurable: true,
+            });
+            Object.defineProperty(URL, 'createObjectURL', {
+                value: jest.fn().mockReturnValue('blob:mock'),
+                writable: true,
+                configurable: true,
+            });
+            Object.defineProperty(URL, 'revokeObjectURL', {
+                value: jest.fn(),
+                writable: true,
+                configurable: true,
+            });
+        });
+
+        afterEach(() => {
+            if (originalFetchDescriptor) {
+                Object.defineProperty(globalThis, 'fetch', originalFetchDescriptor);
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                delete (globalThis as any).fetch;
+            }
+            if (originalCreateObjectUrlDescriptor) {
+                Object.defineProperty(URL, 'createObjectURL', originalCreateObjectUrlDescriptor);
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                delete (URL as any).createObjectURL;
+            }
+            if (originalRevokeObjectUrlDescriptor) {
+                Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectUrlDescriptor);
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                delete (URL as any).revokeObjectURL;
+            }
+        });
+
+        it('should not send Plex auth headers when fetching subtitle text (token is in query)', async () => {
+            const track = createMockSubtitleTrack({
+                id: 'srt-1',
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/1',
+                fetchableViaKey: true,
+            });
+
+            manager.loadTracks([track], {
+                serverUri: 'http://example.com',
+                authHeaders: {
+                    'X-Plex-Token': 'token',
+                    'X-Plex-Product': 'Retune',
+                },
+            });
+
+            const fetchMock = globalThis.fetch as unknown as jest.Mock;
+            fetchMock.mockResolvedValue({
+                ok: true,
+                status: 200,
+                text: async () => `1
+00:00:00,000 --> 00:00:01,000
+Hello`,
+            });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const blobUrl = await (manager as any)._fetchFallbackBlobUrl(track, (manager as any)._loadToken);
+
+            expect(blobUrl).toBe('blob:mock');
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+            const [url, init] = fetchMock.mock.calls[0] ?? [];
+            expect(String(url)).toContain('X-Plex-Token=token');
+            expect(init.headers).toEqual({
+                Accept: 'text/vtt, text/plain, */*',
+            });
+        });
+
+        it('should retry with token header when query auth returns 501', async () => {
+            const track = createMockSubtitleTrack({
+                id: 'srt-1',
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/1',
+                fetchableViaKey: true,
+            });
+
+            manager.loadTracks([track], {
+                serverUri: 'http://example.com',
+                authHeaders: {
+                    'X-Plex-Token': 'token',
+                    'X-Plex-Product': 'Retune',
+                },
+            });
+
+            const fetchMock = globalThis.fetch as unknown as jest.Mock;
+            fetchMock
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    text: async () => `1
+00:00:00,000 --> 00:00:01,000
+Hello`,
+                });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const blobUrl = await (manager as any)._fetchFallbackBlobUrl(track, (manager as any)._loadToken);
+            expect(blobUrl).toBe('blob:mock');
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+
+            const first = fetchMock.mock.calls[0] ?? [];
+            const second = fetchMock.mock.calls[1] ?? [];
+            expect(String(first[0])).toContain('X-Plex-Token=token');
+            expect(second[1]?.headers).toEqual({
+                Accept: 'text/vtt, text/plain, */*',
+                'X-Plex-Token': 'token',
+            });
+        });
+
+        it('should fall back to subtitle transcode endpoint when /library/streams returns 501 for all variants', async () => {
+            const track = createMockSubtitleTrack({
+                id: 'srt-1',
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/1',
+                fetchableViaKey: true,
+            });
+
+            manager.loadTracks([track], {
+                serverUri: 'http://example.com',
+                authHeaders: {
+                    'X-Plex-Token': 'token',
+                    'X-Plex-Client-Identifier': 'client-1',
+                },
+                itemKey: '999',
+                sessionId: 'sess-1',
+            });
+
+            const fetchMock = globalThis.fetch as unknown as jest.Mock;
+            fetchMock
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    text: async () => `1
+00:00:00,000 --> 00:00:01,000
+Hello`,
+                });
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const blobUrl = await (manager as any)._fetchFallbackBlobUrl(track, (manager as any)._loadToken);
+            expect(blobUrl).toBe('blob:mock');
+            expect(fetchMock).toHaveBeenCalledTimes(5);
+
+            const [transcodeUrl] = fetchMock.mock.calls[4] ?? [];
+            const u = new URL(String(transcodeUrl));
+            expect(u.pathname).toBe('/video/:/transcode/universal/subtitles');
+            expect(u.searchParams.get('path')).toBe('/library/metadata/999');
+            expect(u.searchParams.get('subtitleStreamID')).toBe('srt-1');
+            expect(u.searchParams.get('X-Plex-Token')).toBe('token');
+            expect(u.searchParams.get('X-Plex-Client-Identifier')).toBe('client-1');
+            expect(u.searchParams.get('X-Plex-Session-Identifier')).toBe('sess-1');
+        });
+
+        it('should skip fallback work for non-selected tracks', async () => {
+            const track = createMockSubtitleTrack({
+                id: 'srt-1',
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/1',
+                fetchableViaKey: true,
+            });
+
+            manager.loadTracks([track], {
+                serverUri: 'http://example.com',
+                authHeaders: { 'X-Plex-Token': 'token' },
+            });
+
+            const fetchMock = globalThis.fetch as unknown as jest.Mock;
+            fetchMock.mockResolvedValue({
+                ok: true,
+                status: 200,
+                text: async () => 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello',
+            });
+
+            // No active track selected, so fallback should be a no-op.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (manager as any)._triggerFallback(track, 'test', (manager as any)._loadToken);
+            expect(fetchMock).not.toHaveBeenCalled();
         });
     });
 
@@ -229,7 +439,8 @@ describe('SubtitleManager', () => {
     describe('destroy', () => {
         it('should cleanup on destroy', () => {
             const tracks: SubtitleTrack[] = [
-                createMockSubtitleTrack({ id: 'en' }),
+                // Use VTT here to avoid triggering the async SRT fallback fetch during this unit test.
+                createMockSubtitleTrack({ id: 'en', codec: 'vtt', format: 'vtt' }),
             ];
             manager.loadTracks(tracks, {
                 serverUri: 'http://example.com',
@@ -301,6 +512,12 @@ describe('SubtitleManager', () => {
             jest.advanceTimersByTime(2000);
             await Promise.resolve();
 
+            // With the current behavior, we do not eagerly fetch+convert every subtitle track.
+            // Fallback work starts when the user selects a track.
+            expect(global.fetch).not.toHaveBeenCalled();
+
+            manager.setActiveTrack('en');
+            await Promise.resolve();
             expect(global.fetch).toHaveBeenCalled();
         });
 

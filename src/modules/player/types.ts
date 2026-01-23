@@ -199,6 +199,10 @@ export interface StreamDescriptor {
     subtitleContext?: {
         serverUri: string | null;
         authHeaders: Record<string, string>;
+        /** ratingKey for the media item (used for PMS subtitle transcode fallback) */
+        itemKey?: string;
+        /** Playback session identifier (used for PMS subtitle transcode fallback) */
+        sessionId?: string;
         onUnavailable?: () => void;
         onDeactivate?: (reason: string) => void;
     };

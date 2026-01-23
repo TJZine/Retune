@@ -5,8 +5,8 @@
  */
 
 import type { INavigationManager, FocusableElement } from '../../navigation';
-import { SETTINGS_STORAGE_KEYS } from '../settings/constants';
-import { safeLocalStorageGet, safeLocalStorageSet } from '../../../utils/storage';
+import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from '../settings/constants';
+import { safeLocalStorageSet, readStoredBoolean } from '../../../utils/storage';
 
 /**
  * Audio choice configuration.
@@ -43,6 +43,7 @@ export class AudioSetupScreen {
     private _onComplete: () => void;
     private _focusableIds: string[] = [];
     private _selectedChoice: AudioChoice['id'] | null = null;
+    private _directPlayFallbackEnabled: boolean;
 
     constructor(
         container: HTMLElement,
@@ -52,6 +53,10 @@ export class AudioSetupScreen {
         this._container = container;
         this._getNavigation = getNavigation;
         this._onComplete = onComplete;
+        this._directPlayFallbackEnabled = readStoredBoolean(
+            SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+            DEFAULT_SETTINGS.audio.directPlayAudioFallback
+        );
         this._buildUI();
     }
 
@@ -106,6 +111,33 @@ export class AudioSetupScreen {
         }
 
         panel.appendChild(choicesList);
+
+        const fallbackButton = document.createElement('button');
+        fallbackButton.id = 'audio-direct-play-fallback';
+        fallbackButton.className = `setup-toggle${this._directPlayFallbackEnabled ? ' selected' : ''}`;
+
+        const fallbackLabel = document.createElement('span');
+        fallbackLabel.className = 'setup-toggle-label';
+        fallbackLabel.textContent = 'Direct Play Audio Fallback';
+
+        const fallbackMeta = document.createElement('span');
+        fallbackMeta.className = 'setup-toggle-meta';
+        fallbackMeta.textContent = 'Allow Direct Play using a compatible fallback audio track';
+
+        const fallbackState = document.createElement('span');
+        fallbackState.className = 'setup-toggle-state';
+        fallbackState.textContent = this._directPlayFallbackEnabled ? 'On' : 'Off';
+
+        fallbackButton.addEventListener('click', () => {
+            this._directPlayFallbackEnabled = !this._directPlayFallbackEnabled;
+            fallbackButton.classList.toggle('selected', this._directPlayFallbackEnabled);
+            fallbackState.textContent = this._directPlayFallbackEnabled ? 'On' : 'Off';
+        });
+
+        fallbackButton.appendChild(fallbackLabel);
+        fallbackButton.appendChild(fallbackMeta);
+        fallbackButton.appendChild(fallbackState);
+        panel.appendChild(fallbackButton);
 
         // Hint
         const hint = document.createElement('p');
@@ -180,6 +212,10 @@ export class AudioSetupScreen {
         // Mark audio setup as complete
         // Store as '1'
         safeLocalStorageSet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, '1');
+        safeLocalStorageSet(
+            SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+            this._directPlayFallbackEnabled ? '1' : '0'
+        );
 
         this._onComplete();
     }
@@ -188,7 +224,7 @@ export class AudioSetupScreen {
      * Check if audio setup is already complete.
      */
     public static isSetupComplete(): boolean {
-        return safeLocalStorageGet(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE) === '1';
+        return readStoredBoolean(SETTINGS_STORAGE_KEYS.AUDIO_SETUP_COMPLETE, false);
     }
 
     /**
@@ -218,6 +254,10 @@ export class AudioSetupScreen {
         for (const choice of AUDIO_CHOICES) {
             const btn = this._container.querySelector(`#audio-choice-${choice.id}`) as HTMLButtonElement | null;
             if (btn) buttons.push(btn);
+        }
+        const fallbackBtn = this._container.querySelector('#audio-direct-play-fallback') as HTMLButtonElement | null;
+        if (fallbackBtn) {
+            buttons.push(fallbackBtn);
         }
         const continueBtn = this._container.querySelector('#audio-setup-continue') as HTMLButtonElement | null;
         if (continueBtn && !continueBtn.disabled) {
@@ -256,6 +296,7 @@ export class AudioSetupScreen {
             nav.setFocus(focusId);
         }
     }
+
 
     /**
      * Unregister focusable elements.

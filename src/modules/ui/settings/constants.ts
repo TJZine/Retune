@@ -17,8 +17,6 @@ export const SETTINGS_STORAGE_KEYS = {
     DIRECT_PLAY_AUDIO_FALLBACK: RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
     /** Color theme */
     THEME: RETUNE_STORAGE_KEYS.THEME,
-    /** Scanline effect enabled */
-    SCANLINE_EFFECT: RETUNE_STORAGE_KEYS.SCANLINE_EFFECT,
     /** Debug logging enabled */
     DEBUG_LOGGING: RETUNE_STORAGE_KEYS.DEBUG_LOGGING,
     /** Subtitle debug logging enabled */
@@ -49,7 +47,6 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
     },
     display: {
         theme: 'default',
-        scanlineEffect: false,
         nowPlayingInfoAutoHideMs: 10_000,
     },
     developer: {

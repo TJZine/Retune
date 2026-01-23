@@ -438,6 +438,8 @@ export class PlaybackRecoveryManager {
             ? {
                 serverUri: this.deps.getServerUri(),
                 authHeaders: this.deps.getAuthHeaders(),
+                itemKey: program.item.ratingKey,
+                sessionId: decision.sessionId,
                 onUnavailable: this.deps.notifySubtitleUnavailable,
             }
             : null;

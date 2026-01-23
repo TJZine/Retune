@@ -20,8 +20,6 @@ export interface AudioSettings {
 export interface DisplaySettings {
     /** Color theme */
     theme: 'default' | 'retro';
-    /** Enable subtle CRT scanline overlay effect */
-    scanlineEffect: boolean;
     /** Now Playing Info overlay auto-hide timeout (ms) */
     nowPlayingInfoAutoHideMs: number;
 }
