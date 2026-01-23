@@ -1866,6 +1866,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return;
             }
             this._currentStreamDescriptor = stream;
+            this._setActivePlexSessionFromCurrent();
 
             // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
             // and fetch PMS transcode decision in the background to explain why video/audio transcodes.

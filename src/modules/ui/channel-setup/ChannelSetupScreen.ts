@@ -1016,7 +1016,7 @@ export class ChannelSetupScreen {
     private async _refreshPreview(): Promise<void> {
         if (this._step !== 2) return;
         const token = this._visibilityToken;
-        const panel = document.getElementById(this._previewPanelId);
+        const panel = this._contentEl.querySelector<HTMLElement>(`#${this._previewPanelId}`);
         if (panel) {
             const measuredHeight = panel.getBoundingClientRect().height;
             if (Number.isFinite(measuredHeight)) {
