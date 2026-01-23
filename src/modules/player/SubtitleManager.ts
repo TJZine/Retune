@@ -309,15 +309,20 @@ export class SubtitleManager {
     }
 
     private _buildDirectTrackUrl(track: SubtitleTrack): string | null {
-        if (!this._subtitleContext) return null;
-        const baseUri = this._subtitleContext.serverUri;
-        // Use key if available, otherwise fall back to ID-based endpoint
-        const path = track.key ?? `/library/streams/${encodeURIComponent(track.id)}`;
         try {
-            const url = new URL(path, baseUri ?? undefined);
-            const token = this._getAuthTokenFromHeaders(this._subtitleContext.authHeaders);
-            if (!url.searchParams.has('X-Plex-Token')) {
-                if (token) {
+            const baseUri = this._subtitleContext?.serverUri ?? null;
+            let url: URL;
+            if (track.key) {
+                url = new URL(track.key, baseUri ?? undefined);
+            } else {
+                if (!baseUri) return null;
+                const path = `/library/streams/${encodeURIComponent(track.id)}`;
+                url = new URL(path, baseUri);
+            }
+            const authHeaders = this._subtitleContext?.authHeaders;
+            if (authHeaders) {
+                const token = this._getAuthTokenFromHeaders(authHeaders);
+                if (token && !url.searchParams.has('X-Plex-Token')) {
                     url.searchParams.set('X-Plex-Token', token);
                 }
             }

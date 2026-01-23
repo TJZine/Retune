@@ -448,7 +448,7 @@ export class SettingsScreen {
 
     private _loadSubtitleLanguageValue(): number {
         const raw = safeLocalStorageGet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
-        if (!raw) return 0;
+        if (raw === null) return 0;
         const normalized = raw.trim().toLowerCase();
         if (!normalized) {
             safeLocalStorageRemove(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE);
