@@ -183,6 +183,7 @@ export class SubtitleManager {
      * Unload all subtitle tracks.
      */
     public unloadTracks(): void {
+        this._loadToken += 1;
         this._clearPendingTrackState();
         // Remove track elements from DOM
         for (const element of this._trackElements.values()) {

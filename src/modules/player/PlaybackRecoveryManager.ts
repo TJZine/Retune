@@ -141,7 +141,9 @@ export class PlaybackRecoveryManager {
         channelId: string | null,
         tracks: SubtitleTrack[]
     ): string | null {
-        const eligible = tracks.filter((t) => t.isTextCandidate && t.fetchableViaKey);
+        const eligible = tracks.filter(
+            (t) => t.isTextCandidate && (t.fetchableViaKey || Boolean(t.id))
+        );
         if (eligible.length === 0) {
             return null;
         }
