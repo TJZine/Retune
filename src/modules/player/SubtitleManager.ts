@@ -826,7 +826,7 @@ export class SubtitleManager {
                     error: message,
                     url: redactSensitiveTokens(url),
                 }));
-                resolve(null);
+                finish(null);
             }
         });
     }

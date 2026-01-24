@@ -478,13 +478,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.scheduleLoadTimes.clear();
         this._placeholderAutoFocusKeys.clear();
 
-        const focused = this.state.focusedCell;
-        if (focused) {
-            const channel = this.state.channels[focused.channelIndex];
-            if (!channel) {
-                this.state.focusedCell = null;
-            }
-        }
+        this.state.focusedCell = null;
+        this.infoPanel.hide();
         this.state.focusTimeMs = Date.now();
 
         if (this.state.isVisible) {
