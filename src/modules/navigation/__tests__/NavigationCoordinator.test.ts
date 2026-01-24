@@ -5,6 +5,7 @@ import type { IVideoPlayer } from '../../player';
 import type { IPlexAuth } from '../../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../../ui/now-playing-info';
 import { PLAYBACK_OPTIONS_MODAL_ID } from '../../ui/playback-options/constants';
+import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 
 type HandlerMap = Partial<{
     [K in keyof NavigationEventMap]: (payload: NavigationEventMap[K]) => void;
@@ -15,8 +16,16 @@ const makeNavigation = (): {
     handlers: HandlerMap;
 } => {
     const handlers: HandlerMap = {};
+    const state = {
+        currentScreen: 'player' as Screen,
+        screenStack: [] as Screen[],
+        focusedElementId: null,
+        modalStack: [],
+        isPointerActive: false,
+    };
     const navigation: INavigationManager = {
         getCurrentScreen: jest.fn().mockReturnValue('player'),
+        getState: jest.fn().mockReturnValue(state),
         isModalOpen: jest.fn().mockReturnValue(false),
         openModal: jest.fn(),
         closeModal: jest.fn(),
@@ -110,6 +119,35 @@ describe('NavigationCoordinator', () => {
         expect(event.originalEvent.preventDefault).not.toHaveBeenCalled();
     });
 
+    it('opens exit-confirm on back from player when no modal is open', () => {
+        const { handlers, navigation } = setup();
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(navigation.openModal).toHaveBeenCalledWith('exit-confirm');
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('does not open exit-confirm when back stack is available', () => {
+        const { handlers, navigation } = setup();
+        (navigation.getState as jest.Mock).mockReturnValue({
+            currentScreen: 'player',
+            screenStack: ['server-select'],
+            focusedElementId: null,
+            modalStack: [],
+            isPointerActive: false,
+        });
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(navigation.openModal).not.toHaveBeenCalled();
+        expect(event.handled).not.toBe(true);
+        expect(event.originalEvent.preventDefault).not.toHaveBeenCalled();
+    });
+
     it('opens playback options when OK pressed in now playing modal', () => {
         const focus = {
             focusableIds: ['playback-subtitle-off'],
@@ -188,6 +226,30 @@ describe('NavigationCoordinator', () => {
         (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
         handlers.screenChange?.({ from: 'player', to: 'home' });
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
+    });
+
+    it('does not pause when keep-playing-in-settings is enabled', () => {
+        const originalLocalStorage = globalThis.localStorage;
+        Object.defineProperty(globalThis, 'localStorage', {
+            value: {
+                getItem: jest.fn((key: string) =>
+                    key === RETUNE_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS ? '1' : null
+                ),
+            },
+            configurable: true,
+        });
+
+        try {
+            const { handlers, videoPlayer } = setup();
+            handlers.screenChange?.({ from: 'player', to: 'settings' });
+            expect(videoPlayer.pause).not.toHaveBeenCalled();
+        } finally {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: originalLocalStorage,
+                configurable: true,
+                writable: true,
+            });
+        }
     });
 
     it('channel setup gate replaces player screen', () => {

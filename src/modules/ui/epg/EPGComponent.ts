@@ -18,6 +18,7 @@ import type {
     EPGState,
     EPGEventMap,
     EPGInternalState,
+    EPGFocusPosition,
     ScheduledProgram,
     ScheduleWindow,
     ChannelConfig,
@@ -59,6 +60,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private timeIndicatorElement: HTMLElement | null = null;
     private hasRenderedOnce: boolean = false;
     private lastVisibleRangeKey: string | null = null;
+    private _isSelectInProgress: boolean = false;
+    private _placeholderAutoFocusKeys: Set<string> = new Set();
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
@@ -166,6 +169,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             lastRenderTime: 0,
         };
         this.hasRenderedOnce = false;
+        this._isSelectInProgress = false;
+        this._placeholderAutoFocusKeys.clear();
 
         this.errorBoundary.destroy();
         this.removeAllListeners();
@@ -383,6 +388,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.channels = channels;
         this.virtualizer.setChannelCount(channels.length);
         this.channelList.updateChannels(channels);
+        this._placeholderAutoFocusKeys.clear();
 
         if (this.state.isVisible) {
             if (this.config.autoScrollToNow && this.state.scrollPosition.timeOffset === 0) {
@@ -416,9 +422,28 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.state.scheduleLoadTimes.set(channelId, Date.now());
 
         const focused = this.state.focusedCell;
-        if (focused && this.state.channels[focused.channelIndex]?.id === channelId) {
-            const focusTime = this.state.focusTimeMs;
-            this.focusProgramAtTime(focused.channelIndex, focusTime);
+        const isFocusedChannel = focused && this.state.channels[focused.channelIndex]?.id === channelId;
+        const focusKeyBefore = this._getFocusKey(focused);
+        let didAutoFocus = false;
+
+        if (isFocusedChannel && focused && !this._isSelectInProgress) {
+            if (focused.kind === 'program') {
+                const stillExists = schedule.programs.some((program) =>
+                    program.item.ratingKey === focused.program.item.ratingKey &&
+                    program.scheduledStartTime === focused.program.scheduledStartTime
+                );
+                if (!stillExists) {
+                    this.focusProgramAtTime(focused.channelIndex, this.state.focusTimeMs);
+                    didAutoFocus = true;
+                }
+            } else if (focused.kind === 'placeholder') {
+                const placeholderKey = `${channelId}-placeholder-${focused.placeholder.scheduledStartTime}`;
+                if (!this._placeholderAutoFocusKeys.has(placeholderKey)) {
+                    this._placeholderAutoFocusKeys.add(placeholderKey);
+                    this.focusProgramAtTime(focused.channelIndex, focused.focusTimeMs);
+                    didAutoFocus = true;
+                }
+            }
         }
 
         if (this.state.isVisible) {
@@ -435,9 +460,38 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
                 programCount: schedule.programs.length,
                 startTime: schedule.startTime,
                 endTime: schedule.endTime,
+                focusedChannel: isFocusedChannel,
+                focusKeyBefore,
+                focusKeyAfter: this._getFocusKey(this.state.focusedCell),
+                didAutoFocus,
             };
             console.warn('[EPG] loadScheduleForChannel', payload);
             appendEpgDebugLog('EPG.loadScheduleForChannel', payload);
+        }
+    }
+
+    /**
+     * Clear all loaded schedules and schedule timestamps.
+     */
+    clearSchedules(): void {
+        this.state.schedules.clear();
+        this.state.scheduleLoadTimes.clear();
+        this._placeholderAutoFocusKeys.clear();
+
+        this.state.focusedCell = null;
+        this.infoPanel.hide();
+        this.state.focusTimeMs = Date.now();
+
+        if (this.state.isVisible) {
+            this.renderGrid();
+        }
+
+        if (this.isDebugEnabled()) {
+            const payload = {
+                channelCount: this.state.channels.length,
+            };
+            console.warn('[EPG] clearSchedules', payload);
+            appendEpgDebugLog('EPG.clearSchedules', payload);
         }
     }
 
@@ -963,6 +1017,31 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const channel = this.state.channels[focusedCell.channelIndex];
         if (!channel) return false;
 
+        this._isSelectInProgress = true;
+        window.setTimeout(() => {
+            this._isSelectInProgress = false;
+        }, 0);
+
+        if (this.isDebugEnabled()) {
+            const payload = {
+                channelId: channel.id,
+                focusKey: this._getFocusKey(focusedCell),
+                ratingKey: focusedCell.kind === 'program' ? focusedCell.program.item.ratingKey : null,
+                scheduledStartTime:
+                    focusedCell.kind === 'program'
+                        ? focusedCell.program.scheduledStartTime
+                        : focusedCell.placeholder.scheduledStartTime,
+                scheduledEndTime:
+                    focusedCell.kind === 'program'
+                        ? focusedCell.program.scheduledEndTime
+                        : focusedCell.placeholder.scheduledEndTime,
+                focusedKind: focusedCell.kind,
+                scheduleLoaded: this.state.schedules.has(channel.id),
+            };
+            console.warn('[EPG] handleSelect', payload);
+            appendEpgDebugLog('EPG.handleSelect', payload);
+        }
+
         if (focusedCell.kind === 'placeholder') {
             return false;
         }
@@ -1020,6 +1099,16 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         };
     }
 
+    private _getFocusKey(focusedCell: EPGFocusPosition | null): string | null {
+        if (!focusedCell) return null;
+        const channel = this.state.channels[focusedCell.channelIndex];
+        if (!channel) return null;
+        if (focusedCell.kind === 'program') {
+            return `${channel.id}-${focusedCell.program.scheduledStartTime}`;
+        }
+        return `${channel.id}-placeholder-${focusedCell.placeholder.scheduledStartTime}`;
+    }
+
     /**
      * Get the currently focused program.
      *
@@ -1058,11 +1147,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             const channelIds = this.state.channels.map((c) => c.id);
             const focused = this.state.focusedCell;
             const focusedChannel = focused ? this.state.channels[focused.channelIndex] : undefined;
-            const focusedKey = focused && focusedChannel
-                ? focused.kind === 'program'
-                    ? `${focusedChannel.id}-${focused.program.scheduledStartTime}`
-                    : `${focusedChannel.id}-placeholder-${focused.placeholder.scheduledStartTime}`
-                : undefined;
+            const focusedKey = this._getFocusKey(focused) ?? undefined;
 
             this.virtualizer.renderVisibleCells(channelIds, this.state.schedules, range, focusedKey);
 

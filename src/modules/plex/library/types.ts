@@ -345,6 +345,8 @@ export interface RawStream {
     language?: string;
     languageCode?: string;
     title?: string;
+    displayTitle?: string;
+    extendedDisplayTitle?: string;
     selected?: boolean;
     default?: boolean;
     forced?: boolean;
@@ -363,6 +365,8 @@ export interface RawStream {
     bitDepth?: number;
     hdr?: string;
     dynamicRange?: string;
+    DOVIProfile?: string;
+    DOVIPresent?: boolean | number | string;
 }
 
 /**

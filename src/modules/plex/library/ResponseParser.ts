@@ -274,6 +274,8 @@ export function parseStream(data: RawStream): PlexStream {
     if (data.language !== undefined) stream.language = data.language;
     if (data.languageCode !== undefined) stream.languageCode = data.languageCode;
     if (data.title !== undefined) stream.title = data.title;
+    if (data.displayTitle !== undefined) stream.displayTitle = data.displayTitle;
+    if (data.extendedDisplayTitle !== undefined) stream.extendedDisplayTitle = data.extendedDisplayTitle;
     if (data.selected !== undefined) stream.selected = data.selected;
     if (data.default !== undefined) stream.default = data.default;
     if (data.forced !== undefined) stream.forced = data.forced;
@@ -292,6 +294,17 @@ export function parseStream(data: RawStream): PlexStream {
     if (data.bitDepth !== undefined) stream.bitDepth = data.bitDepth;
     if (data.hdr !== undefined) stream.hdr = data.hdr;
     if (data.dynamicRange !== undefined) stream.dynamicRange = data.dynamicRange;
+    if (data.DOVIProfile !== undefined) stream.doviProfile = String(data.DOVIProfile);
+    if (data.DOVIPresent !== undefined) {
+        if (typeof data.DOVIPresent === 'boolean') {
+            stream.doviPresent = data.DOVIPresent;
+        } else if (typeof data.DOVIPresent === 'number') {
+            stream.doviPresent = data.DOVIPresent > 0;
+        } else if (typeof data.DOVIPresent === 'string') {
+            const normalized = data.DOVIPresent.trim().toLowerCase();
+            stream.doviPresent = normalized === '1' || normalized === 'true' || normalized === 'yes';
+        }
+    }
 
     return stream;
 }

@@ -65,6 +65,19 @@ const makeDeps = (
         focusNow: jest.fn(),
         loadChannels: jest.fn(),
         loadScheduleForChannel: jest.fn(),
+        clearSchedules: jest.fn(),
+        getState: jest.fn().mockReturnValue({
+            isVisible: false,
+            focusedCell: null,
+            scrollPosition: { channelOffset: 0, timeOffset: 0 },
+            viewWindow: {
+                startTime: 0,
+                endTime: 0,
+                startChannelIndex: 0,
+                endChannelIndex: 3,
+            },
+            currentTime: 0,
+        }),
         setGridAnchorTime: jest.fn(),
         getFocusedProgram: jest.fn().mockReturnValue(null),
         focusChannel: jest.fn(),
@@ -202,6 +215,19 @@ describe('EPGCoordinator', () => {
             on: jest.fn(),
             off: jest.fn(),
             hide,
+            getState: jest.fn().mockReturnValue({
+                isVisible: false,
+                focusedCell: null,
+                scrollPosition: { channelOffset: 0, timeOffset: 0 },
+                viewWindow: {
+                    startTime: 0,
+                    endTime: 0,
+                    startChannelIndex: 0,
+                    endChannelIndex: 0,
+                },
+                currentTime: 0,
+            }),
+            clearSchedules: jest.fn(),
         } as unknown as IEPGComponent;
         const switchToChannel = jest.fn().mockResolvedValue(undefined);
         const setSource = jest.fn();

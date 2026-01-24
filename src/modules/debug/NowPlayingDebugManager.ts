@@ -47,6 +47,7 @@ export class NowPlayingDebugManager {
         if (!this._isNowPlayingStreamDebugEnabled()) return null;
         const decision = this.deps.getCurrentStreamDecision();
         if (!decision) return null;
+        const program = this.deps.getCurrentProgram();
 
         const lines: string[] = [];
         lines.push(
@@ -63,6 +64,13 @@ export class NowPlayingDebugManager {
             )}`
         );
 
+        const mediaInfo = program?.item.mediaInfo;
+        const hdrLabel = mediaInfo?.hdr ?? decision.source?.hdr;
+        const dvProfile = mediaInfo?.dvProfile ?? decision.source?.doviProfile;
+        if (hdrLabel) {
+            lines.push(`HDR: ${hdrLabel}${dvProfile ? ` (${dvProfile})` : ''}`);
+        }
+
         if (decision.serverDecision) {
             const sd = decision.serverDecision;
             const parts = [
@@ -71,6 +79,7 @@ export class NowPlayingDebugManager {
                 sd.subtitleDecision ? `sub=${sd.subtitleDecision}` : null,
             ].filter(Boolean);
             if (parts.length > 0) lines.push(`PMS: ${parts.join(' ')}`);
+            if (sd.decisionCode) lines.push(`PMS code: ${sd.decisionCode}`);
             if (sd.decisionText) lines.push(`PMS: ${sd.decisionText}`);
         } else if (decision.isTranscoding) {
             lines.push('PMS: (decision pending)');

@@ -117,7 +117,7 @@ import {
 import { PlaybackOptionsCoordinator } from './modules/ui/playback-options';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
-import { safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import { isStoredTrue, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import { getRecoveryActions as getRecoveryActionsHelper } from './core/error-recovery/RecoveryActions';
 import { toLifecycleAppError as toLifecycleAppErrorHelper } from './core/error-recovery/LifecycleErrorAdapter';
@@ -989,12 +989,30 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
+        const debugLogging = isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
+        if (debugLogging) {
+            console.warn('[Orchestrator] selectServer: selecting server', { serverId });
+        }
         const ok = await this._plexDiscovery.selectServer(serverId);
         if (ok) {
             // If we're already running (or resuming from the server-select screen),
             // re-run the channel/player/EPG phases to swap to the selected server.
             if (this._initCoordinator) {
                 await this._initCoordinator.runStartup(3);
+                if (debugLogging) {
+                    console.warn('[Orchestrator] selectServer: startup phases complete', { serverId });
+                }
+                if (this._epg) {
+                    this._epg.clearSchedules();
+                    if (debugLogging) {
+                        console.warn('[Orchestrator] selectServer: cleared EPG schedules', { serverId });
+                    }
+                }
+                this._epgCoordinator?.primeEpgChannels();
+                await this._epgCoordinator?.refreshEpgSchedules({ reason: 'server-swap' });
+                if (debugLogging) {
+                    console.warn('[Orchestrator] selectServer: started EPG refresh', { serverId });
+                }
             }
             return this._ready;
         }

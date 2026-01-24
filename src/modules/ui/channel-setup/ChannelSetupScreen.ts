@@ -84,9 +84,18 @@ export class ChannelSetupScreen {
     private _pendingPreviewKey: string | null = null;
     private _previewPanelHeightPx: number | null = null;
     private _previewPanelId = 'setup-preview-panel';
+    private _maxPreviewWarnings = 5;
 
     private _toDomId(raw: string): string {
         return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    private _clampPreviewHeight(measuredHeight: number): number {
+        const minHeight = 180;
+        const viewportHeight = window.innerHeight || 720;
+        const maxHeight = Math.max(minHeight, Math.floor(viewportHeight * 0.35));
+        const clamped = Math.min(Math.max(measuredHeight, minHeight), maxHeight);
+        return clamped;
     }
 
     constructor(container: HTMLElement, orchestrator: AppOrchestrator) {
@@ -260,6 +269,9 @@ export class ChannelSetupScreen {
         this._statusEl.textContent = 'Select the libraries to include.';
         this._detailEl.textContent = '';
 
+        const scroll = document.createElement('div');
+        scroll.className = 'setup-scroll';
+
         const list = document.createElement('div');
         list.className = 'setup-list';
 
@@ -309,7 +321,8 @@ export class ChannelSetupScreen {
             list.appendChild(button);
         }
 
-        this._contentEl.appendChild(list);
+        scroll.appendChild(list);
+        this._contentEl.appendChild(scroll);
 
         const actions = document.createElement('div');
         actions.className = 'button-row';
@@ -348,6 +361,9 @@ export class ChannelSetupScreen {
     private _renderStrategyStep(): void {
         this._stepEl.textContent = 'Step 2 of 3';
         this._statusEl.textContent = 'Choose channel types to build.';
+
+        const scroll = document.createElement('div');
+        scroll.className = 'setup-scroll';
 
         const list = document.createElement('div');
         list.className = 'setup-list';
@@ -535,13 +551,16 @@ export class ChannelSetupScreen {
 
         list.appendChild(minItemsButton);
 
-        this._contentEl.appendChild(list);
+        scroll.appendChild(list);
 
         const previewPanel = document.createElement('div');
         previewPanel.id = this._previewPanelId;
         previewPanel.className = 'setup-preview';
         if (this._previewPanelHeightPx !== null) {
-            previewPanel.style.minHeight = `${this._previewPanelHeightPx}px`;
+            const height = `${this._previewPanelHeightPx}px`;
+            previewPanel.style.minHeight = height;
+            previewPanel.style.maxHeight = height;
+            previewPanel.style.overflowY = 'auto';
         }
 
         const previewTitle = document.createElement('div');
@@ -590,12 +609,7 @@ export class ChannelSetupScreen {
             if (warnings.length > 0) {
                 const warningList = document.createElement('div');
                 warningList.className = 'setup-preview-warnings';
-                for (const warning of warnings) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = warning;
-                    warningList.appendChild(item);
-                }
+                this._renderCappedWarnings(warnings, warningList);
                 previewPanel.appendChild(warningList);
             }
         } else if (this._isPreviewLoading) {
@@ -611,13 +625,18 @@ export class ChannelSetupScreen {
             previewPanel.appendChild(empty);
         }
 
-        this._contentEl.appendChild(previewPanel);
+        scroll.appendChild(previewPanel);
+        this._contentEl.appendChild(scroll);
         if (this._preview) {
             requestAnimationFrame(() => {
                 if (this._step !== 2) return;
                 const measuredHeight = previewPanel.getBoundingClientRect().height;
                 if (Number.isFinite(measuredHeight)) {
-                    this._previewPanelHeightPx = Math.max(measuredHeight, 180);
+                    this._previewPanelHeightPx = this._clampPreviewHeight(measuredHeight);
+                    const height = `${this._previewPanelHeightPx}px`;
+                    previewPanel.style.minHeight = height;
+                    previewPanel.style.maxHeight = height;
+                    previewPanel.style.overflowY = 'auto';
                 }
             });
         }
@@ -677,6 +696,9 @@ export class ChannelSetupScreen {
             this._loadReview().catch(console.error);
         }
 
+        const scroll = document.createElement('div');
+        scroll.className = 'setup-scroll';
+
         const reviewContainer = document.createElement('div');
         reviewContainer.className = 'setup-review';
 
@@ -706,12 +728,7 @@ export class ChannelSetupScreen {
             if (this._review.preview.warnings.length > 0) {
                 const warningList = document.createElement('div');
                 warningList.className = 'setup-preview-warnings';
-                for (const warning of this._review.preview.warnings) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = warning;
-                    warningList.appendChild(item);
-                }
+                this._renderCappedWarnings(this._review.preview.warnings, warningList);
                 reviewContainer.appendChild(warningList);
             }
 
@@ -748,7 +765,8 @@ export class ChannelSetupScreen {
             }
         }
 
-        this._contentEl.appendChild(reviewContainer);
+        scroll.appendChild(reviewContainer);
+        this._contentEl.appendChild(scroll);
 
         const actions = document.createElement('div');
         actions.className = 'button-row';
@@ -1020,7 +1038,11 @@ export class ChannelSetupScreen {
         if (panel) {
             const measuredHeight = panel.getBoundingClientRect().height;
             if (Number.isFinite(measuredHeight)) {
-                this._previewPanelHeightPx = Math.max(measuredHeight, 180);
+                this._previewPanelHeightPx = this._clampPreviewHeight(measuredHeight);
+                const height = `${this._previewPanelHeightPx}px`;
+                panel.style.minHeight = height;
+                panel.style.maxHeight = height;
+                panel.style.overflowY = 'auto';
             }
         }
         const serverId = this._getSelectedServerId();
@@ -1119,6 +1141,23 @@ export class ChannelSetupScreen {
         row.appendChild(labelEl);
         row.appendChild(valueEl);
         return row;
+    }
+
+    private _renderCappedWarnings(warnings: string[], container: HTMLElement): void {
+        const cappedWarnings = warnings.slice(0, this._maxPreviewWarnings);
+        for (const warning of cappedWarnings) {
+            const item = document.createElement('div');
+            item.className = 'setup-preview-warning';
+            item.textContent = warning;
+            container.appendChild(item);
+        }
+        const remaining = warnings.length - cappedWarnings.length;
+        if (remaining > 0) {
+            const item = document.createElement('div');
+            item.className = 'setup-preview-warning';
+            item.textContent = `And ${remaining} more warning${remaining === 1 ? '' : 's'}…`;
+            container.appendChild(item);
+        }
     }
 
     private _applySetupRecord(record: ChannelSetupRecord): void {

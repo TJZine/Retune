@@ -66,6 +66,11 @@ export interface IEPGComponent {
     loadScheduleForChannel(channelId: string, schedule: ScheduleWindow): void;
 
     /**
+     * Clear cached schedules and timestamps.
+     */
+    clearSchedules(): void;
+
+    /**
      * Refresh the current time indicator position.
      */
     refreshCurrentTime(): void;

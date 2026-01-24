@@ -15,6 +15,10 @@ export const SETTINGS_STORAGE_KEYS = {
     DTS_PASSTHROUGH: RETUNE_STORAGE_KEYS.DTS_PASSTHROUGH,
     /** Direct play audio fallback enabled */
     DIRECT_PLAY_AUDIO_FALLBACK: RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
+    /** Keep playback running in settings */
+    KEEP_PLAYING_IN_SETTINGS: RETUNE_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
+    /** Prefer HDR10 over Dolby Vision */
+    PREFER_HDR10_OVER_DV: RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
     /** Color theme */
     THEME: RETUNE_STORAGE_KEYS.THEME,
     /** Debug logging enabled */
@@ -44,6 +48,10 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
     audio: {
         dtsPassthrough: false,
         directPlayAudioFallback: false,
+    },
+    playback: {
+        keepPlayingInSettings: false,
+        preferHdr10OverDv: false,
     },
     display: {
         theme: 'default',

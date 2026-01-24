@@ -490,6 +490,9 @@ export class SubtitleManager {
         this._fallbackControllers.set(track.id, controller);
 
         try {
+            let lastAttempt: string = 'init';
+            let lastAttemptUrl: string = url.toString();
+
             const tokenFromHeaders = ((): string | null => {
                 const headers = this._subtitleContext?.authHeaders ?? null;
                 if (!headers) return null;
@@ -537,6 +540,8 @@ export class SubtitleManager {
 
             let raw: string | null = null;
             for (const attempt of attempts) {
+                lastAttempt = attempt.name;
+                lastAttemptUrl = attempt.url.toString();
                 const response = await fetch(attempt.url.toString(), {
                     headers: attempt.headers,
                     signal: controller.signal,
@@ -561,22 +566,30 @@ export class SubtitleManager {
             if (!raw) {
                 const transcodeUrl = this._buildSubtitleTranscodeUrl(track, tokenFromHeaders);
                 if (transcodeUrl) {
-                    const response = await fetch(transcodeUrl.toString(), {
-                        headers: baseAcceptHeader,
-                        signal: controller.signal,
-                    });
-                    if (loadToken !== this._loadToken) return null;
-                    if (!response.ok) {
+                    lastAttempt = 'transcode_subtitles';
+                    lastAttemptUrl = transcodeUrl.toString();
+                    try {
+                        raw = await this._fetchSubtitleTextWithFallbacks(
+                            transcodeUrl,
+                            baseAcceptHeader,
+                            controller.signal,
+                            loadToken,
+                            track.id
+                        );
+                        if (!raw) {
+                            return null;
+                        }
+                    } catch (error) {
+                        if (loadToken !== this._loadToken) return null;
+                        const message = error instanceof Error ? error.message : String(error);
                         this._logSubtitleDebug('subtitle_fetch_error', () => ({
                             id: track.id,
-                            status: response.status,
-                            attempt: 'transcode_subtitles',
+                            error: message,
+                            attempt: 'transcode_subtitles_exception',
                             url: redactSensitiveTokens(transcodeUrl.toString()),
                         }));
                         return null;
                     }
-                    raw = await response.text();
-                    if (loadToken !== this._loadToken) return null;
                 }
             }
 
@@ -585,8 +598,8 @@ export class SubtitleManager {
                 this._logSubtitleDebug('subtitle_fetch_error', () => ({
                     id: track.id,
                     error: 'html_response',
-                    // Log the original direct URL here (not the transcode URL) to keep legacy debugging stable.
-                    url: redactSensitiveTokens(url.toString()),
+                    attempt: lastAttempt,
+                    url: redactSensitiveTokens(lastAttemptUrl),
                 }));
                 return null;
             }
@@ -630,6 +643,223 @@ export class SubtitleManager {
         }
     }
 
+    /**
+     * Fetch subtitle text, with a best-effort XHR fallback for environments where `fetch()`
+     * can fail on large/chunked responses (seen on some webOS Chromium builds).
+     */
+    private async _fetchSubtitleTextWithFallbacks(
+        url: URL,
+        headers: Record<string, string>,
+        signal: AbortSignal,
+        loadToken: number,
+        trackId: string
+    ): Promise<string | null> {
+        const urlsToTry: Array<{ variant: 'primary' | 'lan_http'; url: URL }> = [{ variant: 'primary', url }];
+        const lanHttp = this._deriveLanHttpUrl(url);
+        if (lanHttp) {
+            const lan = lanHttp.toString();
+            const primary = url.toString();
+            if (lan !== primary) {
+                urlsToTry.push({ variant: 'lan_http', url: lanHttp });
+            }
+        }
+
+        for (const entry of urlsToTry) {
+            const suffix = entry.variant === 'lan_http' ? '_lan_http' : '';
+            try {
+                const response = await fetch(entry.url.toString(), { headers, signal });
+                if (loadToken !== this._loadToken) return null;
+                if (!response.ok) {
+                    let bodySample: string | null = null;
+                    let contentType: string | null = null;
+                    try {
+                        contentType = response.headers.get('content-type');
+                        const rawText = await response.text();
+                        bodySample = rawText.slice(0, 200);
+                    } catch {
+                        // ignore
+                    }
+                    this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                        id: trackId,
+                        status: response.status,
+                        attempt: (`transcode_subtitles${suffix}`) as string,
+                        url: redactSensitiveTokens(entry.url.toString()),
+                        ...(contentType ? { contentType } : {}),
+                        ...(bodySample ? { bodySample } : {}),
+                    }));
+                } else {
+                    return await response.text();
+                }
+            } catch (error) {
+                if (loadToken !== this._loadToken) return null;
+
+                // If fetch fails (e.g. ERR_INCOMPLETE_CHUNKED_ENCODING), try XHR which can behave differently
+                // on older embedded Chromium stacks.
+                const message = error instanceof Error ? error.message : String(error);
+                this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                    id: trackId,
+                    error: message,
+                    attempt: (`transcode_subtitles_fetch_failed${suffix}`) as string,
+                    url: redactSensitiveTokens(entry.url.toString()),
+                }));
+
+                const xhrText = await this._xhrGetText(entry.url.toString(), headers, signal, loadToken, trackId);
+                if (xhrText) return xhrText;
+            }
+        }
+
+        return null;
+    }
+
+    private _xhrGetText(
+        url: string,
+        headers: Record<string, string>,
+        signal: AbortSignal,
+        loadToken: number,
+        trackId: string
+    ): Promise<string | null> {
+        return new Promise((resolve) => {
+            let xhr: XMLHttpRequest | null = null;
+            let settled = false;
+            const finish = (value: string | null): void => {
+                if (settled) return;
+                settled = true;
+                signal.removeEventListener('abort', onAbort);
+                resolve(value);
+            };
+
+            const onAbort = (): void => {
+                try {
+                    xhr?.abort();
+                } catch {
+                    // ignore
+                }
+                finish(null);
+            };
+
+            if (signal.aborted) {
+                finish(null);
+                return;
+            }
+
+            try {
+                xhr = new XMLHttpRequest();
+                const xhrRef = xhr;
+                xhr.open('GET', url, true);
+                for (const [k, v] of Object.entries(headers)) {
+                    try {
+                        xhr.setRequestHeader(k, v);
+                    } catch {
+                        // Some environments restrict certain headers; ignore and proceed.
+                    }
+                }
+                // Encourage plain text decoding.
+                try {
+                    xhr.overrideMimeType('text/plain; charset=utf-8');
+                } catch {
+                    // ignore
+                }
+
+                signal.addEventListener('abort', onAbort, { once: true });
+
+                xhr.onerror = (): void => {
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
+                    this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                        id: trackId,
+                        attempt: 'transcode_subtitles_xhr_error',
+                        status: xhrRef.status,
+                        readyState: xhrRef.readyState,
+                        url: redactSensitiveTokens(url),
+                    }));
+                    finish(null);
+                };
+                xhr.ontimeout = (): void => {
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
+                    this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                        id: trackId,
+                        attempt: 'transcode_subtitles_xhr_timeout',
+                        status: xhrRef.status,
+                        readyState: xhrRef.readyState,
+                        url: redactSensitiveTokens(url),
+                    }));
+                    finish(null);
+                };
+                xhr.onabort = (): void => {
+                    finish(null);
+                };
+                xhr.onload = (): void => {
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
+                    if (xhrRef.status < 200 || xhrRef.status >= 300) {
+                        const bodySample =
+                            typeof xhrRef.responseText === 'string' && xhrRef.responseText.length > 0
+                                ? xhrRef.responseText.slice(0, 200)
+                                : null;
+                        this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                            id: trackId,
+                            status: xhrRef.status,
+                            attempt: 'transcode_subtitles_xhr_status',
+                            url: redactSensitiveTokens(url),
+                            ...(bodySample ? { bodySample } : {}),
+                        }));
+                        finish(null);
+                        return;
+                    }
+                    finish(typeof xhrRef.responseText === 'string' ? xhrRef.responseText : null);
+                };
+
+                xhr.timeout = 10000;
+                xhr.send();
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                this._logSubtitleDebug('subtitle_fetch_error', () => ({
+                    id: trackId,
+                    attempt: 'transcode_subtitles_xhr_exception',
+                    error: message,
+                    url: redactSensitiveTokens(url),
+                }));
+                finish(null);
+            }
+        });
+    }
+
+    private _deriveLanHttpUrl(original: URL): URL | null {
+        try {
+            // Plex "plex.direct" hostnames often embed the LAN IP as the first label:
+            //   192-168-50-19.<hash>.plex.direct
+            // If HTTPS+plex.direct is flaky on some webOS stacks (chunked encoding),
+            // try plain HTTP to the LAN IP as a best-effort fallback.
+            const hostname = original.hostname ?? '';
+            if (!hostname.endsWith('.plex.direct')) return null;
+
+            const firstLabel = hostname.split('.')[0] ?? '';
+            if (!firstLabel.includes('-')) return null;
+            const ip = firstLabel.split('-').join('.');
+            const octets = ip.split('.');
+            if (octets.length !== 4) return null;
+            for (const o of octets) {
+                const n = Number(o);
+                if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+            }
+
+            const url = new URL(original.toString());
+            url.protocol = 'http:';
+            url.hostname = ip;
+            // Keep the same port.
+            return url;
+        } catch {
+            return null;
+        }
+    }
+
     private _buildSubtitleTranscodeUrl(track: SubtitleTrack, token: string | null): URL | null {
         try {
             const ctx = this._subtitleContext;
@@ -644,6 +874,10 @@ export class SubtitleManager {
             url.searchParams.set('mediaIndex', '0');
             url.searchParams.set('partIndex', '0');
             url.searchParams.set('subtitleStreamID', track.id);
+            // Ask PMS for SRT (or plain text) and run conversion locally.
+            // This avoids relying on PMS WebVTT conversion behavior and has been more robust in practice.
+            url.searchParams.set('format', 'srt');
+            url.searchParams.set('download', '1');
 
             if (ctx?.sessionId) {
                 url.searchParams.set('X-Plex-Session-Identifier', ctx.sessionId);
@@ -665,6 +899,11 @@ export class SubtitleManager {
                 if (!url.searchParams.has(k)) {
                     url.searchParams.set(k, v);
                 }
+            }
+
+            // Some PMS setups require a client profile name for universal transcode endpoints.
+            if (!url.searchParams.has('X-Plex-Client-Profile-Name')) {
+                url.searchParams.set('X-Plex-Client-Profile-Name', 'HTML TV App');
             }
 
             return url;

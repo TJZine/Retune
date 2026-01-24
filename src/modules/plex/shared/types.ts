@@ -14,6 +14,8 @@ export interface PlexStream {
     language?: string;
     languageCode?: string;
     title?: string;
+    displayTitle?: string;
+    extendedDisplayTitle?: string;
     selected?: boolean;
     default?: boolean;
     forced?: boolean;
@@ -32,6 +34,8 @@ export interface PlexStream {
     bitDepth?: number;
     hdr?: string;
     dynamicRange?: string;
+    doviProfile?: string;
+    doviPresent?: boolean;
 }
 
 /**

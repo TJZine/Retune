@@ -12,6 +12,7 @@ import {
     parseDirectoryTags,
     mapLibraryType,
     mapMediaType,
+    parseStream,
 } from '../ResponseParser';
 import type {
     RawLibrarySection,
@@ -20,6 +21,7 @@ import type {
     RawCollection,
     RawPlaylist,
     RawDirectoryTag,
+    RawStream,
 } from '../types';
 
 describe('ResponseParser', () => {
@@ -228,6 +230,51 @@ describe('ResponseParser', () => {
             expect(result[0]!.title).toBe('Marvel');
             expect(result[0]!.childCount).toBe(25);
             expect(result[0]!.thumb).toBe('/c1/thumb');
+        });
+    });
+
+    describe('parseStream', () => {
+        it('should parse display and extended titles', () => {
+            const raw: RawStream = {
+                id: '1',
+                streamType: 1,
+                codec: 'hevc',
+                displayTitle: 'HDR10',
+                extendedDisplayTitle: 'HDR10 (SMPTE2084)',
+            };
+
+            const result = parseStream(raw);
+
+            expect(result.displayTitle).toBe('HDR10');
+            expect(result.extendedDisplayTitle).toBe('HDR10 (SMPTE2084)');
+        });
+
+        it('should parse DOVI profile and present flags', () => {
+            const raw: RawStream = {
+                id: '1',
+                streamType: 1,
+                codec: 'hevc',
+                DOVIProfile: '8.1',
+                DOVIPresent: 'true',
+            };
+
+            const result = parseStream(raw);
+
+            expect(result.doviProfile).toBe('8.1');
+            expect(result.doviPresent).toBe(true);
+        });
+
+        it('should coerce numeric DOVIPresent', () => {
+            const raw: RawStream = {
+                id: '1',
+                streamType: 1,
+                codec: 'hevc',
+                DOVIPresent: 0,
+            };
+
+            const result = parseStream(raw);
+
+            expect(result.doviPresent).toBe(false);
         });
     });
 
