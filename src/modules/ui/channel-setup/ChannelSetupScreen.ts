@@ -557,7 +557,10 @@ export class ChannelSetupScreen {
         previewPanel.id = this._previewPanelId;
         previewPanel.className = 'setup-preview';
         if (this._previewPanelHeightPx !== null) {
-            previewPanel.style.minHeight = `${this._previewPanelHeightPx}px`;
+            const height = `${this._previewPanelHeightPx}px`;
+            previewPanel.style.minHeight = height;
+            previewPanel.style.maxHeight = height;
+            previewPanel.style.overflowY = 'auto';
         }
 
         const previewTitle = document.createElement('div');
@@ -630,6 +633,10 @@ export class ChannelSetupScreen {
                 const measuredHeight = previewPanel.getBoundingClientRect().height;
                 if (Number.isFinite(measuredHeight)) {
                     this._previewPanelHeightPx = this._clampPreviewHeight(measuredHeight);
+                    const height = `${this._previewPanelHeightPx}px`;
+                    previewPanel.style.minHeight = height;
+                    previewPanel.style.maxHeight = height;
+                    previewPanel.style.overflowY = 'auto';
                 }
             });
         }
@@ -1032,6 +1039,10 @@ export class ChannelSetupScreen {
             const measuredHeight = panel.getBoundingClientRect().height;
             if (Number.isFinite(measuredHeight)) {
                 this._previewPanelHeightPx = this._clampPreviewHeight(measuredHeight);
+                const height = `${this._previewPanelHeightPx}px`;
+                panel.style.minHeight = height;
+                panel.style.maxHeight = height;
+                panel.style.overflowY = 'auto';
             }
         }
         const serverId = this._getSelectedServerId();

@@ -719,8 +719,32 @@ export class SubtitleManager {
         trackId: string
     ): Promise<string | null> {
         return new Promise((resolve) => {
+            let xhr: XMLHttpRequest | null = null;
+            let settled = false;
+            const finish = (value: string | null): void => {
+                if (settled) return;
+                settled = true;
+                signal.removeEventListener('abort', onAbort);
+                resolve(value);
+            };
+
+            const onAbort = (): void => {
+                try {
+                    xhr?.abort();
+                } catch {
+                    // ignore
+                }
+                finish(null);
+            };
+
+            if (signal.aborted) {
+                finish(null);
+                return;
+            }
+
             try {
-                const xhr = new XMLHttpRequest();
+                xhr = new XMLHttpRequest();
+                const xhrRef = xhr;
                 xhr.open('GET', url, true);
                 for (const [k, v] of Object.entries(headers)) {
                     try {
@@ -736,22 +760,6 @@ export class SubtitleManager {
                     // ignore
                 }
 
-                let settled = false;
-                const finish = (value: string | null): void => {
-                    if (settled) return;
-                    settled = true;
-                    signal.removeEventListener('abort', onAbort);
-                    resolve(value);
-                };
-
-                const onAbort = (): void => {
-                    try {
-                        xhr.abort();
-                    } catch {
-                        // ignore
-                    }
-                    finish(null);
-                };
                 signal.addEventListener('abort', onAbort, { once: true });
 
                 xhr.onerror = (): void => {
@@ -762,8 +770,8 @@ export class SubtitleManager {
                     this._logSubtitleDebug('subtitle_fetch_error', () => ({
                         id: trackId,
                         attempt: 'transcode_subtitles_xhr_error',
-                        status: xhr.status,
-                        readyState: xhr.readyState,
+                        status: xhrRef.status,
+                        readyState: xhrRef.readyState,
                         url: redactSensitiveTokens(url),
                     }));
                     finish(null);
@@ -776,8 +784,8 @@ export class SubtitleManager {
                     this._logSubtitleDebug('subtitle_fetch_error', () => ({
                         id: trackId,
                         attempt: 'transcode_subtitles_xhr_timeout',
-                        status: xhr.status,
-                        readyState: xhr.readyState,
+                        status: xhrRef.status,
+                        readyState: xhrRef.readyState,
                         url: redactSensitiveTokens(url),
                     }));
                     finish(null);
@@ -790,14 +798,14 @@ export class SubtitleManager {
                         finish(null);
                         return;
                     }
-                    if (xhr.status < 200 || xhr.status >= 300) {
+                    if (xhrRef.status < 200 || xhrRef.status >= 300) {
                         const bodySample =
-                            typeof xhr.responseText === 'string' && xhr.responseText.length > 0
-                                ? xhr.responseText.slice(0, 200)
+                            typeof xhrRef.responseText === 'string' && xhrRef.responseText.length > 0
+                                ? xhrRef.responseText.slice(0, 200)
                                 : null;
                         this._logSubtitleDebug('subtitle_fetch_error', () => ({
                             id: trackId,
-                            status: xhr.status,
+                            status: xhrRef.status,
                             attempt: 'transcode_subtitles_xhr_status',
                             url: redactSensitiveTokens(url),
                             ...(bodySample ? { bodySample } : {}),
@@ -805,7 +813,7 @@ export class SubtitleManager {
                         finish(null);
                         return;
                     }
-                    finish(typeof xhr.responseText === 'string' ? xhr.responseText : null);
+                    finish(typeof xhrRef.responseText === 'string' ? xhrRef.responseText : null);
                 };
 
                 xhr.timeout = 10000;

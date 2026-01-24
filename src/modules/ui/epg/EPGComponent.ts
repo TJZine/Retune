@@ -169,6 +169,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             lastRenderTime: 0,
         };
         this.hasRenderedOnce = false;
+        this._isSelectInProgress = false;
+        this._placeholderAutoFocusKeys.clear();
 
         this.errorBoundary.destroy();
         this.removeAllListeners();
@@ -436,7 +438,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
                 }
             } else if (focused.kind === 'placeholder') {
                 const placeholderKey = `${channelId}-placeholder-${focused.placeholder.scheduledStartTime}`;
-                if (!this._isSelectInProgress && !this._placeholderAutoFocusKeys.has(placeholderKey)) {
+                if (!this._placeholderAutoFocusKeys.has(placeholderKey)) {
                     this._placeholderAutoFocusKeys.add(placeholderKey);
                     this.focusProgramAtTime(focused.channelIndex, focused.focusTimeMs);
                     didAutoFocus = true;

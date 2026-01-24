@@ -631,11 +631,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 session.durationMs = item.durationMs;
             }
 
-            const hdrLabel = ((): string | undefined => {
-                const raw = videoStream?.hdr?.trim();
-                if (raw) return raw;
-                return this._detectHdrLabelFromStream(videoStream);
-            })();
+            const rawHdrLabel = videoStream?.hdr?.trim();
+            const hdrLabel = rawHdrLabel || this._detectHdrLabelFromStream(videoStream);
             const source: NonNullable<StreamDecision['source']> = {
                 container: media.container,
                 videoCodec: media.videoCodec,
@@ -689,7 +686,6 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
 
             if (this._isDebugLoggingEnabled()) {
-                const hdrLabel = this._detectHdrLabelFromStream(videoStream);
                 console.warn('[PlexStreamResolver] Stream decision summary:', {
                     itemKey: request.itemKey,
                     isDirectPlay: decision.isDirectPlay,
