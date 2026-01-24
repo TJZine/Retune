@@ -16,8 +16,16 @@ const makeNavigation = (): {
     handlers: HandlerMap;
 } => {
     const handlers: HandlerMap = {};
+    const state = {
+        currentScreen: 'player' as Screen,
+        screenStack: [] as Screen[],
+        focusedElementId: null,
+        modalStack: [],
+        isPointerActive: false,
+    };
     const navigation: INavigationManager = {
         getCurrentScreen: jest.fn().mockReturnValue('player'),
+        getState: jest.fn().mockReturnValue(state),
         isModalOpen: jest.fn().mockReturnValue(false),
         openModal: jest.fn(),
         closeModal: jest.fn(),
@@ -120,6 +128,24 @@ describe('NavigationCoordinator', () => {
         expect(navigation.openModal).toHaveBeenCalledWith('exit-confirm');
         expect(event.handled).toBe(true);
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('does not open exit-confirm when back stack is available', () => {
+        const { handlers, navigation } = setup();
+        (navigation.getState as jest.Mock).mockReturnValue({
+            currentScreen: 'player',
+            screenStack: ['server-select'],
+            focusedElementId: null,
+            modalStack: [],
+            isPointerActive: false,
+        });
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(navigation.openModal).not.toHaveBeenCalled();
+        expect(event.handled).not.toBe(true);
+        expect(event.originalEvent.preventDefault).not.toHaveBeenCalled();
     });
 
     it('opens playback options when OK pressed in now playing modal', () => {

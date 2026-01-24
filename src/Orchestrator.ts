@@ -989,13 +989,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         if (!this._plexDiscovery) {
             throw new Error('PlexServerDiscovery not initialized');
         }
-        const debugLogging = ((): boolean => {
-            try {
-                return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
-            } catch {
-                return false;
-            }
-        })();
+        const debugLogging = isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
         if (debugLogging) {
             console.warn('[Orchestrator] selectServer: selecting server', { serverId });
         }

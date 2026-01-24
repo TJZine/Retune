@@ -458,27 +458,22 @@ describe('EPGComponent', () => {
         });
 
         it('does not auto-shift focus while a selection is in progress', () => {
-            jest.useFakeTimers();
-            try {
-                const channels = [createMockChannel(0)];
-                epg.loadChannels(channels);
-                epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 3));
-                epg.show();
-                epg.focusProgram(0, 1);
+            const channels = [createMockChannel(0)];
+            epg.loadChannels(channels);
+            epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 3));
+            epg.show();
+            epg.focusProgram(0, 1);
 
-                const before = epg.getState().focusedCell;
-                expect(before?.kind).toBe('program');
+            const before = epg.getState().focusedCell;
+            expect(before?.kind).toBe('program');
 
-                epg.handleSelect();
-                epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 1));
+            epg.handleSelect();
+            epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 1));
 
-                const after = epg.getState().focusedCell;
-                expect(after?.kind).toBe('program');
-                if (before?.kind === 'program' && after?.kind === 'program') {
-                    expect(after.program.item.ratingKey).toBe(before.program.item.ratingKey);
-                }
-            } finally {
-                jest.useRealTimers();
+            const after = epg.getState().focusedCell;
+            expect(after?.kind).toBe('program');
+            if (before?.kind === 'program' && after?.kind === 'program') {
+                expect(after.program.item.ratingKey).toBe(before.program.item.ratingKey);
             }
         });
 

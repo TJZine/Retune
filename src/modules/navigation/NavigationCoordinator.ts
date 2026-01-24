@@ -220,10 +220,11 @@ export class NavigationCoordinator {
         }
 
         if (event.button === 'back') {
-            const navigation = this.deps.getNavigation();
             const currentScreen = navigation?.getCurrentScreen();
-            if (currentScreen === 'player') {
-                if (navigation && !navigation.isModalOpen()) {
+            if (currentScreen === 'player' && navigation && !navigation.isModalOpen()) {
+                const state = navigation.getState();
+                const canGoBack = state.screenStack.length > 0;
+                if (!canGoBack) {
                     navigation.openModal('exit-confirm');
                     event.handled = true;
                     event.originalEvent.preventDefault();

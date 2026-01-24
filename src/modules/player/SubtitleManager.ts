@@ -736,18 +736,29 @@ export class SubtitleManager {
                     // ignore
                 }
 
+                let settled = false;
+                const finish = (value: string | null): void => {
+                    if (settled) return;
+                    settled = true;
+                    signal.removeEventListener('abort', onAbort);
+                    resolve(value);
+                };
+
                 const onAbort = (): void => {
                     try {
                         xhr.abort();
                     } catch {
                         // ignore
                     }
+                    finish(null);
                 };
                 signal.addEventListener('abort', onAbort, { once: true });
 
                 xhr.onerror = (): void => {
-                    signal.removeEventListener('abort', onAbort);
-                    if (loadToken !== this._loadToken) return resolve(null);
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
                     this._logSubtitleDebug('subtitle_fetch_error', () => ({
                         id: trackId,
                         attempt: 'transcode_subtitles_xhr_error',
@@ -755,11 +766,13 @@ export class SubtitleManager {
                         readyState: xhr.readyState,
                         url: redactSensitiveTokens(url),
                     }));
-                    resolve(null);
+                    finish(null);
                 };
                 xhr.ontimeout = (): void => {
-                    signal.removeEventListener('abort', onAbort);
-                    if (loadToken !== this._loadToken) return resolve(null);
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
                     this._logSubtitleDebug('subtitle_fetch_error', () => ({
                         id: trackId,
                         attempt: 'transcode_subtitles_xhr_timeout',
@@ -767,11 +780,16 @@ export class SubtitleManager {
                         readyState: xhr.readyState,
                         url: redactSensitiveTokens(url),
                     }));
-                    resolve(null);
+                    finish(null);
+                };
+                xhr.onabort = (): void => {
+                    finish(null);
                 };
                 xhr.onload = (): void => {
-                    signal.removeEventListener('abort', onAbort);
-                    if (loadToken !== this._loadToken) return resolve(null);
+                    if (loadToken !== this._loadToken) {
+                        finish(null);
+                        return;
+                    }
                     if (xhr.status < 200 || xhr.status >= 300) {
                         const bodySample =
                             typeof xhr.responseText === 'string' && xhr.responseText.length > 0
@@ -784,9 +802,10 @@ export class SubtitleManager {
                             url: redactSensitiveTokens(url),
                             ...(bodySample ? { bodySample } : {}),
                         }));
-                        return resolve(null);
+                        finish(null);
+                        return;
                     }
-                    resolve(typeof xhr.responseText === 'string' ? xhr.responseText : null);
+                    finish(typeof xhr.responseText === 'string' ? xhr.responseText : null);
                 };
 
                 xhr.timeout = 10000;

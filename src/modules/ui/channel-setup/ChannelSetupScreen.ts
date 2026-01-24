@@ -606,20 +606,7 @@ export class ChannelSetupScreen {
             if (warnings.length > 0) {
                 const warningList = document.createElement('div');
                 warningList.className = 'setup-preview-warnings';
-                const cappedWarnings = warnings.slice(0, this._maxPreviewWarnings);
-                for (const warning of cappedWarnings) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = warning;
-                    warningList.appendChild(item);
-                }
-                const remaining = warnings.length - cappedWarnings.length;
-                if (remaining > 0) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = `And ${remaining} more warning${remaining === 1 ? '' : 's'}…`;
-                    warningList.appendChild(item);
-                }
+                this._renderCappedWarnings(warnings, warningList);
                 previewPanel.appendChild(warningList);
             }
         } else if (this._isPreviewLoading) {
@@ -734,20 +721,7 @@ export class ChannelSetupScreen {
             if (this._review.preview.warnings.length > 0) {
                 const warningList = document.createElement('div');
                 warningList.className = 'setup-preview-warnings';
-                const cappedWarnings = this._review.preview.warnings.slice(0, this._maxPreviewWarnings);
-                for (const warning of cappedWarnings) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = warning;
-                    warningList.appendChild(item);
-                }
-                const remaining = this._review.preview.warnings.length - cappedWarnings.length;
-                if (remaining > 0) {
-                    const item = document.createElement('div');
-                    item.className = 'setup-preview-warning';
-                    item.textContent = `And ${remaining} more warning${remaining === 1 ? '' : 's'}…`;
-                    warningList.appendChild(item);
-                }
+                this._renderCappedWarnings(this._review.preview.warnings, warningList);
                 reviewContainer.appendChild(warningList);
             }
 
@@ -1156,6 +1130,23 @@ export class ChannelSetupScreen {
         row.appendChild(labelEl);
         row.appendChild(valueEl);
         return row;
+    }
+
+    private _renderCappedWarnings(warnings: string[], container: HTMLElement): void {
+        const cappedWarnings = warnings.slice(0, this._maxPreviewWarnings);
+        for (const warning of cappedWarnings) {
+            const item = document.createElement('div');
+            item.className = 'setup-preview-warning';
+            item.textContent = warning;
+            container.appendChild(item);
+        }
+        const remaining = warnings.length - cappedWarnings.length;
+        if (remaining > 0) {
+            const item = document.createElement('div');
+            item.className = 'setup-preview-warning';
+            item.textContent = `And ${remaining} more warning${remaining === 1 ? '' : 's'}…`;
+            container.appendChild(item);
+        }
     }
 
     private _applySetupRecord(record: ChannelSetupRecord): void {

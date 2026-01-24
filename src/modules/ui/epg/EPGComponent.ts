@@ -1150,11 +1150,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             const channelIds = this.state.channels.map((c) => c.id);
             const focused = this.state.focusedCell;
             const focusedChannel = focused ? this.state.channels[focused.channelIndex] : undefined;
-            const focusedKey = focused && focusedChannel
-                ? focused.kind === 'program'
-                    ? `${focusedChannel.id}-${focused.program.scheduledStartTime}`
-                    : `${focusedChannel.id}-placeholder-${focused.placeholder.scheduledStartTime}`
-                : undefined;
+            const focusedKey = this._getFocusKey(focused) ?? undefined;
 
             this.virtualizer.renderVisibleCells(channelIds, this.state.schedules, range, focusedKey);
 
