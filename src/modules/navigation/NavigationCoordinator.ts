@@ -3,6 +3,8 @@ import type { IEPGComponent } from '../ui/epg';
 import type { IVideoPlayer } from '../player';
 import type { IPlexAuth } from '../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../ui/now-playing-info';
+import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
+import { readStoredBoolean } from '../../utils/storage';
 
 export interface NavigationCoordinatorDeps {
     getNavigation: () => INavigationManager | null;
@@ -149,7 +151,9 @@ export class NavigationCoordinator {
 
         // Pause playback when leaving player for settings/channel-edit
         if (from === 'player' && (to === 'settings' || to === 'channel-edit')) {
-            videoPlayer?.pause();
+            if (!this._shouldKeepPlayingInSettings()) {
+                videoPlayer?.pause();
+            }
         }
 
         // Resume playback when returning to player
@@ -215,6 +219,19 @@ export class NavigationCoordinator {
             }
         }
 
+        if (event.button === 'back') {
+            const navigation = this.deps.getNavigation();
+            const currentScreen = navigation?.getCurrentScreen();
+            if (currentScreen === 'player') {
+                if (navigation && !navigation.isModalOpen()) {
+                    navigation.openModal('exit-confirm');
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
+                }
+            }
+        }
+
         switch (event.button) {
             case 'red':
                 if (event.isRepeat) {
@@ -256,5 +273,9 @@ export class NavigationCoordinator {
                 break;
             // Other keys handled by active screen
         }
+    }
+
+    private _shouldKeepPlayingInSettings(): boolean {
+        return readStoredBoolean(RETUNE_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, false);
     }
 }

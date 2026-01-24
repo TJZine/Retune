@@ -343,9 +343,84 @@ Hello`,
             expect(u.pathname).toBe('/video/:/transcode/universal/subtitles');
             expect(u.searchParams.get('path')).toBe('/library/metadata/999');
             expect(u.searchParams.get('subtitleStreamID')).toBe('srt-1');
+            expect(u.searchParams.get('format')).toBe('srt');
+            expect(u.searchParams.get('download')).toBe('1');
             expect(u.searchParams.get('X-Plex-Token')).toBe('token');
             expect(u.searchParams.get('X-Plex-Client-Identifier')).toBe('client-1');
+            expect(u.searchParams.get('X-Plex-Client-Profile-Name')).toBe('HTML TV App');
             expect(u.searchParams.get('X-Plex-Session-Identifier')).toBe('sess-1');
+        });
+
+        it('should fall back to XHR when fetch fails for subtitle transcode endpoint', async () => {
+            const track = createMockSubtitleTrack({
+                id: 'srt-1',
+                codec: 'srt',
+                format: 'srt',
+                key: '/library/streams/1',
+                fetchableViaKey: true,
+            });
+
+            manager.loadTracks([track], {
+                serverUri: 'http://example.com',
+                authHeaders: {
+                    'X-Plex-Token': 'token',
+                    'X-Plex-Client-Identifier': 'client-1',
+                },
+                itemKey: '999',
+                sessionId: 'sess-1',
+            });
+
+            const fetchMock = globalThis.fetch as unknown as jest.Mock;
+            // 4 stream attempts -> 501, then transcode attempt -> fetch throws (e.g. chunked encoding)
+            fetchMock
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockResolvedValueOnce({ ok: false, status: 501 })
+                .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+            class MockXhr {
+                status = 200;
+                responseText = `1
+00:00:00,000 --> 00:00:01,000
+Hello`;
+                timeout = 0;
+                onerror: null | (() => void) = null;
+                ontimeout: null | (() => void) = null;
+                onload: null | (() => void) = null;
+                open = jest.fn();
+                setRequestHeader = jest.fn();
+                overrideMimeType = jest.fn();
+                abort = jest.fn();
+                send = jest.fn(() => {
+                    // Simulate async completion.
+                    setTimeout(() => this.onload?.(), 0);
+                });
+            }
+
+            const originalXhr = globalThis.XMLHttpRequest;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (globalThis as any).XMLHttpRequest = MockXhr as any;
+
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const blobUrl = await (manager as any)._fetchFallbackBlobUrl(track, (manager as any)._loadToken);
+                expect(blobUrl).toBe('blob:mock');
+            } finally {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (globalThis as any).XMLHttpRequest = originalXhr as any;
+            }
+        });
+
+        it('should derive a LAN http URL from plex.direct hostnames', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const derived = (manager as any)._deriveLanHttpUrl(
+                new URL('https://192-168-50-19.abcdef.plex.direct:32400/video/:/transcode/universal/subtitles?x=1')
+            ) as URL | null;
+            expect(derived).toBeTruthy();
+            expect(derived?.toString()).toBe(
+                'http://192.168.50.19:32400/video/:/transcode/universal/subtitles?x=1'
+            );
         });
 
         it('should skip fallback work for non-selected tracks', async () => {

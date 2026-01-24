@@ -208,6 +208,7 @@ const mockPlexDiscovery = {
     isConnected: jest.fn().mockReturnValue(true),
     getSelectedServer: jest.fn().mockReturnValue(null),
     getServerUri: jest.fn().mockReturnValue('http://localhost:32400'),
+    selectServer: jest.fn().mockResolvedValue(true),
     clearSelection: jest.fn(),
     on: jest.fn(() => ({ dispose: jest.fn() })),
 };
@@ -362,6 +363,19 @@ const mockEpg = {
     loadChannels: jest.fn(),
     setGridAnchorTime: jest.fn(),
     loadScheduleForChannel: jest.fn(),
+    clearSchedules: jest.fn(),
+    getState: jest.fn().mockReturnValue({
+        isVisible: false,
+        focusedCell: null,
+        scrollPosition: { channelOffset: 0, timeOffset: 0 },
+        viewWindow: {
+            startTime: 0,
+            endTime: 0,
+            startChannelIndex: 0,
+            endChannelIndex: 0,
+        },
+        currentTime: 0,
+    }),
     getFocusedProgram: jest.fn().mockReturnValue(null),
     focusChannel: jest.fn(),
     focusNow: jest.fn(),
@@ -584,6 +598,38 @@ describe('AppOrchestrator', () => {
         });
     });
 
+    describe('selectServer', () => {
+        it('clears EPG schedules and refreshes after selecting a new server', async () => {
+            await orchestrator.initialize(mockConfig);
+
+            const initCoordinator = { runStartup: jest.fn().mockResolvedValue(undefined) };
+            const epgCoordinator = {
+                primeEpgChannels: jest.fn(),
+                refreshEpgSchedules: jest.fn().mockResolvedValue(undefined),
+            };
+            const mutable = orchestrator as unknown as {
+                _initCoordinator?: typeof initCoordinator;
+                _epg?: typeof mockEpg;
+                _epgCoordinator?: typeof epgCoordinator;
+                _ready?: boolean;
+            };
+            mutable._initCoordinator = initCoordinator;
+            mutable._epg = mockEpg;
+            mutable._epgCoordinator = epgCoordinator;
+            mutable._ready = true;
+
+            mockPlexDiscovery.selectServer.mockResolvedValue(true);
+
+            await orchestrator.selectServer('server-1');
+
+            expect(mockPlexDiscovery.selectServer).toHaveBeenCalledWith('server-1');
+            expect(initCoordinator.runStartup).toHaveBeenCalledWith(3);
+            expect(mockEpg.clearSchedules).toHaveBeenCalled();
+            expect(epgCoordinator.primeEpgChannels).toHaveBeenCalled();
+            expect(epgCoordinator.refreshEpgSchedules).toHaveBeenCalledWith({ reason: 'server-swap' });
+        });
+    });
+
     describe('start', () => {
         beforeEach(async () => {
             await orchestrator.initialize(mockConfig);
@@ -648,7 +694,7 @@ describe('AppOrchestrator', () => {
             await orchestrator.start();
 
             expect(mockPlexAuth.validateToken).toHaveBeenCalledWith('valid-token');
-            expect(mockNavigation.goTo).toHaveBeenCalledWith('player');
+            expect(mockNavigation.replaceScreen).toHaveBeenCalledWith('player');
         });
 
         it('should navigate to auth if token invalid', async () => {
@@ -728,8 +774,8 @@ describe('AppOrchestrator', () => {
             await orchestrator.start();
 
             expect(mockPlexAuth.validateToken).toHaveBeenCalledWith('valid-token');
-            expect(mockNavigation.goTo).toHaveBeenCalledWith('player');
-            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('auth');
+            expect(mockNavigation.replaceScreen).toHaveBeenCalledWith('player');
+            expect(mockNavigation.replaceScreen).not.toHaveBeenCalledWith('auth');
         });
 
         it('should navigate to channel-setup when channels are empty and setup is missing', async () => {
@@ -751,8 +797,8 @@ describe('AppOrchestrator', () => {
 
             await orchestrator.start();
 
-            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
-            expect(mockNavigation.goTo).not.toHaveBeenCalledWith('player');
+            expect(mockNavigation.replaceScreen).toHaveBeenCalledWith('channel-setup');
+            expect(mockNavigation.replaceScreen).not.toHaveBeenCalledWith('player');
         });
 
         it('should rerun setup when switching to a new server without setup record', async () => {
@@ -773,7 +819,7 @@ describe('AppOrchestrator', () => {
 
             await orchestrator.start();
 
-            expect(mockNavigation.goTo).toHaveBeenCalledWith('channel-setup');
+            expect(mockNavigation.replaceScreen).toHaveBeenCalledWith('channel-setup');
             expect(mockChannelManager.setStorageKeys).toHaveBeenCalledWith(
                 'retune_channels_server_v1:server-2',
                 'retune_current_channel_v4:server-2'

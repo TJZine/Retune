@@ -13,6 +13,8 @@ export const RETUNE_STORAGE_KEYS = {
     // Audio / Playback
     DTS_PASSTHROUGH: 'retune_enable_dts_passthrough',
     DIRECT_PLAY_AUDIO_FALLBACK: 'retune_direct_play_audio_fallback',
+    KEEP_PLAYING_IN_SETTINGS: 'retune_keep_playing_in_settings',
+    PREFER_HDR10_OVER_DV: 'retune_prefer_hdr10_over_dv',
 
     // Setup / Onboarding
     AUDIO_SETUP_COMPLETE: 'retune_audio_setup_complete',

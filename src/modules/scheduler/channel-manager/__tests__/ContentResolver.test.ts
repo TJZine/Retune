@@ -16,6 +16,7 @@ import type {
     ResolvedContentItem,
 } from '../types';
 import { PLEX_MEDIA_TYPES } from '../../../plex/library/constants';
+import type { PlexMediaFile, PlexStream } from '../../../plex/library';
 
 // ============================================
 // Mock Setup
@@ -41,6 +42,40 @@ function createMockItem(overrides: Partial<PlexMediaItemMinimal> = {}): PlexMedi
         thumb: '/thumb/1',
         addedAt: new Date(),
         ...overrides,
+    };
+}
+
+function createMockMedia(streamOverrides: Partial<PlexStream> = {}): PlexMediaFile {
+    return {
+        id: 'media-1',
+        duration: 1000,
+        bitrate: 1000,
+        width: 1920,
+        height: 1080,
+        aspectRatio: 1.78,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        audioChannels: 2,
+        container: 'mp4',
+        videoResolution: '1080',
+        parts: [
+            {
+                id: 'part-1',
+                key: '/library/parts/1',
+                duration: 1000,
+                file: '/media.mp4',
+                size: 1000,
+                container: 'mp4',
+                streams: [
+                    {
+                        id: 'stream-1',
+                        streamType: 1,
+                        codec: 'hevc',
+                        ...streamOverrides,
+                    },
+                ],
+            },
+        ],
     };
 }
 
@@ -365,6 +400,80 @@ describe('ContentResolver', () => {
             await resolver.resolveSource(source);
             await expect(resolver.resolveSource(source)).rejects.toMatchObject({ name: 'AbortError' });
             nowSpy.mockRestore();
+        });
+    });
+
+    describe('mediaInfo HDR detection', () => {
+        it.each([
+            {
+                name: 'detects Dolby Vision via display title',
+                stream: { displayTitle: 'Dolby Vision', doviPresent: true },
+                expected: 'Dolby Vision',
+            },
+            {
+                name: 'detects Dolby Vision via DOVI profile',
+                stream: { doviProfile: '8.1' },
+                expected: 'Dolby Vision',
+            },
+            {
+                name: 'detects Dolby Vision via extended display title',
+                stream: { extendedDisplayTitle: 'Dolby Vision (Profile 7)' },
+                expected: 'Dolby Vision',
+            },
+            {
+                name: 'detects HDR10+ via hdr field',
+                stream: { hdr: 'HDR10+' },
+                expected: 'HDR10+',
+            },
+            {
+                name: 'detects HDR10 via dynamicRange',
+                stream: { dynamicRange: 'HDR10' },
+                expected: 'HDR10',
+            },
+            {
+                name: 'detects HDR10 via colorTrc',
+                stream: { colorTrc: 'smpte2084' },
+                expected: 'HDR10',
+            },
+            {
+                name: 'detects HLG via colorTrc',
+                stream: { colorTrc: 'arib-std-b67' },
+                expected: 'HLG',
+            },
+        ])('$name', async ({ stream, expected }) => {
+            const item = createMockItem({
+                media: [createMockMedia(stream)],
+            });
+            mockLibrary.getLibraryItems.mockResolvedValue([item]);
+
+            const source: LibraryContentSource = {
+                type: 'library',
+                libraryId: 'lib-hdr',
+                libraryType: 'movie',
+                includeWatched: true,
+            };
+
+            const result = await resolver.resolveSource(source);
+
+            expect(result[0]?.mediaInfo?.hdr).toBe(expected);
+        });
+
+        it('does not label SDR content as HDR', async () => {
+            const item = createMockItem({
+                media: [createMockMedia({})],
+            });
+            mockLibrary.getLibraryItems.mockResolvedValue([item]);
+
+            const source: LibraryContentSource = {
+                type: 'library',
+                libraryId: 'lib-sdr',
+                libraryType: 'movie',
+                includeWatched: true,
+            };
+
+            const result = await resolver.resolveSource(source);
+
+            expect(result[0]?.mediaInfo?.hdr).toBeUndefined();
         });
     });
 

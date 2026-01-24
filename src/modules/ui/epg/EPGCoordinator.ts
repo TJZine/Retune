@@ -1,4 +1,5 @@
 import { ShuffleGenerator, ScheduleCalculator } from '../../scheduler/scheduler';
+import { appendEpgDebugLog } from './utils';
 import type { IEPGComponent } from './interfaces';
 import type { EPGConfig } from './types';
 import type { IChannelManager, ChannelConfig, ResolvedChannelContent } from '../../scheduler/channel-manager';
@@ -87,7 +88,7 @@ export class EPGCoordinator {
         epg.loadChannels(channelManager.getAllChannels());
     }
 
-    async refreshEpgSchedules(): Promise<void> {
+    async refreshEpgSchedules(options?: { reason?: string }): Promise<void> {
         const epg = this.deps.getEpg();
         const channelManager = this.deps.getChannelManager();
         const scheduler = this.deps.getScheduler();
@@ -106,8 +107,53 @@ export class EPGCoordinator {
         const shuffler = new ShuffleGenerator();
 
         const MAX_CHANNELS_TO_PRELOAD = 100;
-        const channelsToLoad = channels.slice(0, MAX_CHANNELS_TO_PRELOAD);
         const liveChannelId = channelManager.getCurrentChannel()?.id ?? null;
+        const epgState = epg.getState();
+        const focusedChannelId = epgState.focusedCell
+            ? channels[epgState.focusedCell.channelIndex]?.id ?? null
+            : null;
+        const visibleChannels = channels.slice(
+            epgState.viewWindow.startChannelIndex,
+            epgState.viewWindow.endChannelIndex
+        );
+
+        const prioritized: ChannelConfig[] = [];
+        const addChannel = (channel: ChannelConfig | null | undefined): void => {
+            if (!channel) return;
+            if (prioritized.some((existing) => existing.id === channel.id)) return;
+            prioritized.push(channel);
+        };
+
+        if (liveChannelId) {
+            addChannel(channels.find((c) => c.id === liveChannelId));
+        }
+        if (focusedChannelId) {
+            addChannel(channels.find((c) => c.id === focusedChannelId));
+        }
+        for (const channel of visibleChannels) {
+            addChannel(channel);
+        }
+        for (const channel of channels) {
+            addChannel(channel);
+        }
+
+        const channelsToLoad = prioritized.slice(0, MAX_CHANNELS_TO_PRELOAD);
+
+        if (this._isDebugEnabled()) {
+            const payload = {
+                reason: options?.reason ?? 'manual',
+                channelCount: channels.length,
+                preloadCount: channelsToLoad.length,
+                liveChannelId,
+                focusedChannelId,
+                visibleRange: {
+                    start: epgState.viewWindow.startChannelIndex,
+                    end: epgState.viewWindow.endChannelIndex,
+                },
+            };
+            console.warn('[EPGCoordinator] refreshEpgSchedules', payload);
+            appendEpgDebugLog('EPG.refreshEpgSchedules', payload);
+        }
 
         for (const channel of channelsToLoad) {
             if (loadToken !== this._epgScheduleLoadToken) return;
@@ -241,6 +287,14 @@ export class EPGCoordinator {
         const index = channels.findIndex((channel) => channel.id === current.id);
         if (index >= 0) {
             epg.focusChannel(index);
+        }
+    }
+
+    private _isDebugEnabled(): boolean {
+        try {
+            return localStorage.getItem('retune_debug_epg') === '1';
+        } catch {
+            return false;
         }
     }
 }

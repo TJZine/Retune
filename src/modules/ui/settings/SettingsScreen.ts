@@ -48,6 +48,14 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
         defaultValue: DEFAULT_SETTINGS.audio.directPlayAudioFallback,
     },
+    'settings-keep-playing': {
+        storageKey: SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
+        defaultValue: DEFAULT_SETTINGS.playback.keepPlayingInSettings,
+    },
+    'settings-prefer-hdr10': {
+        storageKey: SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
+        defaultValue: DEFAULT_SETTINGS.playback.preferHdr10OverDv,
+    },
     'settings-debug-logging': {
         storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
         defaultValue: DEFAULT_SETTINGS.developer.debugLogging,
@@ -149,6 +157,14 @@ export class SettingsScreen {
     private _buildSections(): SettingsSectionConfig[] {
         const nowPlayingAutoHide = this._loadClampedNowPlayingAutoHide();
         const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
+        const keepPlayingInSettings = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
+            DEFAULT_SETTINGS.playback.keepPlayingInSettings
+        );
+        const preferHdr10OverDv = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
+            DEFAULT_SETTINGS.playback.preferHdr10OverDv
+        );
         const subtitlesEnabled = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
             DEFAULT_SETTINGS.subtitles.enabled
@@ -185,6 +201,27 @@ export class SettingsScreen {
                         ),
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK, value),
+                    },
+                ],
+            },
+            {
+                title: 'Playback',
+                items: [
+                    {
+                        id: 'settings-keep-playing',
+                        label: 'Keep Playback Running in Settings',
+                        description: 'Avoid pausing video when opening Settings (uses more CPU/GPU)',
+                        value: keepPlayingInSettings,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, value),
+                    },
+                    {
+                        id: 'settings-prefer-hdr10',
+                        label: 'Prefer HDR10 over Dolby Vision',
+                        description: 'Use HDR10 when available to avoid Dolby Vision artifacts',
+                        value: preferHdr10OverDv,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV, value),
                     },
                 ],
             },

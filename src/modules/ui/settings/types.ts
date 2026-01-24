@@ -15,6 +15,16 @@ export interface AudioSettings {
 }
 
 /**
+ * Playback settings configuration.
+ */
+export interface PlaybackSettings {
+    /** Keep playback running when opening settings */
+    keepPlayingInSettings: boolean;
+    /** Prefer HDR10 over Dolby Vision when possible */
+    preferHdr10OverDv: boolean;
+}
+
+/**
  * Display settings configuration.
  */
 export interface DisplaySettings {
@@ -55,6 +65,7 @@ export interface SubtitleSettings {
  */
 export interface SettingsConfig {
     audio: AudioSettings;
+    playback: PlaybackSettings;
     display: DisplaySettings;
     developer: DeveloperSettings;
     subtitles: SubtitleSettings;

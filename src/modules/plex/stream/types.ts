@@ -208,6 +208,10 @@ export interface StreamDecision {
         width: number;
         height: number;
         bitrate: number;
+        hdr?: string;
+        dynamicRange?: string;
+        doviPresent?: boolean;
+        doviProfile?: string;
     };
 
     /**

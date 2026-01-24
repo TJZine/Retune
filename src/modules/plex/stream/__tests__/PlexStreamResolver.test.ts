@@ -7,6 +7,7 @@ import { PlexStreamResolver } from '../PlexStreamResolver';
 import { PROGRESS_TIMEOUT_MS } from '../constants';
 import type { PlexStreamResolverConfig } from '../interfaces';
 import type { PlexMediaItem, PlexMediaFile, PlexStream } from '../types';
+import { RETUNE_STORAGE_KEYS } from '../../../../config/storageKeys';
 
 // ============================================
 // Test Helpers
@@ -322,6 +323,85 @@ describe('PlexStreamResolver', () => {
             expect(decision.protocol).toBe('http');
             expect(decision.playbackUrl).toContain('/library/parts/');
             expect(decision.playbackUrl).toContain('X-Plex-Token=mock-token');
+        });
+
+        it('prefers non-DV media when HDR10 preference is enabled', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((key: string) =>
+                        key === RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const dvItem = createMockMediaItem();
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvItem.media[0]!.width = 3840;
+            dvItem.media[0]!.height = 2160;
+
+            const restStream = {
+                ...(dvItem.media[0]!.parts[0]!.streams[0] as PlexStream),
+            };
+            delete restStream.displayTitle;
+            delete restStream.extendedDisplayTitle;
+            const hdr10Media: PlexMediaFile = {
+                ...dvItem.media[0]!,
+                id: 'media-hdr10',
+                width: 1920,
+                height: 1080,
+                parts: [
+                    {
+                        ...dvItem.media[0]!.parts[0]!,
+                        streams: [
+                            {
+                                ...restStream,
+                                doviPresent: false,
+                                hdr: 'HDR10',
+                            },
+                            dvItem.media[0]!.parts[0]!.streams[1] as PlexStream,
+                        ],
+                    },
+                ],
+            };
+
+            const mockItem = { ...dvItem, media: [dvItem.media[0]!, hdr10Media] };
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(mockItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.source?.hdr).toBe('HDR10');
+        });
+
+        it('forces transcode for DV when preference is enabled and only DV media exists', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((key: string) =>
+                        key === RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const dvItem = createMockMediaItem();
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.directPlay?.allowed).toBe(false);
+            expect(decision.directPlay?.reasons).toContain('prefer_hdr10_over_dv');
         });
 
         it('should return transcode URL for incompatible content', async () => {

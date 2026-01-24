@@ -33,6 +33,8 @@ type PlexStreamMinimal = {
     selected?: boolean;
     default?: boolean;
     title?: string;
+    displayTitle?: string;
+    extendedDisplayTitle?: string;
     language?: string;
     languageCode?: string;
     codec?: string;
@@ -44,6 +46,8 @@ type PlexStreamMinimal = {
     colorPrimaries?: string;
     bitDepth?: number;
     dynamicRange?: string;
+    doviProfile?: string;
+    doviPresent?: boolean;
 };
 
 /**
@@ -544,8 +548,11 @@ export class ContentResolver {
         const videoStream = streams.find((stream) => stream.streamType === 1);
         const hdr = this._detectHdrFromStream(videoStream);
         if (hdr) mediaInfo.hdr = hdr;
-        if (hdr === 'Dolby Vision' && videoStream?.profile) {
-            mediaInfo.dvProfile = videoStream.profile;
+        if (hdr === 'Dolby Vision') {
+            const dvProfile = videoStream?.doviProfile ?? videoStream?.profile;
+            if (dvProfile) {
+                mediaInfo.dvProfile = dvProfile;
+            }
         }
 
         const audioStream = this._selectAudioStream(streams);
@@ -579,13 +586,22 @@ export class ContentResolver {
     private _detectHdrFromStream(stream?: PlexStreamMinimal): string | undefined {
         if (!stream) return undefined;
         const normalizedTitle = stream.title?.toLowerCase() ?? '';
+        const normalizedDisplay = stream.displayTitle?.toLowerCase() ?? '';
+        const normalizedExtended = stream.extendedDisplayTitle?.toLowerCase() ?? '';
         const normalizedHdr = stream.hdr?.toLowerCase() ?? '';
+        const normalizedRange = stream.dynamicRange?.toLowerCase() ?? '';
         const normalizedColorTrc = stream.colorTrc?.toLowerCase() ?? '';
+        const combined = `${normalizedTitle} ${normalizedDisplay} ${normalizedExtended} ${normalizedHdr} ${normalizedRange}`.trim();
 
-        if (normalizedTitle.includes('dolby vision')) return 'Dolby Vision';
-        if (normalizedTitle.includes('hdr10+') || normalizedHdr.includes('hdr10+')) return 'HDR10+';
-        if (normalizedTitle.includes('hdr10') || normalizedColorTrc === 'smpte2084') return 'HDR10';
-        if (normalizedColorTrc === 'arib-std-b67') return 'HLG';
+        const doviPresent = stream.doviPresent === true
+            || (typeof stream.doviProfile === 'string' && stream.doviProfile.length > 0)
+            || combined.includes('dolby vision')
+            || combined.includes('dovi');
+
+        if (doviPresent) return 'Dolby Vision';
+        if (combined.includes('hdr10+') || normalizedHdr.includes('hdr10+')) return 'HDR10+';
+        if (combined.includes('hdr10') || normalizedColorTrc === 'smpte2084') return 'HDR10';
+        if (combined.includes('hlg') || normalizedColorTrc === 'arib-std-b67') return 'HLG';
         return undefined;
     }
 

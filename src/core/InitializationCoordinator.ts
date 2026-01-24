@@ -25,6 +25,8 @@ import type { IEPGComponent } from '../modules/ui/epg';
 import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
 import type { IPlaybackOptionsModal } from '../modules/ui/playback-options';
 import type { IDisposable } from '../utils/interfaces';
+import { isStoredTrue, safeLocalStorageGet } from '../utils/storage';
+import { RETUNE_STORAGE_KEYS } from '../config/storageKeys';
 import type { OrchestratorConfig, ModuleStatus } from '../Orchestrator';
 
 // ============================================
@@ -236,13 +238,13 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                     if (shouldRunAudioSetup && shouldRunSetup) {
                         // First-time user: audio setup → channel setup
                         console.warn('[InitializationCoordinator] Audio setup required. Navigating to audio setup wizard.');
-                        this._deps.navigation.goTo('audio-setup');
+                        this._deps.navigation.replaceScreen('audio-setup');
                     } else if (shouldRunSetup) {
                         console.warn('[InitializationCoordinator] Channel setup required. Navigating to setup wizard.');
-                        this._deps.navigation.goTo('channel-setup');
+                        this._deps.navigation.replaceScreen('channel-setup');
                     } else {
                         console.warn('[InitializationCoordinator] Navigating to player');
-                        this._deps.navigation.goTo('player');
+                        this._deps.navigation.replaceScreen('player');
                         if (this._deps.channelManager) {
                             console.warn('[InitializationCoordinator] Switching to current channel');
 
@@ -549,6 +551,10 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                 Date.now() - startTime
             );
         }
+
+        if (this._isDebugLoggingEnabled()) {
+            console.warn('[InitializationCoordinator] Phase 4 complete');
+        }
     }
 
     /**
@@ -714,5 +720,13 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             });
         });
         this._serverResumeDisposable = disposable;
+    }
+
+    private _isDebugLoggingEnabled(): boolean {
+        try {
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
+        } catch {
+            return false;
+        }
     }
 }

@@ -399,6 +399,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             part.streams,
             request.audioStreamId
         );
+        const videoStream = part.streams.find((s) => s.streamType === 1) ?? null;
         // Subtitles are not user-selectable in Retune yet; do not auto-select defaults.
         // This prevents accidental burn-in which forces video transcoding.
         const subtitleStream =
@@ -543,6 +544,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
 
             const canDirect = directDecision.canDirect;
+            const preferHdr10 = this._shouldPreferHdr10OverDv();
+            const isDolbyVision = this._detectHdrLabelFromStream(videoStream) === 'Dolby Vision';
+            const forceTranscodeForDv = preferHdr10 && isDolbyVision;
             const debugEnabled = ((): boolean => {
                 try {
                     return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
@@ -558,6 +562,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 }
                 if (!directDecision.canDirect) {
                     reasons.push(...directDecision.reasons);
+                }
+                if (forceTranscodeForDv) {
+                    reasons.push('prefer_hdr10_over_dv');
                 }
                 if (reasons.length > 0) {
                     console.warn('[PlexStreamResolver] Direct play decision:', {
@@ -580,7 +587,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             let audioCodec: string;
             let transcodeRequestInfo: StreamDecision['transcodeRequest'] | null = null;
 
-            if (canDirect && request.directPlay !== false) {
+            const allowDirectPlay = canDirect && request.directPlay !== false && !forceTranscodeForDv;
+            if (allowDirectPlay) {
                 // Direct play
                 playbackUrl = this._buildDirectPlayUrl(part.key, sessionId, directPlayAudioStreamId);
                 protocol = 'http';
@@ -622,6 +630,24 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 session.durationMs = item.durationMs;
             }
 
+            const hdrLabel = ((): string | undefined => {
+                const raw = videoStream?.hdr?.trim();
+                if (raw) return raw;
+                return this._detectHdrLabelFromStream(videoStream);
+            })();
+            const source: NonNullable<StreamDecision['source']> = {
+                container: media.container,
+                videoCodec: media.videoCodec,
+                audioCodec: media.audioCodec,
+                width: media.width,
+                height: media.height,
+                bitrate: media.bitrate,
+                ...(hdrLabel ? { hdr: hdrLabel } : {}),
+                ...(videoStream?.dynamicRange ? { dynamicRange: videoStream.dynamicRange } : {}),
+                ...(typeof videoStream?.doviPresent === 'boolean' ? { doviPresent: videoStream.doviPresent } : {}),
+                ...(videoStream?.doviProfile ? { doviProfile: videoStream.doviProfile } : {}),
+            };
+
             const decision: StreamDecision = {
                 playbackUrl,
                 protocol,
@@ -641,21 +667,15 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 bitrate: isTranscoding
                     ? (typeof request.maxBitrate === 'number' ? request.maxBitrate : 8000)
                     : media.bitrate,
-                source: {
-                    container: media.container,
-                    videoCodec: media.videoCodec,
-                    audioCodec: media.audioCodec,
-                    width: media.width,
-                    height: media.height,
-                    bitrate: media.bitrate,
-                },
+                source,
                 directPlay: {
-                    allowed: canDirect && request.directPlay !== false,
+                    allowed: allowDirectPlay,
                     reasons:
-                        canDirect && request.directPlay !== false
+                        allowDirectPlay
                             ? []
                             : [
                                 ...(request.directPlay === false ? ['direct_play_disabled_by_request'] : []),
+                                ...(forceTranscodeForDv ? ['prefer_hdr10_over_dv'] : []),
                                 ...directDecision.reasons,
                             ],
                 },
@@ -665,6 +685,18 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
             if (transcodeRequestInfo) {
                 decision.transcodeRequest = transcodeRequestInfo;
+            }
+
+            if (this._isDebugLoggingEnabled()) {
+                const hdrLabel = this._detectHdrLabelFromStream(videoStream);
+                console.warn('[PlexStreamResolver] Stream decision summary:', {
+                    itemKey: request.itemKey,
+                    isDirectPlay: decision.isDirectPlay,
+                    isTranscoding: decision.isTranscoding,
+                    hdr: hdrLabel,
+                    doviPresent: videoStream?.doviPresent ?? null,
+                    doviProfile: videoStream?.doviProfile ?? null,
+                });
             }
 
             return decision;
@@ -1605,6 +1637,15 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
         }
 
+        if (this._shouldPreferHdr10OverDv()) {
+            const nonDvCandidates = candidates.filter((media) => !this._isDolbyVisionMedia(media));
+            if (nonDvCandidates.length > 0) {
+                candidates = nonDvCandidates;
+            } else if (this._isDebugLoggingEnabled()) {
+                console.warn('[PlexStreamResolver] HDR10 preference enabled but no non-DV media found.');
+            }
+        }
+
         // Prefer highest resolution
         const sorted = [...candidates].sort((a, b) =>
             (b.width * b.height) - (a.width * a.height)
@@ -1720,6 +1761,50 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         return fallback || defaultTrack; // Use fallback if found, otherwise stick with default
+    }
+
+    private _shouldPreferHdr10OverDv(): boolean {
+        try {
+            return readStoredBoolean(RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV, false);
+        } catch {
+            return false;
+        }
+    }
+
+    private _isDolbyVisionMedia(media: PlexMediaFile): boolean {
+        const stream = media.parts?.[0]?.streams?.find((s) => s.streamType === 1);
+        const hdrLabel = this._detectHdrLabelFromStream(stream ?? undefined);
+        return hdrLabel === 'Dolby Vision';
+    }
+
+    private _detectHdrLabelFromStream(stream?: PlexStream | null): string | undefined {
+        if (!stream) return undefined;
+        const normalizedTitle = stream.title?.toLowerCase() ?? '';
+        const normalizedDisplay = stream.displayTitle?.toLowerCase() ?? '';
+        const normalizedExtended = stream.extendedDisplayTitle?.toLowerCase() ?? '';
+        const normalizedHdr = stream.hdr?.toLowerCase() ?? '';
+        const normalizedRange = stream.dynamicRange?.toLowerCase() ?? '';
+        const normalizedColorTrc = stream.colorTrc?.toLowerCase() ?? '';
+        const combined = `${normalizedTitle} ${normalizedDisplay} ${normalizedExtended} ${normalizedHdr} ${normalizedRange}`.trim();
+
+        const doviPresent = stream.doviPresent === true
+            || (typeof stream.doviProfile === 'string' && stream.doviProfile.length > 0)
+            || combined.includes('dolby vision')
+            || combined.includes('dovi');
+
+        if (doviPresent) return 'Dolby Vision';
+        if (combined.includes('hdr10+') || normalizedHdr.includes('hdr10+')) return 'HDR10+';
+        if (combined.includes('hdr10') || normalizedColorTrc === 'smpte2084') return 'HDR10';
+        if (combined.includes('hlg') || normalizedColorTrc === 'arib-std-b67') return 'HLG';
+        return undefined;
+    }
+
+    private _isDebugLoggingEnabled(): boolean {
+        try {
+            return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
+        } catch {
+            return false;
+        }
     }
 
     private _isTrueHdCodec(codec: string | null | undefined): boolean {
