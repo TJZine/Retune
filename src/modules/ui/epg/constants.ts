@@ -42,6 +42,7 @@ export const EPG_CONSTANTS = {
 export const EPG_CLASSES = {
     CONTAINER: 'epg-container',
     CONTAINER_VISIBLE: 'visible',
+    CONTAINER_PEEK: 'peek',
     GRID: 'epg-grid',
     CHANNEL_LIST: 'epg-channel-list',
     CHANNEL_ROW: 'epg-channel-row',

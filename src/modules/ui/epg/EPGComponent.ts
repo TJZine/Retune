@@ -72,6 +72,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private _onVisibilityChange = (): void => {
         if (!this.state.isVisible) return;
         if (document.visibilityState === 'visible') {
+            this.syncPeekMode();
             this.refreshCurrentTime();
             this.renderGrid();
         }
@@ -153,6 +154,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (this.containerElement) {
             this.containerElement.innerHTML = '';
             this.containerElement.classList.remove(EPG_CLASSES.CONTAINER_VISIBLE);
+            this.containerElement.classList.remove(EPG_CLASSES.CONTAINER_PEEK);
         }
 
         this.containerElement = null;
@@ -286,6 +288,15 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     // Visibility Methods
     // ============================================
 
+    private syncPeekMode(): void {
+        if (!this.containerElement) return;
+        if (this.config.isVideoPlaying?.() === true) {
+            this.containerElement.classList.add(EPG_CLASSES.CONTAINER_PEEK);
+        } else {
+            this.containerElement.classList.remove(EPG_CLASSES.CONTAINER_PEEK);
+        }
+    }
+
     /**
      * Show the EPG overlay.
      */
@@ -295,6 +306,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.containerElement.classList.add(EPG_CLASSES.CONTAINER_VISIBLE);
         this.state.isVisible = true;
         this.lastVisibleRangeKey = null;
+        this.syncPeekMode();
 
         // Start time indicator updates (paused when hidden)
         this.startTimeUpdateInterval();
@@ -352,6 +364,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         this.containerElement.classList.remove(EPG_CLASSES.CONTAINER_VISIBLE);
         this.state.isVisible = false;
+        this.syncPeekMode();
+        this.containerElement.classList.remove(EPG_CLASSES.CONTAINER_PEEK);
 
         // Stop time updates when hidden (CPU optimization)
         this.stopTimeUpdateInterval();

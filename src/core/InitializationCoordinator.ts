@@ -583,6 +583,7 @@ export class InitializationCoordinator implements IInitializationCoordinator {
                     if (!pathOrUrl) return null;
                     return this._callbacks.buildPlexResourceUrl(pathOrUrl);
                 },
+                isVideoPlaying: (): boolean => this._deps.videoPlayer?.isPlaying?.() ?? false,
             };
             this._deps.epg!.initialize(epgConfigWithResolver);
             this._callbacks.updateModuleStatus(

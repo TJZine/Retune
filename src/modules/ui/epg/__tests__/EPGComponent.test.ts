@@ -8,12 +8,44 @@
 
 import { EPGComponent } from '../EPGComponent';
 import { EPG_CLASSES } from '../constants';
-import type { ScheduledProgram, ScheduleWindow, ChannelConfig } from '../types';
+import type { ScheduledProgram, ScheduleWindow, ChannelConfig, EPGConfig } from '../types';
 
 describe('EPGComponent', () => {
     let epg: EPGComponent;
     let container: HTMLElement;
     let gridAnchorTime = 0;
+
+    const createEpgInstance = (overrides: { containerId?: string; isVideoPlaying?: () => boolean } = {}): {
+        epg: EPGComponent;
+        container: HTMLElement;
+    } => {
+        const instanceContainer = document.createElement('div');
+        instanceContainer.id = overrides.containerId ?? 'epg-container';
+        document.body.appendChild(instanceContainer);
+
+        const instance = new EPGComponent();
+        const config: EPGConfig = {
+            containerId: instanceContainer.id,
+            visibleChannels: 5,
+            timeSlotMinutes: 30,
+            visibleHours: 3,
+            totalHours: 24,
+            pixelsPerMinute: 4,
+            autoFitPixelsPerMinute: false,
+            rowHeight: 80,
+            showCurrentTimeIndicator: true,
+            autoScrollToNow: false,
+            resolveThumbUrl: (url) => url,
+        };
+
+        if (overrides.isVideoPlaying) {
+            config.isVideoPlaying = overrides.isVideoPlaying;
+        }
+
+        instance.initialize(config);
+
+        return { epg: instance, container: instanceContainer };
+    };
 
     const createMockChannel = (index: number): ChannelConfig => ({
         id: `ch${index}`,
@@ -117,24 +149,9 @@ describe('EPGComponent', () => {
     };
 
     beforeEach(() => {
-        container = document.createElement('div');
-        container.id = 'epg-container';
-        document.body.appendChild(container);
-
-        epg = new EPGComponent();
-        epg.initialize({
-            containerId: 'epg-container',
-            visibleChannels: 5,
-            timeSlotMinutes: 30,
-            visibleHours: 3,
-            totalHours: 24,
-            pixelsPerMinute: 4,
-            autoFitPixelsPerMinute: false,
-            rowHeight: 80,
-            showCurrentTimeIndicator: true,
-            autoScrollToNow: false,
-            resolveThumbUrl: (url) => url,
-        });
+        const created = createEpgInstance();
+        epg = created.epg;
+        container = created.container;
 
         gridAnchorTime = epg.getState().viewWindow.startTime;
     });
@@ -238,6 +255,54 @@ describe('EPGComponent', () => {
             const titles = Array.from(container.querySelectorAll('.epg-cell-title'))
                 .map((el) => el.textContent);
             expect(titles).toContain('Loading...');
+        });
+    });
+
+    describe('peek mode', () => {
+        it('adds peek class when video playing', () => {
+            const { epg: localEpg, container: localContainer } = createEpgInstance({
+                containerId: 'epg-container-peek-playing',
+                isVideoPlaying: () => true,
+            });
+
+            try {
+                localEpg.show();
+                expect(localContainer.classList.contains(EPG_CLASSES.CONTAINER_PEEK)).toBe(true);
+            } finally {
+                localEpg.destroy();
+                localContainer.remove();
+            }
+        });
+
+        it('does not add peek class when not playing', () => {
+            const { epg: localEpg, container: localContainer } = createEpgInstance({
+                containerId: 'epg-container-peek-stopped',
+                isVideoPlaying: () => false,
+            });
+
+            try {
+                localEpg.show();
+                expect(localContainer.classList.contains(EPG_CLASSES.CONTAINER_PEEK)).toBe(false);
+            } finally {
+                localEpg.destroy();
+                localContainer.remove();
+            }
+        });
+
+        it('removes peek class on hide', () => {
+            const { epg: localEpg, container: localContainer } = createEpgInstance({
+                containerId: 'epg-container-peek-hide',
+                isVideoPlaying: () => true,
+            });
+
+            try {
+                localEpg.show();
+                localEpg.hide();
+                expect(localContainer.classList.contains(EPG_CLASSES.CONTAINER_PEEK)).toBe(false);
+            } finally {
+                localEpg.destroy();
+                localContainer.remove();
+            }
         });
     });
 
