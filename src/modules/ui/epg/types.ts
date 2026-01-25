@@ -237,6 +237,8 @@ export type CellRenderData =
         isPartial: boolean;
         /** Whether program is currently airing */
         isCurrent: boolean;
+        /** Whether program has ended */
+        isPast: boolean;
         /** DOM element reference */
         cellElement: HTMLElement | null;
     }
@@ -261,6 +263,8 @@ export type CellRenderData =
         isPartial: boolean;
         /** Whether program is currently airing */
         isCurrent: boolean;
+        /** Placeholders are never past */
+        isPast: boolean;
         /** DOM element reference */
         cellElement: HTMLElement | null;
     };

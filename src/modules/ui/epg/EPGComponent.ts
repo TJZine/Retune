@@ -323,6 +323,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         // Render immediately on open to avoid a blank guide before first input.
         this.renderGridInternal();
+        this.virtualizer.updateTemporalClasses(this.state.currentTime);
 
         // Auto-focus current program if available.
         if (this.config.autoScrollToNow && !shouldPreserveFocus) {
@@ -507,6 +508,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     refreshCurrentTime(): void {
         this.state.currentTime = Date.now();
         this.updateTimeIndicatorPosition();
+        this.virtualizer.updateTemporalClasses(this.state.currentTime);
     }
 
     /**
@@ -880,7 +882,12 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             return true;
         }
 
-        return false; // At top boundary
+        const lastIndex = this.state.channels.length - 1;
+        if (lastIndex < 0) return false;
+        this.channelList.flashWrapCue();
+        const targetTime = focusedCell.focusTimeMs ?? this.state.focusTimeMs;
+        this.focusProgramAtTime(lastIndex, targetTime);
+        return true;
     }
 
     /**
@@ -897,7 +904,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             return true;
         }
 
-        return false; // At bottom boundary
+        if (channels.length === 0) return false;
+        this.channelList.flashWrapCue();
+        const targetTime = focusedCell.focusTimeMs ?? this.state.focusTimeMs;
+        this.focusProgramAtTime(0, targetTime);
+        return true;
     }
 
     /**

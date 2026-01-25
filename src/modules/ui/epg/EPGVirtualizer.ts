@@ -239,6 +239,7 @@ export class EPGVirtualizer {
             width,
             isPartial: false,
             isCurrent: false,
+            isPast: false,
             cellElement: null,
         }, false);
     }
@@ -324,6 +325,8 @@ export class EPGVirtualizer {
                     }
 
                     const cell = positionCell(program, this.gridAnchorTime, this.config.pixelsPerMinute);
+                    const isCurrent = now >= program.scheduledStartTime && now < program.scheduledEndTime;
+                    const isPast = now >= program.scheduledEndTime;
                     // If the program started before the visible guide window, clip to the left edge (no past).
                     let left = cell.left;
                     let width = cell.width;
@@ -348,7 +351,8 @@ export class EPGVirtualizer {
                         left,
                         width,
                         isPartial,
-                        isCurrent: now >= program.scheduledStartTime && now < program.scheduledEndTime,
+                        isCurrent,
+                        isPast,
                         cellElement: null,
                     }, isFocusedCell);
 
@@ -528,7 +532,7 @@ export class EPGVirtualizer {
         element.style.top = '';
 
         // Remove state classes
-        element.classList.remove(EPG_CLASSES.CELL_FOCUSED, EPG_CLASSES.CELL_CURRENT);
+        element.classList.remove(EPG_CLASSES.CELL_FOCUSED, EPG_CLASSES.CELL_CURRENT, EPG_CLASSES.CELL_PAST);
         element.removeAttribute('data-key');
     }
 
@@ -596,6 +600,11 @@ export class EPGVirtualizer {
         if (cellData.isCurrent) {
             element.classList.add(EPG_CLASSES.CELL_CURRENT);
         }
+        if (cellData.isPast) {
+            element.classList.add(EPG_CLASSES.CELL_PAST);
+        } else {
+            element.classList.remove(EPG_CLASSES.CELL_PAST);
+        }
         this.updateLiveBadge(element, cellData.isCurrent);
 
         // Append to grid
@@ -622,7 +631,43 @@ export class EPGVirtualizer {
         } else {
             element.classList.remove(EPG_CLASSES.CELL_CURRENT);
         }
+        if (cellData.isPast) {
+            element.classList.add(EPG_CLASSES.CELL_PAST);
+        } else {
+            element.classList.remove(EPG_CLASSES.CELL_PAST);
+        }
         this.updateLiveBadge(element, cellData.isCurrent);
+    }
+
+    updateTemporalClasses(nowMs: number): void {
+        for (const cellData of this.visibleCells.values()) {
+            const element = cellData.cellElement;
+            if (cellData.kind === 'program') {
+                const isCurrent = nowMs >= cellData.program.scheduledStartTime &&
+                    nowMs < cellData.program.scheduledEndTime;
+                const isPast = nowMs >= cellData.program.scheduledEndTime;
+                cellData.isCurrent = isCurrent;
+                cellData.isPast = isPast;
+                if (element) {
+                    if (isCurrent) {
+                        element.classList.add(EPG_CLASSES.CELL_CURRENT);
+                    } else {
+                        element.classList.remove(EPG_CLASSES.CELL_CURRENT);
+                    }
+                    if (isPast) {
+                        element.classList.add(EPG_CLASSES.CELL_PAST);
+                    } else {
+                        element.classList.remove(EPG_CLASSES.CELL_PAST);
+                    }
+                    this.updateLiveBadge(element, isCurrent);
+                }
+            } else if (element) {
+                cellData.isCurrent = false;
+                cellData.isPast = false;
+                element.classList.remove(EPG_CLASSES.CELL_PAST, EPG_CLASSES.CELL_CURRENT);
+                this.updateLiveBadge(element, false);
+            }
+        }
     }
 
     private updateLiveBadge(element: HTMLElement, isCurrent: boolean): void {

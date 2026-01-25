@@ -7,6 +7,7 @@
  */
 
 import { EPGComponent } from '../EPGComponent';
+import { EPG_CLASSES } from '../constants';
 import type { ScheduledProgram, ScheduleWindow, ChannelConfig } from '../types';
 
 describe('EPGComponent', () => {
@@ -461,14 +462,18 @@ describe('EPGComponent', () => {
             expect(epg.getState().focusedCell!.channelIndex).toBe(1);
         });
 
-        it('should return false at top boundary', () => {
+        it('should wrap to last channel when navigating up from top', () => {
             epg.focusProgram(0, 0); // First channel
-            expect(epg.handleNavigation('up')).toBe(false);
+            const moved = epg.handleNavigation('up');
+            expect(moved).toBe(true);
+            expect(epg.getState().focusedCell!.channelIndex).toBe(2);
         });
 
-        it('should return false at bottom boundary', () => {
+        it('should wrap to first channel when navigating down from bottom', () => {
             epg.focusProgram(2, 0); // Last channel (index 2)
-            expect(epg.handleNavigation('down')).toBe(false);
+            const moved = epg.handleNavigation('down');
+            expect(moved).toBe(true);
+            expect(epg.getState().focusedCell!.channelIndex).toBe(0);
         });
 
         it('should emit focusChange event', () => {
@@ -661,15 +666,18 @@ describe('EPGComponent', () => {
             epg.loadScheduleForChannel('ch0', createMockSchedule('ch0', 10));
             epg.show();
 
-            const header = container.querySelector('.epg-time-header') as HTMLElement;
+            const header = container.querySelector(`.${EPG_CLASSES.TIME_HEADER}`) as HTMLElement;
+            const slots = container.querySelector(`.${EPG_CLASSES.TIME_HEADER_SLOTS}`) as HTMLElement;
             expect(header).not.toBeNull();
+            expect(slots).not.toBeNull();
 
             // Scroll to 2 hours from anchor
             const twoHoursFromAnchor = epg.getState().viewWindow.startTime + (2 * 60 * 60000);
             epg.scrollToTime(twoHoursFromAnchor);
 
-            // Header transform should be updated (negative translateX)
-            expect(header.style.transform).toMatch(/translateX\(-?\d+px\)/);
+            // Slots transform should be updated (negative translateX)
+            expect(slots.style.transform).toMatch(/translateX\(-?\d+px\)/);
+            expect(header.style.transform).toBe('');
             expect(epg.getState().scrollPosition.timeOffset).toBeGreaterThan(0);
         });
 

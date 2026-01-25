@@ -49,12 +49,16 @@ export const EPG_CLASSES = {
     CELL: 'epg-cell',
     CELL_FOCUSED: 'focused',
     CELL_CURRENT: 'current',
+    CELL_PAST: 'past',
     CELL_SHOW: 'epg-cell-show',
     CELL_TITLE: 'epg-cell-title',
     CELL_TIME: 'epg-cell-time',
     TIME_HEADER: 'epg-time-header',
+    TIME_HEADER_SLOTS: 'epg-time-header-slots',
+    TIME_HEADER_STICKY: 'epg-time-header-sticky',
     TIME_SLOT: 'epg-time-slot',
     TIME_INDICATOR: 'epg-time-indicator',
+    TIME_INDICATOR_LABEL: 'epg-time-indicator-label',
     INFO_PANEL: 'epg-info-panel',
     INFO_POSTER: 'epg-info-poster',
     INFO_CONTENT: 'epg-info-content',
@@ -64,6 +68,7 @@ export const EPG_CLASSES = {
     INFO_DESCRIPTION: 'epg-info-description',
     INFO_QUALITY: 'epg-info-quality',
     INFO_QUALITY_BADGE: 'epg-info-quality-badge',
+    CHANNEL_LIST_WRAP_FLASH: 'wrap-flash',
 } as const;
 
 /**

@@ -30,9 +30,12 @@ function formatTimeSlot(timestamp: number): string {
  */
 export class EPGTimeHeader {
     private containerElement: HTMLElement | null = null;
+    private slotsElement: HTMLElement | null = null;
+    private stickyElement: HTMLElement | null = null;
     private config: EPGConfig | null = null;
     private gridAnchorTime: number = 0;
     private slotElements: HTMLElement[] = [];
+    private lastTimeOffsetMinutes: number = 0;
 
     /**
      * Initialize the time header.
@@ -53,7 +56,16 @@ export class EPGTimeHeader {
         this.containerElement.className = EPG_CLASSES.TIME_HEADER;
         parentElement.appendChild(this.containerElement);
 
+        this.slotsElement = document.createElement('div');
+        this.slotsElement.className = EPG_CLASSES.TIME_HEADER_SLOTS;
+        this.containerElement.appendChild(this.slotsElement);
+
+        this.stickyElement = document.createElement('div');
+        this.stickyElement.className = EPG_CLASSES.TIME_HEADER_STICKY;
+        this.containerElement.appendChild(this.stickyElement);
+
         this.renderSlots();
+        this.updateStickyLabel(0);
     }
 
     /**
@@ -64,6 +76,8 @@ export class EPGTimeHeader {
             this.containerElement.remove();
             this.containerElement = null;
         }
+        this.slotsElement = null;
+        this.stickyElement = null;
         this.slotElements = [];
         this.config = null;
     }
@@ -72,9 +86,9 @@ export class EPGTimeHeader {
      * Render time slot labels.
      */
     private renderSlots(): void {
-        if (!this.containerElement || !this.config) return;
+        if (!this.slotsElement || !this.config) return;
 
-        this.containerElement.innerHTML = '';
+        this.slotsElement.innerHTML = '';
         this.slotElements = [];
 
         const totalMinutes = this.config.totalHours * 60;
@@ -84,7 +98,7 @@ export class EPGTimeHeader {
         for (let i = 0; i < slotCount; i++) {
             const slotTime = this.gridAnchorTime + (i * slotMinutes * 60000);
             const slot = this.createSlotElement(slotTime, i * slotMinutes);
-            this.containerElement.appendChild(slot);
+            this.slotsElement.appendChild(slot);
             this.slotElements.push(slot);
         }
     }
@@ -138,14 +152,16 @@ export class EPGTimeHeader {
      * @param timeOffset - Time offset in minutes from anchor
      */
     updateScrollPosition(timeOffset: number): void {
-        if (!this.containerElement || !this.config) return;
+        if (!this.slotsElement || !this.config) return;
 
+        this.lastTimeOffsetMinutes = timeOffset;
         const translateX = -(timeOffset * this.config.pixelsPerMinute);
-        this.containerElement.style.transform = `translateX(${translateX}px)`;
+        this.slotsElement.style.transform = `translateX(${translateX}px)`;
+        this.updateStickyLabel(timeOffset);
 
         appendEpgDebugLog('EPGTimeHeader.scroll', {
             timeOffset,
-            transform: this.containerElement.style.transform,
+            transform: this.slotsElement.style.transform,
         });
     }
 
@@ -186,5 +202,12 @@ export class EPGTimeHeader {
     setGridAnchorTime(anchorTime: number): void {
         this.gridAnchorTime = anchorTime;
         this.renderSlots();
+        this.updateStickyLabel(this.lastTimeOffsetMinutes);
+    }
+
+    private updateStickyLabel(timeOffset: number): void {
+        if (!this.stickyElement || !this.config) return;
+        const timestampMs = this.gridAnchorTime + (timeOffset * 60000);
+        this.stickyElement.textContent = formatTimeSlot(timestampMs);
     }
 }
