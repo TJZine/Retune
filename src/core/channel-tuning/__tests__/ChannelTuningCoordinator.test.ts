@@ -47,6 +47,7 @@ type CoordinatorHarness = {
         getPendingNowPlayingChannelId: jest.Mock<string | null, []>;
         notifyNowPlaying: jest.Mock<void, [unknown]>;
         resetPlaybackGuardsForNewChannel: jest.Mock<void, []>;
+        stopActiveTranscodeSession: jest.Mock<void, []>;
         handleGlobalError: jest.Mock<void, [unknown, string]>;
         saveLifecycleState: jest.Mock<Promise<void>, []>;
     };
@@ -94,6 +95,7 @@ const createCoordinator = (): CoordinatorHarness => {
         getPendingNowPlayingChannelId: jest.fn<string | null, []>().mockReturnValue(null),
         notifyNowPlaying: jest.fn<void, [unknown]>(),
         resetPlaybackGuardsForNewChannel: jest.fn<void, []>(),
+        stopActiveTranscodeSession: jest.fn<void, []>(),
         handleGlobalError: jest.fn<void, [unknown, string]>(),
         saveLifecycleState: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
     };
@@ -124,6 +126,15 @@ describe('ChannelTuningCoordinator', () => {
         expect(deps.setActiveScheduleDayKey).toHaveBeenCalledWith(123);
 
         nowSpy.mockRestore();
+    });
+
+    it('stops any active transcode session when switching channels', async () => {
+        const { coordinator, deps, videoPlayer } = createCoordinator();
+
+        await coordinator.switchToChannel('ch1');
+
+        expect(deps.stopActiveTranscodeSession).toHaveBeenCalledTimes(1);
+        expect(videoPlayer.stop).toHaveBeenCalledTimes(1);
     });
 
     it('propagates ChannelError code + recoverable', async () => {

@@ -236,6 +236,7 @@ const mockPlexStreamResolver = {
         protocol: 'direct',
         mimeType: 'video/mp4',
     }),
+    stopTranscodeSession: jest.fn().mockResolvedValue(undefined),
     on: jest.fn(() => jest.fn()),
 };
 

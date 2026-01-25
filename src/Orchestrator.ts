@@ -582,6 +582,9 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._playbackRecovery?.resetPlaybackFailureGuard();
                 this._playbackRecovery?.resetDirectFallbackAttempts();
             },
+            stopActiveTranscodeSession: (): void => {
+                this._stopActiveTranscodeSession();
+            },
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
             saveLifecycleState: async (): Promise<void> => {
@@ -724,6 +727,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Stop playback (resilient to errors)
         if (this._videoPlayer) {
             try {
+                this._stopActiveTranscodeSession();
                 this._videoPlayer.stop();
             } catch (e) {
                 console.warn('[Orchestrator] stop failed:', e);
@@ -1558,6 +1562,7 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Player ended -> skip to next
         const endedHandler = (): void => {
+            this._stopActiveTranscodeSession();
             if (this._scheduler) {
                 this._scheduler.skipToNext();
             }
@@ -1756,6 +1761,14 @@ export class AppOrchestrator implements IAppOrchestrator {
             console.error('Failed to load stream:', error);
             this._playbackRecovery?.handlePlaybackFailure('programStart', error);
         }
+    }
+
+    private _stopActiveTranscodeSession(): void {
+        const decision = this._currentStreamDecision;
+        if (!decision || !decision.isTranscoding || !decision.sessionId) {
+            return;
+        }
+        this._plexStreamResolver?.stopTranscodeSession(decision.sessionId).catch(() => { /* swallow */ });
     }
 
     private _notifyNowPlaying(program: ScheduledProgram): void {

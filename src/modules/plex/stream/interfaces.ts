@@ -95,6 +95,16 @@ export interface IPlexStreamResolver {
     resolveStream(request: StreamRequest): Promise<StreamDecision>;
 
     // ========================================
+    // Transcode Session Management
+    // ========================================
+
+    /**
+     * Best-effort: stop an active transcode session without reporting progress.
+     * @param sessionId - Plex transcode session identifier
+     */
+    stopTranscodeSession(sessionId: string): Promise<void>;
+
+    // ========================================
     // Direct Play Check
     // ========================================
 

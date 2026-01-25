@@ -691,6 +691,25 @@ describe('PlexStreamResolver', () => {
         });
     });
 
+    describe('stopTranscodeSession', () => {
+        it('should DELETE transcode session when server URI is available', async () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            mockFetch.mockResolvedValue({
+                ok: true,
+                status: 200,
+            });
+
+            await resolver.stopTranscodeSession('sess-1');
+
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/transcode/sessions/sess-1'),
+                expect.objectContaining({ method: 'DELETE' })
+            );
+        });
+    });
+
     // ========================================
     // Mixed Content Handling
     // ========================================

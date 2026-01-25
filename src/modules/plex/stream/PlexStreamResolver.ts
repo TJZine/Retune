@@ -683,6 +683,30 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
     }
 
+    /**
+     * Best-effort: stop an active transcode session without reporting playback progress.
+     * @param sessionId - Plex transcode session identifier
+     */
+    async stopTranscodeSession(sessionId: string): Promise<void> {
+        const serverUri = this._config.getServerUri();
+        if (!serverUri) {
+            return;
+        }
+
+        try {
+            const baseUri = this._selectBaseUriForMixedContent(serverUri);
+            const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(sessionId)}`, baseUri);
+            const response = await this._fetchWithTimeout(
+                stopUrl.toString(),
+                { method: 'DELETE', headers: this._config.getAuthHeaders() },
+                5000
+            );
+            this._throwIfAuthFailure(response);
+        } catch (error) {
+            console.warn('[PlexStreamResolver] Failed to stop transcode session:', error);
+        }
+    }
+
     // ========================================
     // Direct Play Check
     // ========================================
