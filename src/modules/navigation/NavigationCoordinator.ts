@@ -53,6 +53,8 @@ export class NavigationCoordinator {
 
         const unsubs: Array<() => void> = [];
 
+        navigation.handleLongPress('back', () => this._handleLongPressBack());
+
         const keyHandler = (event: KeyEvent): void => {
             this._handleKeyPress(event);
         };
@@ -185,6 +187,18 @@ export class NavigationCoordinator {
         if (to === 'player' && from !== 'player') {
             videoPlayer?.play().catch(console.error);
         }
+    }
+
+    private _handleLongPressBack(): void {
+        const navigation = this.deps.getNavigation();
+        if (!navigation) return;
+        if (navigation.isInputBlocked()) return;
+
+        this.deps.getEpg()?.hide();
+        while (navigation.isModalOpen()) {
+            navigation.closeModal();
+        }
+        navigation.replaceScreen('player');
     }
 
     private _handleKeyPress(event: KeyEvent): void {

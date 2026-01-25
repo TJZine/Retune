@@ -33,6 +33,7 @@ const makeNavigation = (): {
         goTo: jest.fn(),
         replaceScreen: jest.fn(),
         setFocus: jest.fn(),
+        handleLongPress: jest.fn(),
         on: jest.fn(<K extends keyof NavigationEventMap>(
             event: K,
             handler: (payload: NavigationEventMap[K]) => void
@@ -113,6 +114,44 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
 };
 
 describe('NavigationCoordinator', () => {
+    it('registers long-press back handler', () => {
+        const { navigation } = setup();
+
+        expect(navigation.handleLongPress).toHaveBeenCalledWith('back', expect.any(Function));
+    });
+
+    it('long-press back closes EPG, closes modals, and returns to player', () => {
+        const { navigation, epg } = setup();
+        const handleLongPress = navigation.handleLongPress as jest.Mock;
+        const callback = handleLongPress.mock.calls[0]?.[1] as () => void;
+
+        (navigation.isInputBlocked as jest.Mock).mockReturnValue(false);
+        (navigation.isModalOpen as jest.Mock)
+            .mockImplementationOnce(() => true)
+            .mockImplementationOnce(() => true)
+            .mockImplementationOnce(() => false);
+
+        callback();
+
+        expect(epg.hide).toHaveBeenCalledTimes(1);
+        expect(navigation.closeModal).toHaveBeenCalledTimes(2);
+        expect(navigation.replaceScreen).toHaveBeenCalledWith('player');
+    });
+
+    it('long-press back does nothing when input is blocked', () => {
+        const { navigation, epg } = setup();
+        const handleLongPress = navigation.handleLongPress as jest.Mock;
+        const callback = handleLongPress.mock.calls[0]?.[1] as () => void;
+
+        (navigation.isInputBlocked as jest.Mock).mockReturnValue(true);
+
+        callback();
+
+        expect(epg.hide).not.toHaveBeenCalled();
+        expect(navigation.closeModal).not.toHaveBeenCalled();
+        expect(navigation.replaceScreen).not.toHaveBeenCalled();
+    });
+
     it('swallows back when now playing modal open', () => {
         const { handlers, epg } = setup({
             isNowPlayingModalOpen: jest.fn().mockReturnValue(true),

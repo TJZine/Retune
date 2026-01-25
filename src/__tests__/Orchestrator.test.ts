@@ -155,10 +155,12 @@ const mockNavigation = {
     replaceScreen: jest.fn(),
     getCurrentScreen: jest.fn().mockReturnValue('player'),
     isModalOpen: jest.fn().mockReturnValue(false),
+    isInputBlocked: jest.fn().mockReturnValue(false),
     openModal: jest.fn(),
     closeModal: jest.fn(),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
+    handleLongPress: jest.fn(),
     destroy: jest.fn(),
 };
 

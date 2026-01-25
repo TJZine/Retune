@@ -50,6 +50,8 @@ export interface EPGConfig {
     }) => void;
     /** Optional callback to resolve relative Plex thumb paths to absolute URLs */
     resolveThumbUrl?: (pathOrUrl: string | null) => string | null;
+    /** Optional callback to detect if video is currently playing */
+    isVideoPlaying?: () => boolean;
 }
 
 /**

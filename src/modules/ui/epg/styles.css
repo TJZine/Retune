@@ -14,6 +14,16 @@
   overflow: hidden;
 }
 
+.epg-container.peek {
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.78) 35%,
+    rgba(0, 0, 0, 0.92) 60%,
+    rgba(0, 0, 0, 0.96) 100%
+  );
+}
+
 .epg-container.visible {
   display: flex;
 }
