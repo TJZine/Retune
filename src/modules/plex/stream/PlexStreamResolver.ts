@@ -688,6 +688,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
      * @param sessionId - Plex transcode session identifier
      */
     async stopTranscodeSession(sessionId: string): Promise<void> {
+        const trimmedSessionId = sessionId.trim();
+        if (!trimmedSessionId) {
+            return;
+        }
         const serverUri = this._config.getServerUri();
         if (!serverUri) {
             return;
@@ -695,7 +699,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         try {
             const baseUri = this._selectBaseUriForMixedContent(serverUri);
-            const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(sessionId)}`, baseUri);
+            const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(trimmedSessionId)}`, baseUri);
             const response = await this._fetchWithTimeout(
                 stopUrl.toString(),
                 { method: 'DELETE', headers: this._config.getAuthHeaders() },

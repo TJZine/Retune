@@ -599,6 +599,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             getEpg: (): IEPGComponent | null => this._epg,
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
             getPlexAuth: (): IPlexAuth | null => this._plexAuth,
+            stopPlayback: (): void => this._stopPlayback(),
             isNowPlayingModalOpen: (): boolean => {
                 const isOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
                 if (isOpen) {
@@ -727,8 +728,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Stop playback (resilient to errors)
         if (this._videoPlayer) {
             try {
-                this._stopActiveTranscodeSession();
-                this._videoPlayer.stop();
+                this._stopPlayback();
             } catch (e) {
                 console.warn('[Orchestrator] stop failed:', e);
             }
@@ -1769,6 +1769,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             return;
         }
         this._plexStreamResolver?.stopTranscodeSession(decision.sessionId).catch(() => { /* swallow */ });
+    }
+
+    private _stopPlayback(): void {
+        this._stopActiveTranscodeSession();
+        this._videoPlayer?.stop();
     }
 
     private _notifyNowPlaying(program: ScheduledProgram): void {

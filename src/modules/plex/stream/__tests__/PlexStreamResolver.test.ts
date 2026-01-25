@@ -692,6 +692,17 @@ describe('PlexStreamResolver', () => {
     });
 
     describe('stopTranscodeSession', () => {
+        it('should return silently when server URI is unavailable', async () => {
+            const config = createMockConfig({
+                getServerUri: () => null,
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            await resolver.stopTranscodeSession('sess-1');
+
+            expect(mockFetch).not.toHaveBeenCalled();
+        });
+
         it('should DELETE transcode session when server URI is available', async () => {
             const config = createMockConfig();
             const resolver = new PlexStreamResolver(config);
