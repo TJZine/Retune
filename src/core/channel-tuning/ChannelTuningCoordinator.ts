@@ -32,7 +32,7 @@ export interface ChannelTuningCoordinatorDeps {
     notifyNowPlaying: (program: ScheduledProgram) => void;
 
     resetPlaybackGuardsForNewChannel: () => void;
-    stopPlexTimelineReporting: (finalState: 'paused' | 'stopped') => void;
+    stopActiveTranscodeSession: () => void;
 
     handleGlobalError: (error: AppError, context: string) => void;
     saveLifecycleState: () => Promise<void>;
@@ -153,7 +153,7 @@ export class ChannelTuningCoordinator {
             }
 
             // Only stop player after successful content resolution
-            this.deps.stopPlexTimelineReporting('stopped');
+            this.deps.stopActiveTranscodeSession();
             videoPlayer.stop();
             this._triggerChannelSwitchEffect();
 

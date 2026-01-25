@@ -11,6 +11,7 @@ export interface NavigationCoordinatorDeps {
     getEpg: () => IEPGComponent | null;
     getVideoPlayer: () => IVideoPlayer | null;
     getPlexAuth: () => IPlexAuth | null;
+    stopPlayback: () => void;
 
     isNowPlayingModalOpen: () => boolean;
     toggleNowPlayingInfoOverlay: () => void;
@@ -270,7 +271,7 @@ export class NavigationCoordinator {
                 this.deps.getVideoPlayer()?.pause();
                 break;
             case 'stop':
-                this.deps.getVideoPlayer()?.stop();
+                this.deps.stopPlayback();
                 break;
             // Other keys handled by active screen
         }

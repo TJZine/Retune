@@ -82,6 +82,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         getEpg: () => epg,
         getVideoPlayer: () => videoPlayer,
         getPlexAuth: () => plexAuth,
+        stopPlayback: jest.fn(),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),

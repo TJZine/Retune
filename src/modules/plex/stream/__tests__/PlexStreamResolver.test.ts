@@ -4,7 +4,6 @@
  */
 
 import { PlexStreamResolver } from '../PlexStreamResolver';
-import { PROGRESS_TIMEOUT_MS } from '../constants';
 import type { PlexStreamResolverConfig } from '../interfaces';
 import type { PlexMediaItem, PlexMediaFile, PlexStream } from '../types';
 import { RETUNE_STORAGE_KEYS } from '../../../../config/storageKeys';
@@ -692,160 +691,33 @@ describe('PlexStreamResolver', () => {
         });
     });
 
-    // ========================================
-    // updateProgress
-    // ========================================
-
-    describe('updateProgress', () => {
-        it('should POST to timeline endpoint with correct params', async () => {
-            const config = createMockConfig();
+    describe('stopTranscodeSession', () => {
+        it('should return silently when server URI is unavailable', async () => {
+            const config = createMockConfig({
+                getServerUri: () => null,
+            });
             const resolver = new PlexStreamResolver(config);
 
-            // Start a session first
-            await resolver.startSession('12345');
+            await resolver.stopTranscodeSession('sess-1');
 
-            await resolver.updateProgress('session-1', '12345', 60000, 'playing');
-
-            expect(mockFetch).toHaveBeenCalledWith(
-                expect.stringContaining('/:/timeline'),
-                expect.objectContaining({
-                    method: 'POST',
-                })
-            );
-
-            const callUrl = mockFetch.mock.calls[0]![0] as string;
-            expect(callUrl).toContain('time=60000');
-            expect(callUrl).toContain('state=playing');
-            expect(callUrl).toContain('ratingKey=12345');
+            expect(mockFetch).not.toHaveBeenCalled();
         });
 
-        // ========================================
-        // STREAM-002: Progress Timeout Tests
-        // ========================================
-
-        it('should emit progressTimeout when request exceeds budget', async () => {
-            jest.useFakeTimers();
+        it('should DELETE transcode session when server URI is available', async () => {
             const config = createMockConfig();
             const resolver = new PlexStreamResolver(config);
 
-            const timeoutHandler = jest.fn();
-            resolver.on('progressTimeout', timeoutHandler);
-
-            mockFetch.mockImplementation((_url: string, options: RequestInit) => {
-                return new Promise((_resolve, reject) => {
-                    if (options.signal) {
-                        options.signal.addEventListener('abort', () => {
-                            const abortError = new Error('The operation was aborted');
-                            abortError.name = 'AbortError';
-                            reject(abortError);
-                        });
-                    }
-                });
-            });
-
-            // Start session and call updateProgress
-            const sessionId = await resolver.startSession('12345');
-            const progressPromise = resolver.updateProgress(sessionId, '12345', 60000, 'playing');
-            await jest.advanceTimersByTimeAsync(PROGRESS_TIMEOUT_MS + 1);
-            await progressPromise;
-
-            expect(timeoutHandler).toHaveBeenCalledWith({
-                sessionId,
-                itemKey: '12345',
-            });
-            jest.useRealTimers();
-        });
-
-        it('should not emit progressTimeout when request succeeds within budget', async () => {
-            const config = createMockConfig();
-            const resolver = new PlexStreamResolver(config);
-
-            // Mock fetch that resolves immediately
             mockFetch.mockResolvedValue({
                 ok: true,
                 status: 200,
-                json: async () => ({}),
             });
 
-            const timeoutHandler = jest.fn();
-            resolver.on('progressTimeout', timeoutHandler);
+            await resolver.stopTranscodeSession('sess-1');
 
-            const sessionId = await resolver.startSession('12345');
-            await resolver.updateProgress(sessionId, '12345', 60000, 'playing');
-
-            expect(timeoutHandler).not.toHaveBeenCalled();
-        });
-
-        it('should not emit progressTimeout on non-abort failures', async () => {
-            const config = createMockConfig();
-            const resolver = new PlexStreamResolver(config);
-            const timeoutHandler = jest.fn();
-
-            resolver.on('progressTimeout', timeoutHandler);
-            mockFetch.mockRejectedValue(new Error('Network down'));
-
-            const sessionId = await resolver.startSession('12345');
-            await resolver.updateProgress(sessionId, '12345', 60000, 'playing');
-
-            expect(timeoutHandler).not.toHaveBeenCalled();
-        });
-    });
-
-    // ========================================
-    // Session Management
-    // ========================================
-
-    describe('session management', () => {
-        it('should emit sessionStart event when session starts', async () => {
-            const config = createMockConfig();
-            const resolver = new PlexStreamResolver(config);
-            const handler = jest.fn();
-
-            resolver.on('sessionStart', handler);
-            const sessionId = await resolver.startSession('12345');
-
-            expect(handler).toHaveBeenCalledWith({
-                sessionId,
-                itemKey: '12345',
-            });
-        });
-
-        it('should emit sessionEnd event when session ends', async () => {
-            const config = createMockConfig();
-            const resolver = new PlexStreamResolver(config);
-            const handler = jest.fn();
-
-            resolver.on('sessionEnd', handler);
-            const sessionId = await resolver.startSession('12345');
-            await resolver.endSession(sessionId, '12345');
-
-            expect(handler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sessionId,
-                    itemKey: '12345',
-                })
+            expect(mockFetch).toHaveBeenCalledWith(
+                expect.stringContaining('/transcode/sessions/sess-1'),
+                expect.objectContaining({ method: 'DELETE' })
             );
-        });
-
-        it('should stop transcode on session end', async () => {
-            const mockItem = createMockMediaItem({
-                container: 'avi', // Force transcoding
-                videoCodec: 'mpeg4',
-            });
-            const config = createMockConfig({
-                getItem: jest.fn().mockResolvedValue(mockItem),
-            });
-            const resolver = new PlexStreamResolver(config);
-
-            const decision = await resolver.resolveStream({ itemKey: '12345' });
-            await resolver.endSession(decision.sessionId, '12345');
-
-            // Should have called DELETE /transcode/sessions/{sessionId}
-            const stopCall = mockFetch.mock.calls.find((call) =>
-                (call[0] as string).includes('transcode/sessions/')
-            );
-            expect(stopCall).toBeDefined();
-            expect(stopCall![1]).toMatchObject({ method: 'DELETE' });
         });
     });
 
