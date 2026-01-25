@@ -119,12 +119,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
      * @param program - Program to display
      */
     show(program: ScheduledProgram): void {
-        if (!this.containerElement) return;
-
-        this.currentProgram = program;
-        this.updateContent(program);
-        this.containerElement.style.display = 'flex';
-        this.isVisible = true;
+        this.updateFull(program);
     }
 
     /**
@@ -144,32 +139,49 @@ export class EPGInfoPanel implements IEPGInfoPanel {
      * @param program - Program to display
      */
     update(program: ScheduledProgram): void {
-        // Delegate to show() which handles content update and visibility
-        this.show(program);
+        this.updateFull(program);
     }
 
     /**
-     * Update the content of the info panel.
+     * Update the info panel quickly (without poster/description).
+     *
+     * @param program - Program to display
      */
-    private updateContent(program: ScheduledProgram): void {
+    updateFast(program: ScheduledProgram): void {
+        if (!this.containerElement) return;
+
+        this.currentProgram = program;
+        this.updateContentFast(program);
+        this.containerElement.style.display = 'flex';
+        this.isVisible = true;
+    }
+
+    /**
+     * Update the info panel fully (including poster/description).
+     *
+     * @param program - Program to display
+     */
+    updateFull(program: ScheduledProgram): void {
+        if (!this.containerElement) return;
+
+        this.currentProgram = program;
+        this.updateContentFull(program);
+        this.containerElement.style.display = 'flex';
+        this.isVisible = true;
+    }
+
+    /**
+     * Update the content of the info panel (fast path).
+     */
+    private updateContentFast(program: ScheduledProgram): void {
         if (!this.containerElement) return;
 
         const { item } = program;
 
-        // Update poster: use resolver if available, otherwise validate URL scheme
+        // Hide poster during fast nav without touching src (avoid churn)
         const poster = this.posterElement;
-        if (poster) {
-            // Use resolver callback to convert relative Plex paths to absolute URLs
-            const resolvedUrl = this.thumbResolver?.(item.thumb) ?? null;
-            if (resolvedUrl) {
-                poster.src = resolvedUrl;
-                poster.alt = item.title;
-                poster.style.display = 'block';
-            } else {
-                // Hide poster when unresolved (prevents file:/// errors on webOS)
-                poster.src = '';
-                poster.style.display = 'none';
-            }
+        if (poster && poster.style.display !== 'none') {
+            poster.style.display = 'none';
         }
 
         // Update title
@@ -199,12 +211,10 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             genres.style.display = genreText ? 'block' : 'none';
         }
 
-        // Update description
+        // Hide description during fast nav without updating text
         const description = this.descriptionElement;
-        if (description) {
-            const summary = item.summary?.trim() ?? '';
-            description.textContent = summary;
-            description.style.display = summary ? 'block' : 'none';
+        if (description && description.style.display !== 'none') {
+            description.style.display = 'none';
         }
 
         // Update quality badges
@@ -230,6 +240,41 @@ export class EPGInfoPanel implements IEPGInfoPanel {
                 badge.textContent = '';
                 badge.style.display = 'none';
             }
+        }
+    }
+
+    /**
+     * Update the content of the info panel (full).
+     */
+    private updateContentFull(program: ScheduledProgram): void {
+        if (!this.containerElement) return;
+
+        this.updateContentFast(program);
+
+        const { item } = program;
+
+        // Update poster: use resolver if available, otherwise validate URL scheme
+        const poster = this.posterElement;
+        if (poster) {
+            // Use resolver callback to convert relative Plex paths to absolute URLs
+            const resolvedUrl = this.thumbResolver?.(item.thumb) ?? null;
+            if (resolvedUrl) {
+                poster.src = resolvedUrl;
+                poster.alt = item.title;
+                poster.style.display = 'block';
+            } else {
+                // Hide poster when unresolved (prevents file:/// errors on webOS)
+                poster.src = '';
+                poster.style.display = 'none';
+            }
+        }
+
+        // Update description
+        const description = this.descriptionElement;
+        if (description) {
+            const summary = item.summary?.trim() ?? '';
+            description.textContent = summary;
+            description.style.display = summary ? 'block' : 'none';
         }
     }
 

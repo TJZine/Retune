@@ -189,4 +189,16 @@ export interface IEPGInfoPanel {
      * @param program - Program to display
      */
     update(program: ScheduledProgram): void;
+
+    /**
+     * Fast update without poster/description.
+     * @param program - Program to display
+     */
+    updateFast(program: ScheduledProgram): void;
+
+    /**
+     * Full update including poster/description.
+     * @param program - Program to display
+     */
+    updateFull(program: ScheduledProgram): void;
 }

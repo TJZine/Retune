@@ -92,9 +92,9 @@
         rgba(51, 255, 102, 0.25),
         rgba(255, 204, 0, 0.1)
     );
-    box-shadow:
-        0 0 0 2px var(--color-primary),
-        0 0 12px rgba(51, 255, 102, 0.25);
+    box-shadow: none;
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
     border-left-color: var(--color-accent);
 }
 
