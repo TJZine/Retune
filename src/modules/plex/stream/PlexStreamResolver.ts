@@ -11,8 +11,6 @@ import type {
     PlexStreamResolverConfig,
     StreamResolverError,
     StreamResolverEventMap,
-    SessionStartPayload,
-    SessionEndPayload,
 } from './interfaces';
 import type {
     PlexMediaItem,
@@ -21,8 +19,6 @@ import type {
     StreamRequest,
     StreamDecision,
     HlsOptions,
-    PlaybackSession,
-    StreamResolverState,
 } from './types';
 import { PlexStreamErrorCode } from './types';
 import {
@@ -30,7 +26,6 @@ import {
     SUPPORTED_VIDEO_CODECS,
     SUPPORTED_AUDIO_CODECS,
     MAX_RESOLUTION,
-    PROGRESS_TIMEOUT_MS,
     BURN_IN_SUBTITLE_FORMATS,
     SIDECAR_SUBTITLE_FORMATS,
     DEFAULT_HLS_OPTIONS,
@@ -52,9 +47,6 @@ export { PlexStreamErrorCode } from './types';
 export class PlexStreamResolver implements IPlexStreamResolver {
     private readonly _config: PlexStreamResolverConfig;
     private readonly _emitter: EventEmitter<StreamResolverEventMap>;
-    private readonly _state: StreamResolverState;
-    /** Last time a progress reporting error was logged (to rate-limit spam) */
-    private _lastProgressErrorLogAt: number = 0;
 
     /**
      * Create a new PlexStreamResolver instance.
@@ -63,9 +55,6 @@ export class PlexStreamResolver implements IPlexStreamResolver {
     constructor(config: PlexStreamResolverConfig) {
         this._config = config;
         this._emitter = new EventEmitter<StreamResolverEventMap>();
-        this._state = {
-            activeSessions: new Map<string, PlaybackSession>(),
-        };
     }
 
     private _getChromeMajor(): number | null {
@@ -501,10 +490,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 }
                 : null;
 
-        // 3. Start a playback session early so the same sessionId can be used for:
-        // - Timeline updates (`X-Plex-Session-Identifier`)
-        // - Transcoding session binding (`session` + `X-Plex-Session-Identifier`)
-        const sessionId = await this.startSession(request.itemKey);
+        // 3. Start a playback session early so the same sessionId can be used for
+        // transcoding session binding (`session` + `X-Plex-Session-Identifier`).
+        const sessionId = generateUUID();
 
         try {
             // 4. Check direct play compatibility ON THE SELECTED MEDIA VERSION
@@ -624,13 +612,6 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 isTranscoding
             );
 
-            // 7. Track transcoding state
-            const session = this._state.activeSessions.get(sessionId);
-            if (session) {
-                session.isTranscoding = isTranscoding;
-                session.durationMs = item.durationMs;
-            }
-
             const rawHdrLabel = videoStream?.hdr?.trim();
             const hdrLabel = rawHdrLabel || this._detectHdrLabelFromStream(videoStream);
             const source: NonNullable<StreamDecision['source']> = {
@@ -698,181 +679,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
             return decision;
         } catch (error) {
-            // Avoid leaking sessions when stream resolution fails mid-flight
-            const session = this._state.activeSessions.get(sessionId);
-            const positionMs = session ? session.lastReportedPositionMs : 0;
-            this._state.activeSessions.delete(sessionId);
-
-            // Ensure sessionStart has a corresponding sessionEnd for consumers.
-            this._emitter.emit('sessionEnd', {
-                sessionId,
-                itemKey: request.itemKey,
-                positionMs,
-            });
             throw error;
         }
-    }
-
-    // ========================================
-    // Session Management
-    // ========================================
-
-    /**
-     * Start a new playback session.
-     * @param itemKey - ratingKey of the media item
-     * @returns Promise resolving to session ID
-     */
-    async startSession(itemKey: string): Promise<string> {
-        const sessionId = generateUUID();
-        const now = Date.now();
-
-        const session: PlaybackSession = {
-            sessionId,
-            itemKey,
-            startedAt: now,
-            durationMs: 0,
-            lastReportedPositionMs: 0,
-            lastReportedAt: now,
-            isTranscoding: false,
-        };
-
-        this._state.activeSessions.set(sessionId, session);
-
-        const payload: SessionStartPayload = { sessionId, itemKey };
-        this._emitter.emit('sessionStart', payload);
-
-        return sessionId;
-    }
-
-    /**
-     * Report playback progress to Plex server.
-     * Uses 100ms timeout budget per spec.
-     * @param sessionId - Session identifier
-     * @param itemKey - ratingKey of the media item
-     * @param positionMs - Current playback position
-     * @param state - Playback state
-     */
-    async updateProgress(
-        sessionId: string,
-        itemKey: string,
-        positionMs: number,
-        state: 'playing' | 'paused' | 'stopped'
-    ): Promise<void> {
-        const status = await this._reportProgressWithBudget(sessionId, itemKey, positionMs, state);
-        if (status === 'timeout') {
-            this._emitter.emit('progressTimeout', { sessionId, itemKey });
-        }
-    }
-
-    /**
-     * Internal progress reporting with timeout budget.
-     */
-    private async _reportProgressWithBudget(
-        sessionId: string,
-        itemKey: string,
-        positionMs: number,
-        state: 'playing' | 'paused' | 'stopped'
-    ): Promise<'ok' | 'timeout' | 'error'> {
-        const serverUri = this._config.getServerUri();
-        if (!serverUri) {
-            return 'error';
-        }
-
-        const session = this._state.activeSessions.get(sessionId);
-        const durationMs = session ? session.durationMs : 0;
-
-        const params = new URLSearchParams({
-            ratingKey: itemKey,
-            key: `/library/metadata/${itemKey}`,
-            state: state,
-            time: String(positionMs),
-            duration: String(durationMs),
-            'X-Plex-Session-Identifier': sessionId,
-        });
-
-        try {
-            const baseUri = this._selectBaseUriForMixedContent(serverUri);
-            const timelineUrl = new URL('/:/timeline', baseUri);
-            timelineUrl.search = params.toString();
-
-            const response = await this._fetchWithTimeout(
-                timelineUrl.toString(),
-                { method: 'POST', headers: this._config.getAuthHeaders() },
-                PROGRESS_TIMEOUT_MS
-            );
-            this._throwIfAuthFailure(response);
-
-            // Update local session tracking
-            if (session) {
-                session.lastReportedPositionMs = positionMs;
-                session.lastReportedAt = Date.now();
-            }
-            return 'ok';
-        } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
-                return 'timeout';
-            }
-            // Rate-limit error logging to once per minute to avoid log spam when PMS is unreachable
-            const now = Date.now();
-            if (now - this._lastProgressErrorLogAt > 60_000) {
-                this._lastProgressErrorLogAt = now;
-                console.warn('[PlexStreamResolver] Failed to report progress:', error);
-            }
-            return 'error';
-        }
-    }
-
-    /**
-     * End a playback session.
-     * @param sessionId - Session identifier
-     * @param itemKey - ratingKey of the media item
-     */
-    async endSession(sessionId: string, itemKey: string): Promise<void> {
-        const session = this._state.activeSessions.get(sessionId);
-        const positionMs = session ? session.lastReportedPositionMs : 0;
-
-        const serverUri = this._config.getServerUri();
-        if (serverUri) {
-            const baseUri = this._selectBaseUriForMixedContent(serverUri);
-            // Report stopped state
-            const params = new URLSearchParams({
-                ratingKey: itemKey,
-                key: `/library/metadata/${itemKey}`,
-                state: 'stopped',
-                time: String(positionMs),
-            });
-
-            try {
-                const timelineUrl = new URL('/:/timeline', baseUri);
-                timelineUrl.search = params.toString();
-                const response = await this._fetchWithTimeout(
-                    timelineUrl.toString(),
-                    { method: 'POST', headers: this._config.getAuthHeaders() },
-                    2000
-                );
-                this._throwIfAuthFailure(response);
-
-                // If transcoding, stop the transcode session per spec: DELETE /transcode/sessions/{key}
-                if (session && session.isTranscoding) {
-                    const stopUrl = new URL(`/transcode/sessions/${encodeURIComponent(sessionId)}`, baseUri);
-                    const stopResponse = await this._fetchWithTimeout(
-                        stopUrl.toString(),
-                        { method: 'DELETE', headers: this._config.getAuthHeaders() },
-                        5000
-                    );
-                    this._throwIfAuthFailure(stopResponse);
-                }
-            } catch (error) {
-                console.warn('Error ending session:', error);
-            }
-        }
-
-        // Remove from tracking
-        this._state.activeSessions.delete(sessionId);
-
-        // Emit event
-        const payload: SessionEndPayload = { sessionId, itemKey, positionMs };
-        this._emitter.emit('sessionEnd', payload);
     }
 
     // ========================================

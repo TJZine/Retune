@@ -37,41 +37,12 @@ export interface StreamResolverError {
 // ============================================
 
 /**
- * Payload for sessionStart event.
- */
-export interface SessionStartPayload {
-    sessionId: string;
-    itemKey: string;
-}
-
-/**
- * Payload for sessionEnd event.
- */
-export interface SessionEndPayload {
-    sessionId: string;
-    itemKey: string;
-    positionMs: number;
-}
-
-/**
- * Payload for progressTimeout event.
- */
-export interface ProgressTimeoutPayload {
-    sessionId: string;
-    itemKey: string;
-}
-
-/**
  * Event map for PlexStreamResolver events.
  */
 export interface StreamResolverEventMap {
-    sessionStart: SessionStartPayload;
-    sessionEnd: SessionEndPayload;
     error: StreamResolverError;
-    /** Emitted when progress reporting exceeds timeout budget (diagnostic) */
-    progressTimeout: ProgressTimeoutPayload;
     /** Index signature for EventEmitter compatibility */
-    [key: string]: SessionStartPayload | SessionEndPayload | StreamResolverError | ProgressTimeoutPayload;
+    [key: string]: StreamResolverError;
 }
 
 // ============================================
@@ -122,40 +93,6 @@ export interface IPlexStreamResolver {
      * @throws StreamResolverError on failure
      */
     resolveStream(request: StreamRequest): Promise<StreamDecision>;
-
-    // ========================================
-    // Session Management
-    // ========================================
-
-    /**
-     * Start a new playback session.
-     * @param itemKey - ratingKey of the media item
-     * @returns Promise resolving to session ID
-     */
-    startSession(itemKey: string): Promise<string>;
-
-    /**
-     * Report playback progress to Plex server.
-     * Updates "Continue Watching" feature.
-     * @param sessionId - Session identifier
-     * @param itemKey - ratingKey of the media item
-     * @param positionMs - Current playback position in milliseconds
-     * @param state - Playback state
-     */
-    updateProgress(
-        sessionId: string,
-        itemKey: string,
-        positionMs: number,
-        state: 'playing' | 'paused' | 'stopped'
-    ): Promise<void>;
-
-    /**
-     * End a playback session.
-     * Reports final position and stops any active transcode.
-     * @param sessionId - Session identifier
-     * @param itemKey - ratingKey of the media item
-     */
-    endSession(sessionId: string, itemKey: string): Promise<void>;
 
     // ========================================
     // Direct Play Check

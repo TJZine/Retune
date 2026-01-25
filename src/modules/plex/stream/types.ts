@@ -276,35 +276,3 @@ export interface HlsOptions {
      */
     sessionId?: string;
 }
-
-// ============================================
-// Local Types
-// ============================================
-
-/**
- * Active playback session tracking.
- */
-export interface PlaybackSession {
-    /** Unique session identifier (UUID) */
-    sessionId: string;
-    /** ratingKey of the media item */
-    itemKey: string;
-    /** Session start timestamp (ms since epoch) */
-    startedAt: number;
-    /** Duration of the media in ms */
-    durationMs: number;
-    /** Last reported playback position in ms */
-    lastReportedPositionMs: number;
-    /** Timestamp of last progress report */
-    lastReportedAt: number;
-    /** Whether this session is using transcoding */
-    isTranscoding: boolean;
-}
-
-/**
- * Internal state for PlexStreamResolver.
- */
-export interface StreamResolverState {
-    /** Map of active sessions by sessionId */
-    activeSessions: Map<string, PlaybackSession>;
-}

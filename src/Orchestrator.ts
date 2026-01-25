@@ -73,7 +73,6 @@ import {
     type VideoPlayerConfig,
     type StreamDescriptor,
     type PlaybackError,
-    type PlaybackState,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
 import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
@@ -321,11 +320,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _currentProgramForPlayback: ScheduledProgram | null = null;
     private _currentStreamDescriptor: StreamDescriptor | null = null;
     private _currentStreamDecision: StreamDecision | null = null;
-    private _activePlexSession: { sessionId: string; itemKey: string } | null = null;
-    private _lastEndedPlexSessionKey: string | null = null;
-
-    // Plex timeline reporting state
-    private _plexTimelineIntervalId: ReturnType<typeof setInterval> | null = null;
 
     constructor() {
         this._initializeModuleStatus();
@@ -588,9 +582,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._playbackRecovery?.resetPlaybackFailureGuard();
                 this._playbackRecovery?.resetDirectFallbackAttempts();
             },
-            stopPlexTimelineReporting: (finalState: 'paused' | 'stopped'): void => {
-                this._stopPlexTimelineReporting(finalState);
-            },
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
             saveLifecycleState: async (): Promise<void> => {
@@ -703,9 +694,6 @@ export class AppOrchestrator implements IAppOrchestrator {
      * instance reuse is not a supported pattern.
      */
     async shutdown(): Promise<void> {
-        // Stop Plex timeline reporting
-        this._stopPlexTimelineReporting('stopped');
-
         if (this._initCoordinator) {
             this._initCoordinator.clearAuthResume();
             this._initCoordinator.clearServerResume();
@@ -1570,8 +1558,6 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         // Player ended -> skip to next
         const endedHandler = (): void => {
-            // Stop timeline reporting on ended
-            this._stopPlexTimelineReporting('stopped');
             if (this._scheduler) {
                 this._scheduler.skipToNext();
             }
@@ -1633,20 +1619,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         });
 
-        // Player state change -> timeline reporting
-        const stateHandler = (state: PlaybackState): void => {
-            if (state.status === 'playing') {
-                this._startPlexTimelineReporting();
-            } else if (state.status === 'paused') {
-                this._stopPlexTimelineReporting('paused');
-            } else if (state.status === 'idle') {
-                this._stopPlexTimelineReporting('stopped');
-            }
-        };
-        this._videoPlayer.on('stateChange', stateHandler);
-        this._eventUnsubscribers.push(() => {
-            this._videoPlayer?.off('stateChange', stateHandler);
-        });
+        // No-op on state changes: Retune does not report playback progress to Plex.
     }
 
     private _wirePlexEvents(): void {
@@ -1742,124 +1715,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     }
 
     // ========================================
-    // Plex Timeline Reporting
     // ========================================
-
-    /**
-     * Start periodic Plex timeline reporting.
-     * Reports progress every 10 seconds while playing.
-     */
-    private _startPlexTimelineReporting(): void {
-        // Guard: don't start if already running
-        if (this._plexTimelineIntervalId !== null) {
-            return;
-        }
-
-        this._setActivePlexSessionFromCurrent();
-
-        // Report immediately on start
-        this._reportPlexTimeline('playing').catch(() => { /* swallow */ });
-
-        // Start 10-second interval
-        this._plexTimelineIntervalId = setInterval(() => {
-            if (this._videoPlayer?.isPlaying()) {
-                this._reportPlexTimeline('playing').catch(() => { /* swallow */ });
-            }
-        }, 10_000);
-    }
-
-    /**
-     * Stop Plex timeline reporting and optionally report final state.
-     */
-    private _stopPlexTimelineReporting(finalState?: 'paused' | 'stopped'): void {
-        if (this._plexTimelineIntervalId !== null) {
-            clearInterval(this._plexTimelineIntervalId);
-            this._plexTimelineIntervalId = null;
-        }
-
-        if (finalState === 'paused') {
-            // Report paused state
-            this._reportPlexTimeline(finalState).catch(() => { /* swallow */ });
-        } else if (finalState === 'stopped') {
-            // End session (which already sends stopped timeline - no need for duplicate updateProgress)
-            const activeSession = this._activePlexSession;
-            if (activeSession && this._plexStreamResolver) {
-                const sessionKey = `${activeSession.sessionId}:${activeSession.itemKey}`;
-                this._activePlexSession = null;
-                this._lastEndedPlexSessionKey = sessionKey;
-                this._plexStreamResolver.endSession(activeSession.sessionId, activeSession.itemKey)
-                    .catch(() => { /* swallow */ })
-                    .finally(() => { /* swallow */ });
-                return;
-            }
-            if (activeSession) {
-                this._activePlexSession = null;
-            }
-            const decision = this._currentStreamDecision;
-            const program = this._currentProgramForPlayback;
-            const fallbackSessionKey = decision?.sessionId && program?.item.ratingKey
-                ? `${decision.sessionId}:${program.item.ratingKey}`
-                : null;
-            // Defensive fallback for cases where active session wasn't captured.
-            if (fallbackSessionKey === this._lastEndedPlexSessionKey) {
-                return;
-            }
-            if (decision?.sessionId && program?.item.ratingKey && this._plexStreamResolver) {
-                if (fallbackSessionKey) {
-                    this._lastEndedPlexSessionKey = fallbackSessionKey;
-                }
-                this._plexStreamResolver.endSession(decision.sessionId, program.item.ratingKey)
-                    .catch(() => { /* swallow */ });
-            }
-        }
-    }
-
-    /**
-     * Report current playback state to Plex timeline endpoint.
-     * Best-effort: errors are swallowed, never blocks playback.
-     */
-    private async _reportPlexTimeline(state: 'playing' | 'paused' | 'stopped'): Promise<void> {
-        const activeSession = this._activePlexSession;
-        const decision = this._currentStreamDecision;
-        const program = this._currentProgramForPlayback;
-        const sessionId = activeSession?.sessionId ?? decision?.sessionId ?? null;
-        const itemKey = activeSession?.itemKey ?? program?.item.ratingKey ?? null;
-
-        // Guard: must have all required data
-        if (!this._plexStreamResolver) return;
-        if (!sessionId) return;
-        if (!itemKey) return;
-
-        // Get current position from VideoPlayer
-        let positionMs = this._videoPlayer?.getCurrentTimeMs() ?? 0;
-        if (!Number.isFinite(positionMs)) {
-            positionMs = 0;
-        }
-
-        try {
-            await this._plexStreamResolver.updateProgress(
-                sessionId,
-                itemKey,
-                positionMs,
-                state
-            );
-        } catch {
-            // Best-effort: swallow errors to never stall playback
-        }
-    }
-
-    private _setActivePlexSessionFromCurrent(): void {
-        const decision = this._currentStreamDecision;
-        const program = this._currentProgramForPlayback;
-        if (!decision?.sessionId || !program?.item.ratingKey) {
-            return;
-        }
-        this._activePlexSession = {
-            sessionId: decision.sessionId,
-            itemKey: program.item.ratingKey,
-        };
-        this._lastEndedPlexSessionKey = null;
-    }
 
     /**
      * Handle program start event from scheduler.
@@ -1884,7 +1740,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return;
             }
             this._currentStreamDescriptor = stream;
-            this._setActivePlexSessionFromCurrent();
 
             // Optional developer aid: show a compact "stream decision" HUD when tuning a channel,
             // and fetch PMS transcode decision in the background to explain why video/audio transcodes.

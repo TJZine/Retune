@@ -89,20 +89,6 @@ export const RETRYABLE_ERROR_CODES: readonly string[] = [
 ] as const;
 
 // ============================================
-// Progress Reporting
-// ============================================
-
-/**
- * Maximum time allowed for progress reporting (per spec budget).
- */
-export const PROGRESS_TIMEOUT_MS = 100;
-
-/**
- * Recommended interval between progress reports.
- */
-export const PROGRESS_REPORT_INTERVAL_MS = 10000;
-
-// ============================================
 // Subtitle Formats
 // ============================================
 
