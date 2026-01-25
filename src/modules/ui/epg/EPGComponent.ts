@@ -24,6 +24,8 @@ import type {
     ChannelConfig,
 } from './types';
 
+const INFO_PANEL_FULL_UPDATE_DEBOUNCE_MS = 200;
+
 /**
  * EPG Component class.
  * Main orchestrator for the Electronic Program Guide grid.
@@ -62,6 +64,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private lastVisibleRangeKey: string | null = null;
     private _isSelectInProgress: boolean = false;
     private _placeholderAutoFocusKeys: Set<string> = new Set();
+    private _infoPanelFullUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    private _pendingInfoPanelKey: string | null = null;
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
@@ -137,6 +141,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * Destroy the EPG component and clean up resources.
      */
     destroy(): void {
+        this._clearInfoPanelFullUpdateTimer();
         this.stopTimeUpdateInterval();
         document.removeEventListener('visibilitychange', this._onVisibilityChange);
 
@@ -351,6 +356,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.stopTimeUpdateInterval();
         document.removeEventListener('visibilitychange', this._onVisibilityChange);
 
+        this._clearInfoPanelFullUpdateTimer();
         this.infoPanel.hide();
         this.emit('close', undefined);
     }
@@ -592,7 +598,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.channelList.setFocusedChannel(channelIndex);
 
         // Update info panel
-        this.infoPanel.update(program);
+        this._scheduleInfoPanelUpdate(program);
 
         // Emit focus change event
         this.emit('focusChange', this.state.focusedCell);
@@ -780,9 +786,46 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         };
 
         this.channelList.setFocusedChannel(channelIndex);
+        this._clearInfoPanelFullUpdateTimer();
         this.infoPanel.hide();
         this.renderGrid();
         this.emit('focusChange', this.state.focusedCell);
+    }
+
+    private _clearInfoPanelFullUpdateTimer(): void {
+        if (this._infoPanelFullUpdateTimer !== null) {
+            clearTimeout(this._infoPanelFullUpdateTimer);
+            this._infoPanelFullUpdateTimer = null;
+        }
+        this._pendingInfoPanelKey = null;
+    }
+
+    private _scheduleInfoPanelUpdate(program: ScheduledProgram): void {
+        this.infoPanel.updateFast(program);
+
+        const key = `${program.item.ratingKey}::${program.scheduledStartTime}`;
+        this._pendingInfoPanelKey = key;
+
+        if (this._infoPanelFullUpdateTimer !== null) {
+            clearTimeout(this._infoPanelFullUpdateTimer);
+        }
+
+        this._infoPanelFullUpdateTimer = setTimeout(() => {
+            this._infoPanelFullUpdateTimer = null;
+            if (this._pendingInfoPanelKey !== key) {
+                return;
+            }
+            this._pendingInfoPanelKey = null;
+
+            const focusedCell = this.state.focusedCell;
+            if (!this.state.isVisible) return;
+            if (!focusedCell || focusedCell.kind !== 'program') return;
+
+            const focusedKey = `${focusedCell.program.item.ratingKey}::${focusedCell.program.scheduledStartTime}`;
+            if (focusedKey !== key) return;
+
+            this.infoPanel.updateFull(program);
+        }, INFO_PANEL_FULL_UPDATE_DEBOUNCE_MS);
     }
 
     // ============================================

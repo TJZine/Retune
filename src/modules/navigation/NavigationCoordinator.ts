@@ -6,6 +6,13 @@ import { NOW_PLAYING_INFO_MODAL_ID } from '../ui/now-playing-info';
 import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
 import { readStoredBoolean } from '../../utils/storage';
 
+const EPG_REPEAT_INITIAL_DELAY_MS = 250;
+const EPG_REPEAT_TIER_1_MS = 800;
+const EPG_REPEAT_TIER_2_MS = 1800;
+const EPG_REPEAT_INTERVAL_1_MS = 140;
+const EPG_REPEAT_INTERVAL_2_MS = 90;
+const EPG_REPEAT_INTERVAL_3_MS = 55;
+
 export interface NavigationCoordinatorDeps {
     getNavigation: () => INavigationManager | null;
     getEpg: () => IEPGComponent | null;
@@ -34,6 +41,10 @@ export interface NavigationCoordinatorDeps {
 }
 
 export class NavigationCoordinator {
+    private _epgRepeatTimer: ReturnType<typeof setTimeout> | null = null;
+    private _epgRepeatButton: 'up' | 'down' | 'left' | 'right' | null = null;
+    private _epgRepeatStartMs = 0;
+
     constructor(private readonly deps: NavigationCoordinatorDeps) { }
 
     wireNavigationEvents(): Array<() => void> {
@@ -50,6 +61,16 @@ export class NavigationCoordinator {
             this.deps.getNavigation()?.off('keyPress', keyHandler);
         });
 
+        const keyUpHandler = (payload: { button: KeyEvent['button'] }): void => {
+            if (payload.button === this._epgRepeatButton) {
+                this._stopEpgRepeat('keyup');
+            }
+        };
+        navigation.on('keyUp', keyUpHandler);
+        unsubs.push(() => {
+            this.deps.getNavigation()?.off('keyUp', keyUpHandler);
+        });
+
         const channelNumberHandler = (payload: { channelNumber: number }): void => {
             if (!Number.isFinite(payload.channelNumber)) {
                 return;
@@ -64,6 +85,7 @@ export class NavigationCoordinator {
 
         const guideHandler = (): void => {
             // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
+            this._stopEpgRepeat('guide');
             this.deps.toggleEpg();
         };
         navigation.on('guide', guideHandler);
@@ -91,6 +113,7 @@ export class NavigationCoordinator {
         });
 
         const modalOpenHandler = (payload: { modalId: string }): void => {
+            this._stopEpgRepeat('modalOpen');
             if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
                 this.deps.showNowPlayingInfoOverlay();
             }
@@ -117,6 +140,7 @@ export class NavigationCoordinator {
     }
 
     private _handleScreenChange(from: string, to: string): void {
+        this._stopEpgRepeat('screenChange');
         if (to === 'player' && this.deps.shouldRunChannelSetup()) {
             this.deps.getNavigation()?.replaceScreen('channel-setup');
             return;
@@ -164,6 +188,16 @@ export class NavigationCoordinator {
     }
 
     private _handleKeyPress(event: KeyEvent): void {
+        const isDirection = (
+            event.button === 'up'
+            || event.button === 'down'
+            || event.button === 'left'
+            || event.button === 'right'
+        );
+        if (this._epgRepeatButton && !isDirection) {
+            this._stopEpgRepeat('nonDirectional');
+        }
+
         const isNowPlayingModalOpen = this.deps.isNowPlayingModalOpen();
         if (isNowPlayingModalOpen && event.button === 'back') {
             return;
@@ -195,26 +229,33 @@ export class NavigationCoordinator {
                 case 'down':
                 case 'left':
                 case 'right':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+
+                    if (event.isRepeat) {
+                        return;
+                    }
+
+                    if (this._epgRepeatButton && this._epgRepeatButton !== event.button) {
+                        this._stopEpgRepeat('directionChange');
+                    }
+
                     if (epg.handleNavigation(event.button)) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
+                        this._startEpgRepeat(event.button);
                     }
-                    break;
+                    return;
                 case 'ok':
-                    if (epg.handleSelect()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
+                    this._stopEpgRepeat('ok');
+                    epg.handleSelect();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
                 case 'back':
-                    if (epg.handleBack()) {
-                        event.handled = true;
-                        event.originalEvent.preventDefault();
-                        return;
-                    }
-                    break;
+                    this._stopEpgRepeat('back');
+                    epg.handleBack();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
                 default:
                     break;
             }
@@ -275,6 +316,74 @@ export class NavigationCoordinator {
                 break;
             // Other keys handled by active screen
         }
+    }
+
+    private _stopEpgRepeat(_reason: string): void {
+        if (this._epgRepeatTimer !== null) {
+            clearTimeout(this._epgRepeatTimer);
+            this._epgRepeatTimer = null;
+        }
+        this._epgRepeatButton = null;
+        this._epgRepeatStartMs = 0;
+    }
+
+    private _computeEpgRepeatInterval(heldMs: number): number {
+        if (heldMs < EPG_REPEAT_TIER_1_MS) {
+            return EPG_REPEAT_INTERVAL_1_MS;
+        }
+        if (heldMs < EPG_REPEAT_TIER_2_MS) {
+            return EPG_REPEAT_INTERVAL_2_MS;
+        }
+        return EPG_REPEAT_INTERVAL_3_MS;
+    }
+
+    private _scheduleNextEpgRepeatTick(): void {
+        const epg = this.deps.getEpg();
+        const navigation = this.deps.getNavigation();
+
+        if (!epg || !epg.isVisible()) {
+            this._stopEpgRepeat('notVisible');
+            return;
+        }
+        if (!navigation) {
+            this._stopEpgRepeat('noNavigation');
+            return;
+        }
+        if (navigation.isModalOpen()) {
+            this._stopEpgRepeat('modalOpen');
+            return;
+        }
+        if (navigation.isInputBlocked()) {
+            this._stopEpgRepeat('inputBlocked');
+            return;
+        }
+        if (!this._epgRepeatButton) {
+            this._stopEpgRepeat('noButton');
+            return;
+        }
+
+        const moved = epg.handleNavigation(this._epgRepeatButton);
+        if (!moved) {
+            this._stopEpgRepeat('blocked');
+            return;
+        }
+
+        const heldMs = Date.now() - this._epgRepeatStartMs;
+        const interval = this._computeEpgRepeatInterval(heldMs);
+        this._epgRepeatTimer = setTimeout(
+            () => this._scheduleNextEpgRepeatTick(),
+            interval
+        );
+    }
+
+    private _startEpgRepeat(button: 'up' | 'down' | 'left' | 'right'): void {
+        this._stopEpgRepeat('restart');
+        this._epgRepeatButton = button;
+        this._epgRepeatStartMs = Date.now();
+        this._epgRepeatTimer = setTimeout(
+            () => this._scheduleNextEpgRepeatTick(),
+            EPG_REPEAT_INITIAL_DELAY_MS
+        );
     }
 
     private _shouldKeepPlayingInSettings(): boolean {

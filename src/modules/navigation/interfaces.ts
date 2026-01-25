@@ -235,6 +235,7 @@ export interface FocusGroup {
 export interface NavigationEventMap {
     [key: string]: unknown;
     keyPress: KeyEvent;
+    keyUp: { button: RemoteButton };
     screenChange: { from: Screen; to: Screen };
     focusChange: { from: string | null; to: string };
     modalOpen: { modalId: string };

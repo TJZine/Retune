@@ -62,6 +62,59 @@ describe('EPGComponent', () => {
         };
     };
 
+    const createDetailedSchedule = (channelId: string): ScheduleWindow => {
+        const programs: ScheduledProgram[] = [
+            {
+                item: {
+                    ratingKey: `${channelId}-prog-0`,
+                    type: 'movie',
+                    title: 'Program A',
+                    fullTitle: 'Program A',
+                    durationMs: 3600000,
+                    thumb: 'https://example.com/poster-a.jpg',
+                    summary: 'Some summary text A',
+                    year: 2020,
+                    scheduledIndex: 0,
+                },
+                scheduledStartTime: gridAnchorTime,
+                scheduledEndTime: gridAnchorTime + 3600000,
+                elapsedMs: 0,
+                remainingMs: 3600000,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: true,
+            },
+            {
+                item: {
+                    ratingKey: `${channelId}-prog-1`,
+                    type: 'movie',
+                    title: 'Program B',
+                    fullTitle: 'Program B',
+                    durationMs: 3600000,
+                    thumb: 'https://example.com/poster-b.jpg',
+                    summary: 'Some summary text B',
+                    year: 2020,
+                    scheduledIndex: 1,
+                },
+                scheduledStartTime: gridAnchorTime + 3600000,
+                scheduledEndTime: gridAnchorTime + 7200000,
+                elapsedMs: 0,
+                remainingMs: 3600000,
+                scheduleIndex: 1,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: false,
+            },
+        ];
+
+        return {
+            startTime: gridAnchorTime,
+            endTime: gridAnchorTime + (programs.length * 3600000),
+            programs,
+        };
+    };
+
     beforeEach(() => {
         container = document.createElement('div');
         container.id = 'epg-container';
@@ -79,6 +132,7 @@ describe('EPGComponent', () => {
             rowHeight: 80,
             showCurrentTimeIndicator: true,
             autoScrollToNow: false,
+            resolveThumbUrl: (url) => url,
         });
 
         gridAnchorTime = epg.getState().viewWindow.startTime;
@@ -237,6 +291,62 @@ describe('EPGComponent', () => {
             refreshSpy.mockRestore();
             autoEpg.destroy();
             autoContainer.remove();
+        });
+    });
+
+    describe('info panel debounce', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.setSystemTime(0);
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('poster/summary deferred during rapid focus changes', () => {
+            const channel = createMockChannel(0);
+            epg.loadChannels([channel]);
+            epg.loadScheduleForChannel(channel.id, createDetailedSchedule(channel.id));
+            epg.show();
+
+            epg.focusProgram(0, 0);
+            epg.focusProgram(0, 1);
+
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            const description = container.querySelector('.epg-info-description') as HTMLElement;
+
+            expect(poster.getAttribute('src')).toBe('');
+            expect(poster.style.display).toBe('none');
+            expect(description.textContent).toBe('');
+            expect(description.style.display).toBe('none');
+
+            jest.advanceTimersByTime(199);
+            expect(poster.getAttribute('src')).toBe('');
+            expect(description.textContent).toBe('');
+
+            jest.advanceTimersByTime(1);
+            expect(poster.getAttribute('src')).toContain('poster-b.jpg');
+            expect(description.textContent).toBe('Some summary text B');
+            expect(description.style.display).toBe('block');
+        });
+
+        it('timer cleared on hide', () => {
+            const channel = createMockChannel(0);
+            epg.loadChannels([channel]);
+            epg.loadScheduleForChannel(channel.id, createDetailedSchedule(channel.id));
+            epg.show();
+
+            epg.focusProgram(0, 0);
+            epg.hide();
+
+            jest.advanceTimersByTime(250);
+
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            const description = container.querySelector('.epg-info-description') as HTMLElement;
+
+            expect(poster.getAttribute('src')).toBe('');
+            expect(description.textContent).toBe('');
         });
     });
 

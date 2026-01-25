@@ -709,6 +709,7 @@ export class NavigationManager
      * Handle key up events from remote handler.
      */
     private _handleKeyUp(button: RemoteButton): void {
+        this.emit('keyUp', { button });
         if (button === this._activeDpadButton) {
             this._stopDpadRepeat();
         }

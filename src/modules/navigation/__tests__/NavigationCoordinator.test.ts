@@ -27,6 +27,7 @@ const makeNavigation = (): {
         getCurrentScreen: jest.fn().mockReturnValue('player'),
         getState: jest.fn().mockReturnValue(state),
         isModalOpen: jest.fn().mockReturnValue(false),
+        isInputBlocked: jest.fn().mockReturnValue(false),
         openModal: jest.fn(),
         closeModal: jest.fn(),
         goTo: jest.fn(),
@@ -43,12 +44,16 @@ const makeNavigation = (): {
     return { navigation, handlers };
 };
 
-const makeKeyEvent = (button: KeyEvent['button']): KeyEvent => ({
+const makeKeyEvent = (
+    button: KeyEvent['button'],
+    overrides: Partial<KeyEvent> = {}
+): KeyEvent => ({
     button,
     isRepeat: false,
     isLongPress: false,
     timestamp: Date.now(),
     originalEvent: { preventDefault: jest.fn() } as unknown as KeyboardEvent,
+    ...overrides,
 });
 
 const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
@@ -179,6 +184,20 @@ describe('NavigationCoordinator', () => {
 
         const event = makeKeyEvent('up');
         handlers.keyPress?.(event);
+        handlers.keyUp?.({ button: 'up' });
+
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('EPG direction keys always consumed', () => {
+        const { handlers, epg, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (epg.handleNavigation as jest.Mock).mockReturnValue(false);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+
+        const event = makeKeyEvent('up');
+        handlers.keyPress?.(event);
 
         expect(event.handled).toBe(true);
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
@@ -304,6 +323,7 @@ describe('NavigationCoordinator', () => {
 
         const event = makeKeyEvent('right');
         handlers.keyPress?.(event);
+        handlers.keyUp?.({ button: 'right' });
 
         expect(epg.handleNavigation).toHaveBeenCalledWith('right');
         expect(event.handled).toBe(true);
@@ -318,6 +338,7 @@ describe('NavigationCoordinator', () => {
 
         const event = makeKeyEvent('down');
         handlers.keyPress?.(event);
+        handlers.keyUp?.({ button: 'down' });
 
         expect(epg.handleNavigation).toHaveBeenCalledWith('down');
         expect(event.handled).toBe(true);
@@ -329,5 +350,124 @@ describe('NavigationCoordinator', () => {
         handlers.screenChange?.({ from: 'player', to: 'settings' });
 
         expect(epg.hide).toHaveBeenCalled();
+    });
+
+    describe('epg repeat', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.setSystemTime(0);
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('accelerated repeat ticks and stops on keyUp', () => {
+            const { handlers, epg, navigation } = setup();
+            (epg.isVisible as jest.Mock).mockReturnValue(true);
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+            const event = makeKeyEvent('down');
+            handlers.keyPress?.(event);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+
+            jest.advanceTimersByTime(140);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(3);
+
+            jest.advanceTimersByTime(140);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(4);
+
+            jest.advanceTimersByTime(140);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(5);
+
+            jest.advanceTimersByTime(140);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(6);
+
+            jest.advanceTimersByTime(89);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(6);
+
+            jest.advanceTimersByTime(1);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(7);
+
+            handlers.keyUp?.({ button: 'down' });
+            jest.advanceTimersByTime(1000);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(7);
+        });
+
+        it('repeat stops on modal open', () => {
+            const { handlers, epg, navigation } = setup();
+            (epg.isVisible as jest.Mock).mockReturnValue(true);
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+            const event = makeKeyEvent('right');
+            handlers.keyPress?.(event);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+
+            handlers.modalOpen?.({ modalId: 'any' });
+            jest.advanceTimersByTime(1000);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+        });
+
+        it('repeat stops on screen change away from guide', () => {
+            const { handlers, epg, navigation } = setup();
+            (epg.isVisible as jest.Mock).mockReturnValue(true);
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+            handlers.keyPress?.(makeKeyEvent('left'));
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+
+            handlers.screenChange?.({ from: 'guide', to: 'player' });
+            jest.advanceTimersByTime(1000);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+        });
+
+        it('repeat stops when input is blocked', () => {
+            const { handlers, epg, navigation } = setup();
+            const isInputBlocked = navigation.isInputBlocked as jest.Mock;
+            (epg.isVisible as jest.Mock).mockReturnValue(true);
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            isInputBlocked.mockReturnValue(false);
+            (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+
+            handlers.keyPress?.(makeKeyEvent('down'));
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+
+            isInputBlocked.mockReturnValue(true);
+            jest.advanceTimersByTime(1000);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+        });
+
+        it('repeat stops immediately on back', () => {
+            const { handlers, epg, navigation } = setup();
+            (epg.isVisible as jest.Mock).mockReturnValue(true);
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            (epg.handleNavigation as jest.Mock).mockReturnValue(true);
+            (epg.handleBack as jest.Mock).mockReturnValue(true);
+
+            handlers.keyPress?.(makeKeyEvent('right'));
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+
+            handlers.keyPress?.(makeKeyEvent('back'));
+            jest.advanceTimersByTime(1000);
+            expect(epg.handleNavigation).toHaveBeenCalledTimes(2);
+        });
     });
 });

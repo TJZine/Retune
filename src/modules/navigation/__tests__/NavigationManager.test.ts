@@ -257,6 +257,16 @@ describe('NavigationManager', () => {
             );
         });
 
+        it('should emit keyUp event on mapped key', () => {
+            const handler = jest.fn();
+            nav.on('keyUp', handler);
+
+            // Simulate keyup for Up arrow (keyCode 38)
+            dispatchKeyEvent(38, 'keyup');
+
+            expect(handler).toHaveBeenCalledWith({ button: 'up' });
+        });
+
         it('should not emit keyPress for unmapped keys', () => {
             const handler = jest.fn();
             nav.on('keyPress', handler);
