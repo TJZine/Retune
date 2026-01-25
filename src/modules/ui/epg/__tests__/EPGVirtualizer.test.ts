@@ -7,7 +7,7 @@
  */
 
 import { EPGVirtualizer, positionCell } from '../EPGVirtualizer';
-import { EPG_CONSTANTS } from '../constants';
+import { EPG_CONSTANTS, EPG_CLASSES } from '../constants';
 import type { ScheduledProgram, ScheduleWindow, EPGConfig } from '../types';
 
 describe('EPGVirtualizer', () => {
@@ -619,6 +619,60 @@ describe('EPGVirtualizer', () => {
 
             const focusedCell = container.querySelector(`[data-key="${focusedKey}"]`);
             expect(focusedCell).not.toBeNull();
+        });
+    });
+
+    describe('temporal class updates', () => {
+        it('marks programs as past when end time has passed', () => {
+            const channelIds = ['ch0'];
+            const channelId = channelIds[0];
+            if (!channelId) {
+                throw new Error('Missing channelId for temporal class test.');
+            }
+            const program: ScheduledProgram = {
+                item: {
+                    ratingKey: 'past-test',
+                    type: 'movie',
+                    title: 'Past Test',
+                    fullTitle: 'Past Test',
+                    durationMs: 1800000,
+                    thumb: null,
+                    year: 2020,
+                    scheduledIndex: 0,
+                },
+                scheduledStartTime: gridAnchorTime,
+                scheduledEndTime: gridAnchorTime + (30 * 60000),
+                elapsedMs: 0,
+                remainingMs: 1800000,
+                scheduleIndex: 0,
+                loopNumber: 0,
+                streamDescriptor: null,
+                isCurrent: false,
+            };
+            const schedules = new Map<string, ScheduleWindow>();
+            schedules.set(channelId, {
+                startTime: gridAnchorTime,
+                endTime: gridAnchorTime + (24 * 60 * 60000),
+                programs: [program],
+            });
+
+            virtualizer.setChannelCount(channelIds.length);
+            const range = virtualizer.calculateVisibleRange({
+                channelOffset: 0,
+                timeOffset: 0,
+            });
+            virtualizer.renderVisibleCells(channelIds, schedules, range);
+
+            const key = `${channelId}-${program.scheduledStartTime}`;
+            const cell = container.querySelector(`[data-key="${key}"]`) as HTMLElement;
+            expect(cell).not.toBeNull();
+
+            virtualizer.updateTemporalClasses(gridAnchorTime + (31 * 60000));
+            expect(cell.classList.contains(EPG_CLASSES.CELL_PAST)).toBe(true);
+
+            virtualizer.updateTemporalClasses(gridAnchorTime + (10 * 60000));
+            expect(cell.classList.contains(EPG_CLASSES.CELL_CURRENT)).toBe(true);
+            expect(cell.classList.contains(EPG_CLASSES.CELL_PAST)).toBe(false);
         });
     });
 });

@@ -23,6 +23,7 @@ export class EPGChannelList {
     private focusedChannelIndex: number = -1;
     private channelOffset: number = 0;
     private isVirtualized: boolean = false;
+    private wrapFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
     /**
      * Initialize the channel list.
@@ -46,6 +47,13 @@ export class EPGChannelList {
      * Destroy the channel list and clean up resources.
      */
     destroy(): void {
+        if (this.wrapFlashTimer) {
+            clearTimeout(this.wrapFlashTimer);
+            this.wrapFlashTimer = null;
+        }
+        if (this.containerElement) {
+            this.containerElement.classList.remove(EPG_CLASSES.CHANNEL_LIST_WRAP_FLASH);
+        }
         if (this.containerElement) {
             this.containerElement.remove();
             this.containerElement = null;
@@ -58,6 +66,20 @@ export class EPGChannelList {
         this.config = null;
         this.channelOffset = 0;
         this.isVirtualized = false;
+    }
+
+    flashWrapCue(): void {
+        if (!this.containerElement) return;
+        this.containerElement.classList.add(EPG_CLASSES.CHANNEL_LIST_WRAP_FLASH);
+        if (this.wrapFlashTimer) {
+            clearTimeout(this.wrapFlashTimer);
+        }
+        this.wrapFlashTimer = setTimeout(() => {
+            if (this.containerElement) {
+                this.containerElement.classList.remove(EPG_CLASSES.CHANNEL_LIST_WRAP_FLASH);
+            }
+            this.wrapFlashTimer = null;
+        }, 120);
     }
 
     /**
