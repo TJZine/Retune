@@ -1,0 +1,55 @@
+/**
+ * Theme overrides for Broadcast Blue and Swiss Minimal.
+ */
+
+.theme-broadcast {
+  --focus-color: #e5a00d;
+  --color-primary: #00a8e1;
+  --color-primary-dark: #007aa8;
+  --color-primary-light: #49c2ea;
+  --color-bg-deep: #040911;
+  --color-bg-surface: rgba(6, 10, 18, 0.92);
+  --color-bg-elevated: rgba(10, 14, 22, 0.94);
+  --color-bg-overlay: rgba(4, 8, 16, 0.86);
+  --panel-surface: rgba(6, 10, 18, 0.92);
+  --panel-surface-2: rgba(10, 14, 22, 0.94);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.1);
+  --panel-radius: 0px;
+  --epg-info-panel-fade-to: var(--panel-surface-2);
+}
+
+.theme-swiss {
+  --focus-color: #ff4444;
+  --color-bg-deep: #07090a;
+  --color-bg-surface: rgba(14, 16, 18, 0.76);
+  --color-bg-elevated: rgba(18, 20, 22, 0.82);
+  --color-bg-overlay: rgba(10, 12, 14, 0.74);
+  --panel-surface: rgba(14, 16, 18, 0.76);
+  --panel-surface-2: rgba(18, 20, 22, 0.82);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.16);
+  --panel-radius: 16px;
+  --epg-info-panel-fade-to: var(--panel-surface-2);
+}
+
+.theme-swiss .now-playing-info-title {
+  font-size: calc(var(--text-2xl) + 4px);
+}
+
+.theme-swiss .now-playing-info-subtitle {
+  font-size: var(--text-lg);
+}
+
+.theme-swiss .now-playing-info-context,
+.theme-swiss .now-playing-info-progress-meta,
+.theme-swiss .now-playing-info-up-next {
+  font-size: var(--text-sm);
+}
+
+.theme-swiss .epg-info-title {
+  font-size: 34px;
+}
+
+.theme-swiss .epg-info-meta,
+.theme-swiss .epg-info-genres {
+  font-size: 16px;
+}

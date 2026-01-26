@@ -16,7 +16,7 @@ type ThemeName = DisplaySettings['theme'];
  */
 export class ThemeManager {
     private static _instance: ThemeManager | null = null;
-    private _currentTheme: ThemeName = 'default';
+    private _currentTheme: ThemeName = 'obsidian';
 
     static getInstance(): ThemeManager {
         if (!ThemeManager._instance) {
@@ -36,9 +36,12 @@ export class ThemeManager {
         if (isThemeName(saved)) {
             this._currentTheme = saved;
             this._applyTheme(saved);
-        } else {
-            this._applyTheme(this._currentTheme);
+            return;
         }
+
+        this._currentTheme = 'obsidian';
+        safeLocalStorageSet(RETUNE_STORAGE_KEYS.THEME, this._currentTheme);
+        this._applyTheme(this._currentTheme);
     }
 
     getTheme(): ThemeName {

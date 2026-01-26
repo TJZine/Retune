@@ -61,6 +61,7 @@ export const EPG_CLASSES = {
     TIME_INDICATOR: 'epg-time-indicator',
     TIME_INDICATOR_LABEL: 'epg-time-indicator-label',
     INFO_PANEL: 'epg-info-panel',
+    INFO_POSTER_WRAP: 'epg-info-poster-wrap',
     INFO_POSTER: 'epg-info-poster',
     INFO_CONTENT: 'epg-info-content',
     INFO_TITLE: 'epg-info-title',

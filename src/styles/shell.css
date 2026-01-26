@@ -18,11 +18,10 @@
 
 .screen-panel {
   width: min(920px, 90%);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
+  background: var(--panel-inner-glow), var(--panel-surface);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
   padding: var(--space-8) var(--space-8);
-  box-shadow: var(--shadow-xl);
 }
 
 .screen-title {
@@ -94,9 +93,8 @@
 
 .screen-button.focused,
 .screen-button:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(0, 168, 225, 0.45);
+  outline: var(--focus-ring-width) solid var(--focus-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .server-list {
@@ -211,8 +209,9 @@
 
 .setup-toggle.focused,
 .setup-toggle:focus {
-  border-color: rgba(0, 168, 225, 0.9);
-  box-shadow: 0 0 0 3px rgba(0, 168, 225, 0.35);
+  border-color: var(--focus-color);
+  outline: var(--focus-ring-width) solid var(--focus-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .setup-toggle-label {

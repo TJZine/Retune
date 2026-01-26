@@ -6,7 +6,7 @@
 
 import { App } from './App';
 import './styles/tokens.css';
-import './styles/theme-retro.css';
+import './styles/themes.css';
 import './modules/ui/epg/styles.css';
 import './modules/ui/now-playing-info/styles.css';
 import './modules/ui/player-osd/styles.css';

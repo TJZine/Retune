@@ -29,7 +29,7 @@ export interface PlaybackSettings {
  */
 export interface DisplaySettings {
     /** Color theme */
-    theme: 'default' | 'retro';
+    theme: 'obsidian' | 'broadcast' | 'swiss';
     /** Now Playing Info overlay auto-hide timeout (ms) */
     nowPlayingInfoAutoHideMs: number;
 }
