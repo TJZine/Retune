@@ -77,6 +77,7 @@ import {
     type TimeRange,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
+import { BURN_IN_SUBTITLE_FORMATS } from './modules/player/constants';
 import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
 import {
     EPGComponent,
@@ -130,7 +131,13 @@ import {
 import { PlaybackOptionsCoordinator } from './modules/ui/playback-options';
 import type { IDisposable } from './utils/interfaces';
 import { createMulberry32 } from './utils/prng';
-import { isStoredTrue, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from './utils/storage';
+import {
+    isStoredTrue,
+    readStoredBoolean,
+    safeLocalStorageGet,
+    safeLocalStorageRemove,
+    safeLocalStorageSet,
+} from './utils/storage';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import { getRecoveryActions as getRecoveryActionsHelper } from './core/error-recovery/RecoveryActions';
 import { toLifecycleAppError as toLifecycleAppErrorHelper } from './core/error-recovery/LifecycleErrorAdapter';
@@ -566,7 +573,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             getNavigation: (): INavigationManager | null => this._navigation,
             getPlaybackOptionsModal: (): IPlaybackOptionsModal | null => this._playbackOptionsModal,
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
-            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getCurrentProgram: (): ScheduledProgram | null =>
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
+            notifyToast: (message: string): void => {
+                this._nowPlayingHandler?.(message);
+            },
         });
 
         this._playbackRecovery = new PlaybackRecoveryManager({
@@ -575,6 +586,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             getScheduler: (): IChannelScheduler | null => this._scheduler,
             getCurrentProgramForPlayback: (): ScheduledProgram | null => this._currentProgramForPlayback,
             getCurrentStreamDescriptor: (): StreamDescriptor | null => this._currentStreamDescriptor,
+            getCurrentStreamDecision: (): StreamDecision | null => this._currentStreamDecision,
             setCurrentStreamDecision: (decision: StreamDecision): void => {
                 this._currentStreamDecision = decision;
             },
@@ -1643,8 +1655,38 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         });
 
-        const trackHandler = (): void => {
+        const trackHandler = (event: { type: 'audio' | 'subtitle'; trackId: string | null }): void => {
             this._playbackOptionsCoordinator?.refreshIfOpen();
+
+            if (event.type !== 'subtitle' || !event.trackId || !this._videoPlayer) {
+                return;
+            }
+
+            const selected = this._videoPlayer.getAvailableSubtitles()
+                .find((track) => track.id === event.trackId) ?? null;
+            if (!selected) {
+                return;
+            }
+
+            const format = (selected.format || selected.codec || '').toLowerCase();
+            const isBurnIn = BURN_IN_SUBTITLE_FORMATS.includes(format);
+            if (!isBurnIn) {
+                return;
+            }
+
+            const allowBurnIn = readStoredBoolean(RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN, true);
+            if (!allowBurnIn) {
+                if (this._nowPlayingHandler) {
+                    this._nowPlayingHandler('Burn-in subtitles are disabled in Settings');
+                }
+                void this._videoPlayer.setSubtitleTrack(null).catch(() => undefined);
+                return;
+            }
+
+            void this._playbackRecovery?.attemptBurnInSubtitleForCurrentProgram(
+                event.trackId,
+                'subtitle_track_change'
+            );
         };
         this._videoPlayer.on('trackChange', trackHandler);
         this._eventUnsubscribers.push(() => {

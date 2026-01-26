@@ -27,6 +27,9 @@ const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> =
     { label: 'Chinese', code: 'zh' },
 ];
 
+const SUBTITLE_EXTERNAL_ONLY_DEFAULT = false;
+const SUBTITLE_ALLOW_BURN_IN_DEFAULT = true;
+
 type ToggleMetadata = {
     storageKey: string;
     defaultValue: boolean;
@@ -75,6 +78,14 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
     'settings-subtitles-prefer-forced': {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
         defaultValue: DEFAULT_SETTINGS.subtitles.preferForced,
+    },
+    'settings-subtitles-external-only': {
+        storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+        defaultValue: SUBTITLE_EXTERNAL_ONLY_DEFAULT,
+    },
+    'settings-subtitles-allow-burn-in': {
+        storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
+        defaultValue: SUBTITLE_ALLOW_BURN_IN_DEFAULT,
     },
 };
 
@@ -201,6 +212,14 @@ export class SettingsScreen {
             SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
             DEFAULT_SETTINGS.subtitles.preferForced
         );
+        const subtitleExternalOnly = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+            SUBTITLE_EXTERNAL_ONLY_DEFAULT
+        );
+        const subtitleAllowBurnIn = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
+            SUBTITLE_ALLOW_BURN_IN_DEFAULT
+        );
         const subtitleLanguageValue = this._loadSubtitleLanguageValue();
 
         return [
@@ -302,6 +321,34 @@ export class SettingsScreen {
                         onChange: (value: boolean): void => {
                             this._saveBoolSetting(
                                 SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
+                                value
+                            );
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-external-only',
+                        label: 'External (Direct) Only',
+                        description: 'Only show subtitles that can be fetched directly (best performance)',
+                        value: subtitleExternalOnly,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+                                value
+                            );
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-allow-burn-in',
+                        label: 'Allow Burn-in Subtitles',
+                        description: 'Enable image/styled subtitles by transcoding and burning into video',
+                        value: subtitleAllowBurnIn,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
                                 value
                             );
                         },
@@ -554,6 +601,10 @@ export class SettingsScreen {
         subtitleGlobal?.setDisabled(!subtitlesEnabled);
         const subtitlePreferForced = this._toggleElements.get('settings-subtitles-prefer-forced');
         subtitlePreferForced?.setDisabled(!subtitlesEnabled);
+        const subtitleExternalOnly = this._toggleElements.get('settings-subtitles-external-only');
+        subtitleExternalOnly?.setDisabled(!subtitlesEnabled);
+        const subtitleAllowBurnIn = this._toggleElements.get('settings-subtitles-allow-burn-in');
+        subtitleAllowBurnIn?.setDisabled(!subtitlesEnabled);
         if (this._container.classList.contains('visible') && this._focusableIds.length > 0) {
             this._unregisterFocusables();
             this._registerFocusables();

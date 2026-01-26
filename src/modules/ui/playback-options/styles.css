@@ -53,6 +53,13 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.playback-options-helper {
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+  margin: -4px 0 12px 0;
+}
+
 .playback-options-list {
   display: flex;
   flex-direction: column;

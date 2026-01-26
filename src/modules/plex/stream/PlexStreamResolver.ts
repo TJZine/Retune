@@ -366,8 +366,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
 
         // 2. Select best media version
-        const media = this._selectBestMedia(item.media, request.maxBitrate);
-        if (!media) {
+        const selectedMedia = this._selectBestMedia(item.media, request.maxBitrate);
+        if (!selectedMedia) {
             throw this._createError(
                 PlexStreamErrorCode.PLAYBACK_FORMAT_UNSUPPORTED,
                 'No compatible media version found',
@@ -375,6 +375,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             );
         }
 
+        const { media, mediaIndex } = selectedMedia;
         const part = media.parts[0];
         if (!part) {
             throw this._createError(
@@ -383,6 +384,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 false
             );
         }
+        const partIndex = 0;
 
         // Track selection (used for UI and optional HLS stream selection)
         const audioStream = this._selectCompatibleAudioTrack(
@@ -589,9 +591,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 const maxBitrate = typeof request.maxBitrate === 'number'
                     ? request.maxBitrate
                     : DEFAULT_HLS_OPTIONS.maxBitrate;
-                const options: HlsOptions = { maxBitrate, sessionId };
+                const options: HlsOptions = { maxBitrate, sessionId, mediaIndex, partIndex };
                 if (shouldForceAudioStreamId && audioStream?.id) {
                     options.audioStreamId = audioStream.id;
+                }
+                const subtitleFormat = (subtitleStream?.format ?? subtitleStream?.codec ?? '').toLowerCase();
+                const shouldBurnIn = request.subtitleMode === 'burn' ||
+                    (subtitleStream && BURN_IN_SUBTITLE_FORMATS.includes(subtitleFormat));
+                if (shouldBurnIn && subtitleStream?.id) {
+                    options.subtitleStreamId = subtitleStream.id;
+                    options.subtitleMode = 'burn';
                 }
                 playbackUrl = this.getTranscodeUrl(request.itemKey, options);
                 protocol = 'hls';
@@ -599,9 +608,23 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 container = 'mpegts';
                 videoCodec = 'h264';
                 audioCodec = 'aac';
-                const req: { sessionId: string; maxBitrate: number; audioStreamId?: string } = { sessionId, maxBitrate };
+                const req: {
+                    sessionId: string;
+                    maxBitrate: number;
+                    audioStreamId?: string;
+                    subtitleStreamId?: string;
+                    subtitleMode?: 'none' | 'burn';
+                    mediaIndex?: number;
+                    partIndex?: number;
+                } = { sessionId, maxBitrate, mediaIndex, partIndex };
                 if (typeof options.audioStreamId === 'string') {
                     req.audioStreamId = options.audioStreamId;
+                }
+                if (typeof options.subtitleStreamId === 'string') {
+                    req.subtitleStreamId = options.subtitleStreamId;
+                    if (typeof options.subtitleMode === 'string') {
+                        req.subtitleMode = options.subtitleMode;
+                    }
                 }
                 transcodeRequestInfo = req;
             }
@@ -851,6 +874,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         const audioBoost = typeof options.audioBoost === 'number'
             ? options.audioBoost
             : DEFAULT_HLS_OPTIONS.audioBoost;
+        const mediaIndex = typeof options.mediaIndex === 'number' ? options.mediaIndex : 0;
+        const partIndex = typeof options.partIndex === 'number' ? options.partIndex : 0;
+        const burnInEnabled =
+            options.subtitleMode === 'burn' &&
+            typeof options.subtitleStreamId === 'string' &&
+            options.subtitleStreamId.length > 0;
 
         const metadataPath = itemKey.startsWith('/library/metadata/')
             ? itemKey
@@ -901,8 +930,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
         const params = new URLSearchParams();
         params.set('path', metadataPath);
-        params.set('mediaIndex', '0');
-        params.set('partIndex', '0');
+        params.set('mediaIndex', String(mediaIndex));
+        params.set('partIndex', String(partIndex));
         params.set('protocol', 'hls');
         params.set('offset', '0');
         // Bind the transcoder session key to our app sessionId so we can terminate it later
@@ -928,11 +957,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('addDebugOverlay', '0');
             params.set('autoAdjustQuality', '0');
             params.set('mediaBufferSize', '102400');
-            // Retune does not yet provide subtitle track selection. Avoid forcing burn-in, which can trigger video transcode.
-            params.set('subtitles', 'none');
-            // Redundant belt-and-suspenders for servers that ignore `subtitles=none`.
-            params.set('subtitleStreamID', '0');
-            params.set('subtitleFormat', 'none');
+            if (burnInEnabled) {
+                params.set('subtitles', 'burn');
+                params.set('subtitleStreamID', options.subtitleStreamId as string);
+            } else {
+                // Retune does not yet provide subtitle track selection. Avoid forcing burn-in, which can trigger video transcode.
+                params.set('subtitles', 'none');
+                // Redundant belt-and-suspenders for servers that ignore `subtitles=none`.
+                params.set('subtitleStreamID', '0');
+                params.set('subtitleFormat', 'none');
+            }
             params.set('Accept-Language', 'en');
         } else {
             // Compat: minimal, conservative set for older/stricter servers
@@ -941,6 +975,14 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             params.set('maxVideoBitrate', String(maxBitrate));
             if (location) {
                 params.set('location', location);
+            }
+            if (burnInEnabled) {
+                params.set('subtitles', 'burn');
+                params.set('subtitleStreamID', options.subtitleStreamId as string);
+            } else {
+                params.set('subtitles', 'none');
+                params.set('subtitleStreamID', '0');
+                params.set('subtitleFormat', 'none');
             }
         }
 
@@ -1453,7 +1495,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
     private _selectBestMedia(
         mediaList: PlexMediaFile[],
         maxBitrate?: number
-    ): PlexMediaFile | null {
+    ): { media: PlexMediaFile; mediaIndex: number } | null {
         if (!mediaList || mediaList.length === 0) {
             return null;
         }
@@ -1484,7 +1526,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             (b.width * b.height) - (a.width * a.height)
         );
 
-        return sorted[0] || null;
+        const media = sorted[0];
+        if (!media) return null;
+        const mediaIndex = mediaList.findIndex((entry) => entry === media);
+        return { media, mediaIndex: mediaIndex >= 0 ? mediaIndex : 0 };
     }
 
     /**

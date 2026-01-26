@@ -14,12 +14,15 @@ export interface PlaybackOptionsItem {
     state?: string;
     selected?: boolean;
     disabled?: boolean;
+    blocked?: boolean;
     onSelect: () => void;
+    onBlockedSelect?: () => void;
 }
 
 export interface PlaybackOptionsSection {
     title: string;
     options: PlaybackOptionsItem[];
+    helperText?: string;
     emptyMessage?: string;
 }
 

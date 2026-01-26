@@ -20,6 +20,7 @@ export interface PlaybackRecoveryDeps {
 
     getCurrentProgramForPlayback: () => ScheduledProgram | null;
     getCurrentStreamDescriptor: () => StreamDescriptor | null;
+    getCurrentStreamDecision?: () => StreamDecision | null;
 
     setCurrentStreamDecision: (d: StreamDecision) => void;
     setCurrentStreamDescriptor: (d: StreamDescriptor) => void;
@@ -45,6 +46,7 @@ export class PlaybackRecoveryManager {
 
     // Prevent runaway recovery loops
     private _directFallbackAttemptedForItemKey: Set<string> = new Set();
+    private _burnInAttemptedForItemKey: Set<string> = new Set();
     private _streamRecoveryInProgress: boolean = false;
 
     constructor(private readonly deps: PlaybackRecoveryDeps) { }
@@ -77,14 +79,21 @@ export class PlaybackRecoveryManager {
         }
     }
 
-    private _getCurrentChannelId(): string | null {
-        const scheduler = this.deps.getScheduler();
-        if (!scheduler) return null;
+    private _isExternalOnlyFilterEnabled(): boolean {
         try {
-            return scheduler.getState().channelId ?? null;
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY)
+            );
         } catch {
-            return null;
+            return false;
         }
+    }
+
+    private _getCurrentItemKey(): string | null {
+        const program = this.deps.getCurrentProgramForPlayback();
+        if (!program) return null;
+        const itemKey = program.item.ratingKey;
+        return typeof itemKey === 'string' && itemKey.length > 0 ? itemKey : null;
     }
 
     private _getPreferredSubtitleLanguage(): string | null {
@@ -111,8 +120,8 @@ export class PlaybackRecoveryManager {
         }
     }
 
-    private _getSubtitlePreferenceKey(channelId: string): string {
-        return `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX}${channelId}`;
+    private _getSubtitlePreferenceKey(itemKey: string): string {
+        return `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_ITEM_PREFIX}${itemKey}`;
     }
 
     private _readStoredPreference(key: string): { trackId: string; language: string; codec: string } | null {
@@ -138,20 +147,27 @@ export class PlaybackRecoveryManager {
     }
 
     private _resolvePreferredSubtitleId(
-        channelId: string | null,
+        itemKey: string | null,
         tracks: SubtitleTrack[]
     ): string | null {
-        const eligible = tracks.filter(
-            (t) => t.isTextCandidate && (t.fetchableViaKey || Boolean(t.id))
-        );
+        const externalOnly = this._isExternalOnlyFilterEnabled();
+        const eligible = tracks.filter((t) => {
+            if (!t.isTextCandidate || !(t.fetchableViaKey || Boolean(t.id))) {
+                return false;
+            }
+            if (externalOnly && !t.fetchableViaKey) {
+                return false;
+            }
+            return true;
+        });
         if (eligible.length === 0) {
             return null;
         }
 
-        const useGlobal = this._useGlobalSubtitlePreference() || !channelId;
+        const useGlobal = this._useGlobalSubtitlePreference() || !itemKey;
         const storedPreference = useGlobal
             ? this._readStoredPreference(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL)
-            : this._readStoredPreference(this._getSubtitlePreferenceKey(channelId));
+            : this._readStoredPreference(this._getSubtitlePreferenceKey(itemKey));
         if (storedPreference) {
             const byId = eligible.find((t) => t.id === storedPreference.trackId);
             if (byId) return byId.id;
@@ -294,6 +310,7 @@ export class PlaybackRecoveryManager {
 
     resetDirectFallbackAttempts(): void {
         this._directFallbackAttemptedForItemKey.clear();
+        this._burnInAttemptedForItemKey.clear();
     }
 
     handlePlaybackFailure(context: string, error: unknown): void {
@@ -430,9 +447,9 @@ export class PlaybackRecoveryManager {
         const subtitleTracks = subtitlesEnabled
             ? this._mapSubtitleTracks(decision.availableSubtitleStreams ?? [])
             : [];
-        const channelId = this._getCurrentChannelId();
+        const itemKey = this._getCurrentItemKey();
         const preferredSubtitleTrackId = subtitlesEnabled
-            ? this._resolvePreferredSubtitleId(channelId, subtitleTracks)
+            ? this._resolvePreferredSubtitleId(itemKey, subtitleTracks)
             : null;
         const subtitleContext = subtitlesEnabled
             ? {
@@ -512,6 +529,74 @@ export class PlaybackRecoveryManager {
             return true;
         } catch (error) {
             console.error('[Orchestrator] Transcode fallback failed:', error);
+            return false;
+        } finally {
+            this._streamRecoveryInProgress = false;
+        }
+    }
+
+    async attemptBurnInSubtitleForCurrentProgram(trackId: string, reason: string): Promise<boolean> {
+        if (this._streamRecoveryInProgress) {
+            return false;
+        }
+        const program = this.deps.getCurrentProgramForPlayback();
+        const player = this.deps.getVideoPlayer();
+        const resolver = this.deps.getStreamResolver();
+        if (!program || !player || !resolver) {
+            return false;
+        }
+
+        const itemKey = program.item.ratingKey;
+        const attemptKey = `${itemKey}::${trackId}`;
+        if (this._burnInAttemptedForItemKey.has(attemptKey)) {
+            return false;
+        }
+
+        const currentDescriptor = this.deps.getCurrentStreamDescriptor();
+        const currentDecision = this.deps.getCurrentStreamDecision?.() ?? null;
+        if (
+            currentDescriptor?.protocol === 'hls' &&
+            currentDecision?.transcodeRequest?.subtitleMode === 'burn' &&
+            currentDecision.transcodeRequest.subtitleStreamId === trackId
+        ) {
+            return false;
+        }
+
+        this._burnInAttemptedForItemKey.add(attemptKey);
+        this._streamRecoveryInProgress = true;
+
+        try {
+            console.warn('[PlaybackRecovery] Reloading for burn-in subtitles:', {
+                reason,
+                itemKey,
+                trackId,
+            });
+
+            const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
+            const activeAudioId = player.getState()?.activeAudioId ?? null;
+            const decision: StreamDecision = await resolver.resolveStream({
+                itemKey,
+                startOffsetMs: clampedOffset,
+                directPlay: false,
+                subtitleStreamId: trackId,
+                subtitleMode: 'burn',
+                ...(activeAudioId ? { audioStreamId: activeAudioId } : {}),
+            });
+            if (this.deps.getCurrentProgramForPlayback() !== program) {
+                return false;
+            }
+            this.deps.setCurrentStreamDecision(decision);
+
+            const descriptor = this._buildStreamDescriptor(program, decision, clampedOffset);
+            descriptor.preferredSubtitleTrackId = trackId;
+            this.deps.setCurrentStreamDescriptor(descriptor);
+
+            await player.loadStream(descriptor);
+            await player.play();
+            this.resetPlaybackFailureGuard();
+            return true;
+        } catch (error) {
+            console.error('[PlaybackRecovery] Burn-in reload failed:', error);
             return false;
         } finally {
             this._streamRecoveryInProgress = false;

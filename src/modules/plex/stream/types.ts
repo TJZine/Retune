@@ -148,6 +148,8 @@ export interface StreamRequest {
     audioStreamId?: string;
     /** Preferred subtitle track ID */
     subtitleStreamId?: string;
+    /** Subtitle delivery override */
+    subtitleMode?: 'none' | 'burn';
     /** Maximum bitrate in kbps */
     maxBitrate?: number;
     /** Prefer direct play (no transcoding) */
@@ -241,6 +243,10 @@ export interface StreamDecision {
         sessionId: string;
         maxBitrate: number;
         audioStreamId?: string;
+        subtitleStreamId?: string;
+        subtitleMode?: 'none' | 'burn';
+        mediaIndex?: number;
+        partIndex?: number;
     };
 
     /**
@@ -269,6 +275,14 @@ export interface HlsOptions {
     audioBoost?: number;
     /** Preferred audio stream ID (Plex stream id) */
     audioStreamId?: string;
+    /** Subtitle stream to burn-in when transcoding */
+    subtitleStreamId?: string;
+    /** Subtitle mode for the transcode session */
+    subtitleMode?: 'none' | 'burn';
+    /** Selected media index (for multi-version items) */
+    mediaIndex?: number;
+    /** Selected part index (for multi-part items) */
+    partIndex?: number;
     /**
      * Optional Plex session identifier to bind the transcode session to.
      * When provided, `getTranscodeUrl()` will use this value for both
