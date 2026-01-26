@@ -161,11 +161,14 @@ export class ChannelTuningCoordinator {
                 if (hasNumber && hasName) {
                     return `${channel.number} ${channel.name}`;
                 }
-            if (hasName) {
-                return channel.name;
-            }
-            return '';
-        })();
+                if (hasName) {
+                    return channel.name;
+                }
+                if (hasNumber) {
+                    return `${channel.number}`;
+                }
+                return '';
+            })();
         try {
             this.deps.armChannelTransitionForSwitch(channelPrefix);
         } catch (error: unknown) {

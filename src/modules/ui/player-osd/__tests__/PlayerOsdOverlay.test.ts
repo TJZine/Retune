@@ -46,18 +46,18 @@ describe('PlayerOsdOverlay', () => {
 
     it('initializes hidden', () => {
         expect(overlay.isVisible()).toBe(false);
-        expect(container.classList.contains('visible')).toBe(false);
+        expect(container.classList.contains(PLAYER_OSD_CLASSES.VISIBLE)).toBe(false);
     });
 
     it('shows and hides', () => {
         overlay.setViewModel(baseViewModel);
         overlay.show();
         expect(overlay.isVisible()).toBe(true);
-        expect(container.classList.contains('visible')).toBe(true);
+        expect(container.classList.contains(PLAYER_OSD_CLASSES.VISIBLE)).toBe(true);
 
         overlay.hide();
         expect(overlay.isVisible()).toBe(false);
-        expect(container.classList.contains('visible')).toBe(false);
+        expect(container.classList.contains(PLAYER_OSD_CLASSES.VISIBLE)).toBe(false);
     });
 
     it('renders text and progress values', () => {
