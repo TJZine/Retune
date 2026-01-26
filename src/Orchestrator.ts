@@ -1674,6 +1674,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 return;
             }
 
+            // Only check burn-in settings for tracks that actually require burn-in.
             const allowBurnIn = readStoredBoolean(RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN, true);
             if (!allowBurnIn) {
                 if (this._nowPlayingHandler) {

@@ -27,9 +27,6 @@ const SUBTITLE_LANGUAGE_OPTIONS: Array<{ label: string; code: string | null }> =
     { label: 'Chinese', code: 'zh' },
 ];
 
-const SUBTITLE_EXTERNAL_ONLY_DEFAULT = false;
-const SUBTITLE_ALLOW_BURN_IN_DEFAULT = true;
-
 type ToggleMetadata = {
     storageKey: string;
     defaultValue: boolean;
@@ -81,11 +78,11 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
     },
     'settings-subtitles-external-only': {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
-        defaultValue: SUBTITLE_EXTERNAL_ONLY_DEFAULT,
+        defaultValue: DEFAULT_SETTINGS.subtitles.externalOnly,
     },
     'settings-subtitles-allow-burn-in': {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
-        defaultValue: SUBTITLE_ALLOW_BURN_IN_DEFAULT,
+        defaultValue: DEFAULT_SETTINGS.subtitles.allowBurnIn,
     },
 };
 
@@ -214,11 +211,11 @@ export class SettingsScreen {
         );
         const subtitleExternalOnly = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
-            SUBTITLE_EXTERNAL_ONLY_DEFAULT
+            DEFAULT_SETTINGS.subtitles.externalOnly
         );
         const subtitleAllowBurnIn = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
-            SUBTITLE_ALLOW_BURN_IN_DEFAULT
+            DEFAULT_SETTINGS.subtitles.allowBurnIn
         );
         const subtitleLanguageValue = this._loadSubtitleLanguageValue();
 

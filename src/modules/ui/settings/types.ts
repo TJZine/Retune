@@ -58,6 +58,10 @@ export interface SubtitleSettings {
     language: string | null;
     /** Prefer forced subtitles over full subtitles when auto-selecting */
     preferForced: boolean;
+    /** Only show external (direct) subtitle tracks */
+    externalOnly: boolean;
+    /** Allow burn-in subtitle tracks */
+    allowBurnIn: boolean;
 }
 
 /**

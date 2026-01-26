@@ -71,6 +71,8 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         useGlobalPreference: false,
         language: null,
         preferForced: false,
+        externalOnly: false,
+        allowBurnIn: true,
     },
 };
 

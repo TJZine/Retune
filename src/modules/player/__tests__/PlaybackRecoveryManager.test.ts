@@ -245,6 +245,7 @@ describe('PlaybackRecoveryManager', () => {
 
     it('prefers stored per-item subtitle preference when available', async () => {
         localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE, '0');
         localStorage.setItem(
             `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_ITEM_PREFIX}item-1`,
             JSON.stringify({ trackId: 'sub-full', language: 'en', codec: 'srt', lastUpdated: Date.now() })

@@ -270,11 +270,7 @@ export class PlaybackOptionsCoordinator {
     }
 
     private notifyBurnInDisabled(): void {
-        try {
-            this.deps.notifyToast?.('Burn-in subtitles are disabled in Settings');
-        } catch {
-            // Ignore toast failures
-        }
+        this.deps.notifyToast?.('Burn-in subtitles are disabled in Settings');
     }
 
     private handleAudioSelect(trackId: string): void {

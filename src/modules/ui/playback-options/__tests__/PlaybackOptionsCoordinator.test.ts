@@ -172,6 +172,7 @@ describe('PlaybackOptionsCoordinator', () => {
 
     it('persists subtitle preference per item when global override is off', () => {
         localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE, '0');
 
         const player = createPlayer([
             makeTextTrack({ id: 'sub-99', fetchableViaKey: true, key: '/library/streams/99' }),

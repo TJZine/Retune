@@ -562,7 +562,6 @@ export class PlaybackRecoveryManager {
             return false;
         }
 
-        this._burnInAttemptedForItemKey.add(attemptKey);
         this._streamRecoveryInProgress = true;
 
         try {
@@ -572,7 +571,16 @@ export class PlaybackRecoveryManager {
                 trackId,
             });
 
-            const clampedOffset = Math.max(0, Math.min(program.elapsedMs, program.item.durationMs));
+            const livePosition = (() => {
+                try {
+                    const value = player.getCurrentTimeMs();
+                    return Number.isFinite(value) ? value : null;
+                } catch {
+                    return null;
+                }
+            })();
+            const baseOffset = typeof livePosition === 'number' ? livePosition : program.elapsedMs;
+            const clampedOffset = Math.max(0, Math.min(baseOffset, program.item.durationMs));
             const activeAudioId = player.getState()?.activeAudioId ?? null;
             const decision: StreamDecision = await resolver.resolveStream({
                 itemKey,
@@ -588,12 +596,14 @@ export class PlaybackRecoveryManager {
             this.deps.setCurrentStreamDecision(decision);
 
             const descriptor = this._buildStreamDescriptor(program, decision, clampedOffset);
-            descriptor.preferredSubtitleTrackId = trackId;
-            this.deps.setCurrentStreamDescriptor(descriptor);
+            // Override preferred subtitle to the burn-in track that triggered this reload.
+            const descriptorWithBurnIn = { ...descriptor, preferredSubtitleTrackId: trackId };
+            this.deps.setCurrentStreamDescriptor(descriptorWithBurnIn);
 
-            await player.loadStream(descriptor);
+            await player.loadStream(descriptorWithBurnIn);
             await player.play();
             this.resetPlaybackFailureGuard();
+            this._burnInAttemptedForItemKey.add(attemptKey);
             return true;
         } catch (error) {
             console.error('[PlaybackRecovery] Burn-in reload failed:', error);
