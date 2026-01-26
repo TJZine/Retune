@@ -1,0 +1,97 @@
+.player-osd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 800;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+
+.player-osd.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.player-osd-panel {
+  width: min(1600px, 92vw);
+  margin: 0 0 48px 0;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 18px 22px;
+}
+
+.player-osd-status {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.player-osd-title {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.player-osd-subtitle {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.player-osd-bar {
+  height: 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.10);
+  position: relative;
+  overflow: hidden;
+}
+
+.player-osd-bar-buffer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.18);
+  width: 0%;
+}
+
+.player-osd-bar-played {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--color-primary);
+  width: 0%;
+}
+
+.player-osd-meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 18px;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.player-osd-timecode {
+  flex: 0 0 auto;
+}
+
+.player-osd-ends {
+  flex: 0 0 auto;
+}
+
+.player-osd-buffertext {
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-osd {
+    transition: none;
+  }
+}

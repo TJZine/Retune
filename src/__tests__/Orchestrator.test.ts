@@ -81,12 +81,22 @@ const mockPlaybackOptionsConfig = {
     containerId: 'playback-options-container',
 };
 
+const mockPlayerOsdConfig = {
+    containerId: 'player-osd-container',
+};
+
+const mockChannelTransitionConfig = {
+    containerId: 'channel-transition-container',
+};
+
 const mockConfig: OrchestratorConfig = {
     plexConfig: mockPlexConfig,
     navConfig: mockNavConfig,
     playerConfig: mockPlayerConfig,
     epgConfig: mockEpgConfig,
     nowPlayingInfoConfig: mockNowPlayingInfoConfig,
+    playerOsdConfig: mockPlayerOsdConfig,
+    channelTransitionConfig: mockChannelTransitionConfig,
     playbackOptionsConfig: mockPlaybackOptionsConfig,
 };
 
@@ -187,6 +197,28 @@ jest.mock('../modules/ui/now-playing-info', () => ({
         posterHeight: 480,
     },
     NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS: [5_000, 10_000, 15_000, 30_000, 60_000, 120_000],
+}));
+
+jest.mock('../modules/ui/player-osd', () => ({
+    PlayerOsdOverlay: jest.fn(() => ({
+        initialize: jest.fn(),
+        show: jest.fn(),
+        hide: jest.fn(),
+        isVisible: jest.fn(() => false),
+        destroy: jest.fn(),
+        setViewModel: jest.fn(),
+    })),
+}));
+
+jest.mock('../modules/ui/channel-transition', () => ({
+    ChannelTransitionOverlay: jest.fn(() => ({
+        initialize: jest.fn(),
+        show: jest.fn(),
+        hide: jest.fn(),
+        isVisible: jest.fn(() => false),
+        destroy: jest.fn(),
+        setViewModel: jest.fn(),
+    })),
 }));
 
 // Mock PlexAuth

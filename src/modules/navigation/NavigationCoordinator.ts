@@ -19,6 +19,8 @@ export interface NavigationCoordinatorDeps {
     getVideoPlayer: () => IVideoPlayer | null;
     getPlexAuth: () => IPlexAuth | null;
     stopPlayback: () => void;
+    pokePlayerOsd: (reason: 'play' | 'pause' | 'seek') => void;
+    getSeekIncrementMs: () => number;
 
     isNowPlayingModalOpen: () => boolean;
     toggleNowPlayingInfoOverlay: () => void;
@@ -38,6 +40,8 @@ export interface NavigationCoordinatorDeps {
 
     toggleEpg: () => void;
     shouldRunChannelSetup: () => boolean;
+    hidePlayerOsd: () => void;
+    hideChannelTransition: () => void;
 }
 
 export class NavigationCoordinator {
@@ -162,6 +166,8 @@ export class NavigationCoordinator {
             if (navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
                 navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
             }
+            this.deps.hidePlayerOsd();
+            this.deps.hideChannelTransition();
         }
 
         // Show EPG when entering guide
@@ -321,10 +327,24 @@ export class NavigationCoordinator {
             }
             case 'play':
                 this.deps.getVideoPlayer()?.play().catch(console.error);
+                this.deps.pokePlayerOsd('play');
                 break;
             case 'pause':
                 this.deps.getVideoPlayer()?.pause();
+                this.deps.pokePlayerOsd('pause');
                 break;
+            case 'rewind': {
+                const deltaMs = -this.deps.getSeekIncrementMs();
+                this.deps.getVideoPlayer()?.seekRelative(deltaMs).catch(console.error);
+                this.deps.pokePlayerOsd('seek');
+                break;
+            }
+            case 'fastforward': {
+                const deltaMs = this.deps.getSeekIncrementMs();
+                this.deps.getVideoPlayer()?.seekRelative(deltaMs).catch(console.error);
+                this.deps.pokePlayerOsd('seek');
+                break;
+            }
             case 'stop':
                 this.deps.stopPlayback();
                 break;

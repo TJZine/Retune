@@ -48,6 +48,7 @@ type CoordinatorHarness = {
         notifyNowPlaying: jest.Mock<void, [unknown]>;
         resetPlaybackGuardsForNewChannel: jest.Mock<void, []>;
         stopActiveTranscodeSession: jest.Mock<void, []>;
+        armChannelTransitionForSwitch: jest.Mock<void, [string]>;
         handleGlobalError: jest.Mock<void, [unknown, string]>;
         saveLifecycleState: jest.Mock<Promise<void>, []>;
     };
@@ -96,6 +97,7 @@ const createCoordinator = (): CoordinatorHarness => {
         notifyNowPlaying: jest.fn<void, [unknown]>(),
         resetPlaybackGuardsForNewChannel: jest.fn<void, []>(),
         stopActiveTranscodeSession: jest.fn<void, []>(),
+        armChannelTransitionForSwitch: jest.fn<void, [string]>(),
         handleGlobalError: jest.fn<void, [unknown, string]>(),
         saveLifecycleState: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
     };
@@ -309,13 +311,16 @@ describe('ChannelTuningCoordinator', () => {
         await coordinator.switchToChannel('ch1');
 
         const resolveOrder = channelManager.resolveChannelContent.mock.invocationCallOrder[0] ?? 0;
+        const armTransitionOrder = deps.armChannelTransitionForSwitch.mock.invocationCallOrder[0] ?? 0;
         const stopOrder = videoPlayer.stop.mock.invocationCallOrder[0] ?? 0;
         const loadOrder = scheduler.loadChannel.mock.invocationCallOrder[0] ?? 0;
         const syncOrder = scheduler.syncToCurrentTime.mock.invocationCallOrder[0] ?? 0;
         const setCurrentOrder = channelManager.setCurrentChannel.mock.invocationCallOrder[0] ?? 0;
         const saveOrder = deps.saveLifecycleState.mock.invocationCallOrder[0] ?? 0;
 
-        expect(resolveOrder).toBeLessThan(stopOrder);
+        expect(resolveOrder).toBeLessThan(armTransitionOrder);
+        expect(armTransitionOrder).toBeLessThan(stopOrder);
+        expect(deps.armChannelTransitionForSwitch).toHaveBeenCalledWith('1 Channel 1');
         expect(loadOrder).toBeGreaterThan(0);
         expect(syncOrder).toBeGreaterThan(loadOrder);
         expect(setCurrentOrder).toBeGreaterThan(syncOrder);

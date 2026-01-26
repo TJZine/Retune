@@ -72,7 +72,9 @@ import {
     type IVideoPlayer,
     type VideoPlayerConfig,
     type StreamDescriptor,
+    type PlaybackState,
     type PlaybackError,
+    type TimeRange,
     mapPlayerErrorCodeToAppErrorCode,
 } from './modules/player';
 import { PlaybackRecoveryManager } from './modules/player/PlaybackRecoveryManager';
@@ -88,6 +90,18 @@ import {
     type NowPlayingInfoConfig,
     NOW_PLAYING_INFO_MODAL_ID,
 } from './modules/ui/now-playing-info';
+import {
+    PlayerOsdOverlay,
+    type IPlayerOsdOverlay,
+    type PlayerOsdConfig,
+} from './modules/ui/player-osd';
+import { PlayerOsdCoordinator } from './modules/ui/player-osd/PlayerOsdCoordinator';
+import {
+    ChannelTransitionOverlay,
+    type IChannelTransitionOverlay,
+    type ChannelTransitionConfig,
+} from './modules/ui/channel-transition';
+import { ChannelTransitionCoordinator } from './modules/ui/channel-transition/ChannelTransitionCoordinator';
 import {
     PlaybackOptionsModal,
     type IPlaybackOptionsModal,
@@ -215,6 +229,8 @@ export interface OrchestratorConfig {
     epgConfig: EPGConfig;
     nowPlayingInfoConfig: NowPlayingInfoConfig;
     playbackOptionsConfig: PlaybackOptionsConfig;
+    playerOsdConfig: PlayerOsdConfig;
+    channelTransitionConfig: ChannelTransitionConfig;
 }
 
 export type { ErrorRecoveryAction } from './core/error-recovery/types';
@@ -295,6 +311,10 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _epgCoordinator: EPGCoordinator | null = null;
     private _nowPlayingInfo: INowPlayingInfoOverlay | null = null;
     private _nowPlayingInfoCoordinator: NowPlayingInfoCoordinator | null = null;
+    private _playerOsd: PlayerOsdOverlay | null = null;
+    private _channelTransitionOverlay: ChannelTransitionOverlay | null = null;
+    private _playerOsdCoordinator: PlayerOsdCoordinator | null = null;
+    private _channelTransitionCoordinator: ChannelTransitionCoordinator | null = null;
     private _playbackOptionsModal: IPlaybackOptionsModal | null = null;
     private _playbackOptionsCoordinator: PlaybackOptionsCoordinator | null = null;
     private _nowPlayingDebugManager: NowPlayingDebugManager | null = null;
@@ -442,6 +462,12 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Now Playing Info overlay - no constructor args, initialize later
         this._nowPlayingInfo = new NowPlayingInfoOverlay();
 
+        // Player OSD overlay - no constructor args, initialize later
+        this._playerOsd = new PlayerOsdOverlay();
+
+        // Channel transition overlay - no constructor args, initialize later
+        this._channelTransitionOverlay = new ChannelTransitionOverlay();
+
         // Playback Options modal - no constructor args, initialize later
         this._playbackOptionsModal = new PlaybackOptionsModal();
 
@@ -518,6 +544,23 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._currentProgramForPlayback,
         });
 
+        this._playerOsdCoordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay | null => this._playerOsd,
+            getCurrentProgram: (): ScheduledProgram | null =>
+                this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
+            getCurrentChannel: (): ChannelConfig | null =>
+                this._channelManager?.getCurrentChannel() ?? null,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+            getAutoHideMs: (): number =>
+                this._config?.playerConfig.hideControlsAfterMs ?? 3000,
+        });
+
+        this._channelTransitionCoordinator = new ChannelTransitionCoordinator({
+            getOverlay: (): IChannelTransitionOverlay | null => this._channelTransitionOverlay,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
+        });
+
         this._playbackOptionsCoordinator = new PlaybackOptionsCoordinator({
             playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
             getNavigation: (): INavigationManager | null => this._navigation,
@@ -585,6 +628,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             stopActiveTranscodeSession: (): void => {
                 this._stopActiveTranscodeSession();
             },
+            armChannelTransitionForSwitch: (prefix: string): void => {
+                this._channelTransitionCoordinator?.armForChannelSwitch(prefix);
+            },
             handleGlobalError: (error: AppError, context: string): void =>
                 this.handleGlobalError(error, context),
             saveLifecycleState: async (): Promise<void> => {
@@ -600,6 +646,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
             getPlexAuth: (): IPlexAuth | null => this._plexAuth,
             stopPlayback: (): void => this._stopPlayback(),
+            pokePlayerOsd: (reason): void => {
+                this._playerOsdCoordinator?.poke(reason);
+            },
+            getSeekIncrementMs: (): number =>
+                (this._config?.playerConfig.seekIncrementSec ?? 10) * 1000,
             isNowPlayingModalOpen: (): boolean => {
                 const isOpen = this._navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID) ?? false;
                 if (isOpen) {
@@ -630,6 +681,12 @@ export class AppOrchestrator implements IAppOrchestrator {
             switchToChannelByNumber: (n: number): Promise<void> => this.switchToChannelByNumber(n),
             toggleEpg: (): void => this.toggleEPG(),
             shouldRunChannelSetup: (): boolean => this._channelSetup?.shouldRunChannelSetup() ?? false,
+            hidePlayerOsd: (): void => {
+                this._playerOsdCoordinator?.hide();
+            },
+            hideChannelTransition: (): void => {
+                this._channelTransitionCoordinator?.hide();
+            },
         });
 
         // Create InitializationCoordinator with dependencies and callbacks
@@ -647,6 +704,8 @@ export class AppOrchestrator implements IAppOrchestrator {
                 videoPlayer: this._videoPlayer,
                 epg: this._epg,
                 nowPlayingInfo: this._nowPlayingInfo,
+                playerOsd: this._playerOsd,
+                channelTransition: this._channelTransitionOverlay,
                 playbackOptions: this._playbackOptionsModal,
             },
             {
@@ -747,6 +806,14 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._nowPlayingInfoCoordinator?.dispose();
         if (this._nowPlayingInfo) {
             this._nowPlayingInfo.destroy();
+        }
+        this._playerOsdCoordinator?.hide();
+        if (this._playerOsd) {
+            this._playerOsd.destroy();
+        }
+        this._channelTransitionCoordinator?.hide();
+        if (this._channelTransitionOverlay) {
+            this._channelTransitionOverlay.destroy();
         }
         this._playbackOptionsCoordinator?.dispose();
         if (this._playbackOptionsModal) {
@@ -1263,6 +1330,8 @@ export class AppOrchestrator implements IAppOrchestrator {
             'video-player',
             'epg-ui',
             'now-playing-info-ui',
+            'player-osd-ui',
+            'channel-transition-ui',
             'playback-options-ui',
         ];
 
@@ -1624,6 +1693,37 @@ export class AppOrchestrator implements IAppOrchestrator {
             }
         });
 
+        const stateHandler = (state: PlaybackState): void => {
+            this._playerOsdCoordinator?.onPlayerStateChange(state);
+            this._channelTransitionCoordinator?.onPlayerStateChange(state);
+        };
+        this._videoPlayer.on('stateChange', stateHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('stateChange', stateHandler);
+            }
+        });
+
+        const timeHandler = (payload: { currentTimeMs: number; durationMs: number }): void => {
+            this._playerOsdCoordinator?.onTimeUpdate(payload);
+        };
+        this._videoPlayer.on('timeUpdate', timeHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('timeUpdate', timeHandler);
+            }
+        });
+
+        const bufferHandler = (payload: { percent: number; bufferedRanges: TimeRange[] }): void => {
+            this._playerOsdCoordinator?.onBufferUpdate(payload);
+        };
+        this._videoPlayer.on('bufferUpdate', bufferHandler);
+        this._eventUnsubscribers.push(() => {
+            if (this._videoPlayer) {
+                this._videoPlayer.off('bufferUpdate', bufferHandler);
+            }
+        });
+
         // No-op on state changes: Retune does not report playback progress to Plex.
     }
 
@@ -1679,6 +1779,16 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     private _wireNavigationEvents(): void {
         this._eventUnsubscribers.push(...(this._navigationCoordinator?.wireNavigationEvents() ?? []));
+        if (!this._navigation) {
+            return;
+        }
+        const screenHandler = (payload: { from: string; to: string }): void => {
+            this._channelTransitionCoordinator?.onScreenChange(payload.to as Screen);
+        };
+        this._navigation.on('screenChange', screenHandler);
+        this._eventUnsubscribers.push(() => {
+            this._navigation?.off('screenChange', screenHandler);
+        });
     }
 
     /**
