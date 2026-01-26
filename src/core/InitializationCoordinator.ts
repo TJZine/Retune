@@ -23,6 +23,8 @@ import type { IChannelScheduler } from '../modules/scheduler/scheduler';
 import type { IVideoPlayer } from '../modules/player';
 import type { IEPGComponent } from '../modules/ui/epg';
 import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
+import type { IPlayerOsdOverlay } from '../modules/ui/player-osd';
+import type { IChannelTransitionOverlay } from '../modules/ui/channel-transition';
 import type { IPlaybackOptionsModal } from '../modules/ui/playback-options';
 import type { IDisposable } from '../utils/interfaces';
 import { isStoredTrue, safeLocalStorageGet } from '../utils/storage';
@@ -49,6 +51,8 @@ export interface InitializationDependencies {
     videoPlayer: IVideoPlayer | null;
     epg: IEPGComponent | null;
     nowPlayingInfo: INowPlayingInfoOverlay | null;
+    playerOsd: IPlayerOsdOverlay | null;
+    channelTransition: IChannelTransitionOverlay | null;
     playbackOptions: IPlaybackOptionsModal | null;
 }
 
@@ -546,6 +550,28 @@ export class InitializationCoordinator implements IInitializationCoordinator {
 
             this._callbacks.updateModuleStatus(
                 'video-player',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
+
+        if (this._deps.playerOsd && this._config) {
+            this._callbacks.updateModuleStatus('player-osd-ui', 'initializing');
+            this._deps.playerOsd.initialize(this._config.playerOsdConfig);
+            this._callbacks.updateModuleStatus(
+                'player-osd-ui',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
+
+        if (this._deps.channelTransition && this._config) {
+            this._callbacks.updateModuleStatus('channel-transition-ui', 'initializing');
+            this._deps.channelTransition.initialize(this._config.channelTransitionConfig);
+            this._callbacks.updateModuleStatus(
+                'channel-transition-ui',
                 'ready',
                 undefined,
                 Date.now() - startTime

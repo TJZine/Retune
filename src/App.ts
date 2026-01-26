@@ -15,6 +15,8 @@ import type { NavigationConfig } from './modules/navigation';
 import type { VideoPlayerConfig } from './modules/player';
 import type { EPGConfig } from './modules/ui/epg';
 import type { NowPlayingInfoConfig } from './modules/ui/now-playing-info';
+import type { PlayerOsdConfig } from './modules/ui/player-osd';
+import type { ChannelTransitionConfig } from './modules/ui/channel-transition';
 import type { PlaybackOptionsConfig } from './modules/ui/playback-options';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
@@ -80,6 +82,14 @@ const DEFAULT_EPG_CONFIG: EPGConfig = {
 const DEFAULT_NOW_PLAYING_INFO_CONFIG: NowPlayingInfoConfig = {
     containerId: 'now-playing-info-container',
     autoHideMs: 10_000,
+};
+
+const DEFAULT_PLAYER_OSD_CONFIG: PlayerOsdConfig = {
+    containerId: 'player-osd-container',
+};
+
+const DEFAULT_CHANNEL_TRANSITION_CONFIG: ChannelTransitionConfig = {
+    containerId: 'channel-transition-container',
 };
 
 const DEFAULT_PLAYBACK_OPTIONS_CONFIG: PlaybackOptionsConfig = {
@@ -252,6 +262,14 @@ export class App {
         videoContainer.id = 'video-container';
         videoContainer.className = 'video-container';
         root.appendChild(videoContainer);
+
+        const playerOsdContainer = document.createElement('div');
+        playerOsdContainer.id = 'player-osd-container';
+        root.appendChild(playerOsdContainer);
+
+        const channelTransitionContainer = document.createElement('div');
+        channelTransitionContainer.id = 'channel-transition-container';
+        root.appendChild(channelTransitionContainer);
 
         // EPG container
         const epgContainer = document.createElement('div');
@@ -539,6 +557,8 @@ export class App {
             playerConfig: DEFAULT_PLAYER_CONFIG,
             epgConfig: DEFAULT_EPG_CONFIG,
             nowPlayingInfoConfig: DEFAULT_NOW_PLAYING_INFO_CONFIG,
+            playerOsdConfig: DEFAULT_PLAYER_OSD_CONFIG,
+            channelTransitionConfig: DEFAULT_CHANNEL_TRANSITION_CONFIG,
             playbackOptionsConfig: DEFAULT_PLAYBACK_OPTIONS_CONFIG,
         };
     }

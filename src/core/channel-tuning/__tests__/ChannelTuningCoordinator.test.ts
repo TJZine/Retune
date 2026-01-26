@@ -48,6 +48,7 @@ type CoordinatorHarness = {
         notifyNowPlaying: jest.Mock<void, [unknown]>;
         resetPlaybackGuardsForNewChannel: jest.Mock<void, []>;
         stopActiveTranscodeSession: jest.Mock<void, []>;
+        armChannelTransitionForSwitch: jest.Mock<void, [string]>;
         handleGlobalError: jest.Mock<void, [unknown, string]>;
         saveLifecycleState: jest.Mock<Promise<void>, []>;
     };
@@ -96,6 +97,7 @@ const createCoordinator = (): CoordinatorHarness => {
         notifyNowPlaying: jest.fn<void, [unknown]>(),
         resetPlaybackGuardsForNewChannel: jest.fn<void, []>(),
         stopActiveTranscodeSession: jest.fn<void, []>(),
+        armChannelTransitionForSwitch: jest.fn<void, [string]>(),
         handleGlobalError: jest.fn<void, [unknown, string]>(),
         saveLifecycleState: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
     };

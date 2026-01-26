@@ -33,6 +33,7 @@ export interface ChannelTuningCoordinatorDeps {
 
     resetPlaybackGuardsForNewChannel: () => void;
     stopActiveTranscodeSession: () => void;
+    armChannelTransitionForSwitch: (channelPrefix: string) => void;
 
     handleGlobalError: (error: AppError, context: string) => void;
     saveLifecycleState: () => Promise<void>;
@@ -154,6 +155,18 @@ export class ChannelTuningCoordinator {
 
             // Only stop player after successful content resolution
             this.deps.stopActiveTranscodeSession();
+            const channelPrefix = ((): string => {
+                const hasNumber = typeof channel.number === 'number' && Number.isFinite(channel.number);
+                const hasName = typeof channel.name === 'string' && channel.name.length > 0;
+                if (hasNumber && hasName) {
+                    return `${channel.number} ${channel.name}`;
+                }
+                if (hasName) {
+                    return channel.name;
+                }
+                return '';
+            })();
+            this.deps.armChannelTransitionForSwitch(channelPrefix);
             videoPlayer.stop();
             this._triggerChannelSwitchEffect();
 

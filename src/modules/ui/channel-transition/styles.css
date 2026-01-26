@@ -1,0 +1,59 @@
+.channel-transition {
+  position: absolute;
+  inset: 0;
+  z-index: 850;
+  pointer-events: none;
+  display: none;
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.channel-transition.visible {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.channel-transition-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.channel-transition-spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.channel-transition-title {
+  margin-top: 16px;
+  font-size: 28px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+}
+
+.channel-transition-subtitle {
+  margin-top: 6px;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .channel-transition-spinner {
+    animation: none;
+  }
+}

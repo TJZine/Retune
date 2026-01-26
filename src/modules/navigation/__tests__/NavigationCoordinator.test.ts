@@ -78,6 +78,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         play: jest.fn().mockResolvedValue(undefined),
         pause: jest.fn(),
         stop: jest.fn(),
+        seekRelative: jest.fn().mockResolvedValue(undefined),
     } as unknown as IVideoPlayer;
     const plexAuth: IPlexAuth = {
         isAuthenticated: jest.fn().mockReturnValue(true),
@@ -89,6 +90,8 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         getVideoPlayer: () => videoPlayer,
         getPlexAuth: () => plexAuth,
         stopPlayback: jest.fn(),
+        pokePlayerOsd: jest.fn(),
+        getSeekIncrementMs: jest.fn().mockReturnValue(10_000),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
@@ -104,6 +107,8 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         switchToChannelByNumber: jest.fn().mockResolvedValue(undefined),
         toggleEpg: jest.fn(),
         shouldRunChannelSetup: jest.fn().mockReturnValue(false),
+        hidePlayerOsd: jest.fn(),
+        hideChannelTransition: jest.fn(),
         ...overrides,
     };
 
@@ -252,6 +257,38 @@ describe('NavigationCoordinator', () => {
         handlers.keyPress?.(makeKeyEvent('channelDown'));
         expect(deps.setLastChannelChangeSourceRemote).toHaveBeenCalledTimes(2);
         expect(deps.switchToNextChannel).toHaveBeenCalled();
+    });
+
+    it('play triggers pokePlayerOsd', () => {
+        const { handlers, deps } = setup();
+        handlers.keyPress?.(makeKeyEvent('play'));
+
+        expect(deps.pokePlayerOsd).toHaveBeenCalledWith('play');
+    });
+
+    it('pause triggers pokePlayerOsd', () => {
+        const { handlers, deps } = setup();
+        handlers.keyPress?.(makeKeyEvent('pause'));
+
+        expect(deps.pokePlayerOsd).toHaveBeenCalledWith('pause');
+    });
+
+    it('fastforward seeks forward and pokes OSD', () => {
+        const { handlers, deps, videoPlayer } = setup();
+
+        handlers.keyPress?.(makeKeyEvent('fastforward'));
+
+        expect(videoPlayer.seekRelative).toHaveBeenCalledWith(10_000);
+        expect(deps.pokePlayerOsd).toHaveBeenCalledWith('seek');
+    });
+
+    it('rewind seeks backward and pokes OSD', () => {
+        const { handlers, deps, videoPlayer } = setup();
+
+        handlers.keyPress?.(makeKeyEvent('rewind'));
+
+        expect(videoPlayer.seekRelative).toHaveBeenCalledWith(-10_000);
+        expect(deps.pokePlayerOsd).toHaveBeenCalledWith('seek');
     });
 
     it('settings handler only runs from player or guide', () => {
