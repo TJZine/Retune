@@ -98,6 +98,13 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
         title.textContent = section.title;
         wrapper.appendChild(title);
 
+        if (section.helperText) {
+            const helper = document.createElement('div');
+            helper.className = PLAYBACK_OPTIONS_CLASSES.HELPER;
+            helper.textContent = section.helperText;
+            wrapper.appendChild(helper);
+        }
+
         const list = document.createElement('div');
         list.className = PLAYBACK_OPTIONS_CLASSES.LIST;
 
@@ -130,9 +137,14 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
         button.type = 'button';
         button.id = item.id;
         button.className = `setup-toggle ${PLAYBACK_OPTIONS_CLASSES.ITEM}${item.selected ? ' selected' : ''}`;
-        if (item.disabled) {
+        if (item.disabled || item.blocked) {
             button.classList.add('disabled');
+        }
+        if (item.disabled) {
             button.disabled = true;
+        }
+        if (item.blocked) {
+            button.setAttribute('aria-disabled', 'true');
         }
 
         const label = document.createElement('span');
@@ -157,6 +169,10 @@ export class PlaybackOptionsModal implements IPlaybackOptionsModal {
 
         button.addEventListener('click', () => {
             if (item.disabled) return;
+            if (item.blocked) {
+                item.onBlockedSelect?.();
+                return;
+            }
             item.onSelect();
         });
 

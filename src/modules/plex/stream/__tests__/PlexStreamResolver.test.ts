@@ -637,6 +637,45 @@ describe('PlexStreamResolver', () => {
             expect(url).toContain('X-Plex-Session-Identifier=test-session-id');
         });
 
+        it('should include burn-in subtitle params when requested', () => {
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            const url = resolver.getTranscodeUrl('12345', {
+                subtitleStreamId: 'sub-1',
+                subtitleMode: 'burn',
+                mediaIndex: 1,
+                partIndex: 2,
+            });
+
+            const parsed = new URL(url);
+            expect(parsed.searchParams.get('subtitles')).toBe('burn');
+            expect(parsed.searchParams.get('subtitleStreamID')).toBe('sub-1');
+            expect(parsed.searchParams.get('subtitleFormat')).toBeNull();
+            expect(parsed.searchParams.get('mediaIndex')).toBe('1');
+            expect(parsed.searchParams.get('partIndex')).toBe('2');
+        });
+
+        it('should include explicit subtitle defaults in compat mode when burn-in is off', () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: (key: string) =>
+                        key === RETUNE_STORAGE_KEYS.TRANSCODE_COMPAT ? '1' : null,
+                },
+                configurable: true,
+            });
+
+            const config = createMockConfig();
+            const resolver = new PlexStreamResolver(config);
+
+            const url = resolver.getTranscodeUrl('12345', {});
+            const parsed = new URL(url);
+
+            expect(parsed.searchParams.get('subtitles')).toBe('none');
+            expect(parsed.searchParams.get('subtitleStreamID')).toBe('0');
+            expect(parsed.searchParams.get('subtitleFormat')).toBe('none');
+        });
+
         it('should throw when no server URI is available', () => {
             const config = createMockConfig({
                 getServerUri: () => null,

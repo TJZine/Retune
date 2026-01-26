@@ -76,6 +76,14 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
         defaultValue: DEFAULT_SETTINGS.subtitles.preferForced,
     },
+    'settings-subtitles-external-only': {
+        storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+        defaultValue: DEFAULT_SETTINGS.subtitles.externalOnly,
+    },
+    'settings-subtitles-allow-burn-in': {
+        storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
+        defaultValue: DEFAULT_SETTINGS.subtitles.allowBurnIn,
+    },
 };
 
 const SELECT_METADATA: Record<string, SelectMetadata> = {
@@ -201,6 +209,14 @@ export class SettingsScreen {
             SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
             DEFAULT_SETTINGS.subtitles.preferForced
         );
+        const subtitleExternalOnly = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+            DEFAULT_SETTINGS.subtitles.externalOnly
+        );
+        const subtitleAllowBurnIn = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
+            DEFAULT_SETTINGS.subtitles.allowBurnIn
+        );
         const subtitleLanguageValue = this._loadSubtitleLanguageValue();
 
         return [
@@ -302,6 +318,34 @@ export class SettingsScreen {
                         onChange: (value: boolean): void => {
                             this._saveBoolSetting(
                                 SETTINGS_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
+                                value
+                            );
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-external-only',
+                        label: 'External (Direct) Only',
+                        description: 'Only show subtitles that can be fetched directly (best performance)',
+                        value: subtitleExternalOnly,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+                                value
+                            );
+                        },
+                    },
+                    {
+                        id: 'settings-subtitles-allow-burn-in',
+                        label: 'Allow Burn-in Subtitles',
+                        description: 'Enable image/styled subtitles by transcoding and burning into video',
+                        value: subtitleAllowBurnIn,
+                        disabled: !subtitlesEnabled,
+                        disabledReason: 'Enable Subtitles (beta) first',
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(
+                                SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
                                 value
                             );
                         },
@@ -554,6 +598,10 @@ export class SettingsScreen {
         subtitleGlobal?.setDisabled(!subtitlesEnabled);
         const subtitlePreferForced = this._toggleElements.get('settings-subtitles-prefer-forced');
         subtitlePreferForced?.setDisabled(!subtitlesEnabled);
+        const subtitleExternalOnly = this._toggleElements.get('settings-subtitles-external-only');
+        subtitleExternalOnly?.setDisabled(!subtitlesEnabled);
+        const subtitleAllowBurnIn = this._toggleElements.get('settings-subtitles-allow-burn-in');
+        subtitleAllowBurnIn?.setDisabled(!subtitlesEnabled);
         if (this._container.classList.contains('visible') && this._focusableIds.length > 0) {
             this._unregisterFocusables();
             this._registerFocusables();

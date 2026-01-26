@@ -27,6 +27,9 @@ const makeDecision = (overrides: Partial<StreamDecision> = {}): StreamDecision =
         playbackUrl: 'http://test/stream.m3u8',
         protocol: 'hls',
         container: 'mpegts',
+        sessionId: 'sess-1',
+        availableSubtitleStreams: [],
+        availableAudioStreams: [],
         ...overrides,
     } as StreamDecision);
 
@@ -99,6 +102,7 @@ const setup = (overrides: Partial<PlaybackRecoveryDeps> = {}): {
     const player: IVideoPlayer = {
         loadStream: jest.fn().mockResolvedValue(undefined),
         play: jest.fn().mockResolvedValue(undefined),
+        getState: jest.fn().mockReturnValue({ activeAudioId: null }),
     } as unknown as IVideoPlayer;
     const deps: PlaybackRecoveryDeps = {
         getVideoPlayer: () => player,
@@ -135,6 +139,7 @@ describe('PlaybackRecoveryManager', () => {
     afterEach(() => {
         localStorage.removeItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED);
         localStorage.removeItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED);
+        localStorage.removeItem(RETUNE_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY);
     });
     it('resets playback failure guard and resumes scheduler', () => {
         const { manager, scheduler } = setup();
@@ -236,6 +241,66 @@ describe('PlaybackRecoveryManager', () => {
         expect(setDescriptor).toHaveBeenCalled();
         expect(player.loadStream).toHaveBeenCalled();
         expect(player.play).toHaveBeenCalled();
+    });
+
+    it('prefers stored per-item subtitle preference when available', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE, '0');
+        localStorage.setItem(
+            `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_ITEM_PREFIX}item-1`,
+            JSON.stringify({ trackId: 'sub-full', language: 'en', codec: 'srt', lastUpdated: Date.now() })
+        );
+
+        const decision = makeDecision({ availableSubtitleStreams: makeSubtitleStreams() });
+        const { manager, resolver } = setup();
+        (resolver.resolveStream as jest.Mock).mockResolvedValue(decision);
+
+        const stream = await manager.resolveStreamForProgram(makeProgram());
+
+        expect(stream.preferredSubtitleTrackId).toBe('sub-full');
+    });
+
+    it('filters out keyless subtitles when external-only is enabled', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY, '1');
+
+        const keylessStream: PlexStream = {
+            id: 'sub-keyless',
+            streamType: 3,
+            language: 'English',
+            languageCode: 'en',
+            codec: 'srt',
+            format: 'srt',
+            forced: false,
+            default: true,
+            title: 'Keyless',
+        };
+        const decision = makeDecision({ availableSubtitleStreams: [keylessStream] });
+        const { manager, resolver } = setup();
+        (resolver.resolveStream as jest.Mock).mockResolvedValue(decision);
+
+        const stream = await manager.resolveStreamForProgram(makeProgram());
+
+        expect(stream.preferredSubtitleTrackId).toBeNull();
+    });
+
+    it('skips burn-in reload when already in burn-in HLS for track', async () => {
+        const { manager, resolver } = setup({
+            getCurrentStreamDescriptor: () => ({ protocol: 'hls' } as StreamDescriptor),
+            getCurrentStreamDecision: () => ({
+                transcodeRequest: {
+                    sessionId: 'sess-1',
+                    maxBitrate: 2000,
+                    subtitleStreamId: 'burn-1',
+                    subtitleMode: 'burn',
+                },
+            } as StreamDecision),
+        });
+
+        const ok = await manager.attemptBurnInSubtitleForCurrentProgram('burn-1', 'test');
+
+        expect(ok).toBe(false);
+        expect(resolver.resolveStream).not.toHaveBeenCalled();
     });
 
     it('prefers forced subtitles when preference is enabled', async () => {

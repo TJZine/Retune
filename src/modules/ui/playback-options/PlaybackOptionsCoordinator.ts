@@ -7,17 +7,25 @@ import type { INavigationManager, FocusableElement } from '../../navigation';
 import type { IPlaybackOptionsModal } from './interfaces';
 import type { PlaybackOptionsViewModel, PlaybackOptionsItem } from './types';
 import type { IVideoPlayer } from '../../player';
-import type { IChannelManager } from '../../scheduler/channel-manager';
+import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { AudioTrack, SubtitleTrack } from '../../player/types';
+import { BURN_IN_SUBTITLE_FORMATS } from '../../player/constants';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
-import { isStoredTrue, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../../../utils/storage';
+import {
+    isStoredTrue,
+    readStoredBoolean,
+    safeLocalStorageGet,
+    safeLocalStorageRemove,
+    safeLocalStorageSet,
+} from '../../../utils/storage';
 
 export interface PlaybackOptionsCoordinatorDeps {
     playbackOptionsModalId: string;
     getNavigation: () => INavigationManager | null;
     getPlaybackOptionsModal: () => IPlaybackOptionsModal | null;
     getVideoPlayer: () => IVideoPlayer | null;
-    getChannelManager: () => IChannelManager | null;
+    getCurrentProgram: () => ScheduledProgram | null;
+    notifyToast?: (message: string) => void;
 }
 
 export class PlaybackOptionsCoordinator {
@@ -83,6 +91,8 @@ export class PlaybackOptionsCoordinator {
     private buildViewModel(): PlaybackOptionsViewModel {
         const player = this.deps.getVideoPlayer();
         const subtitlesEnabled = this.isSubtitlesEnabled();
+        const externalOnly = this.isExternalOnlyFilterEnabled();
+        const allowBurnIn = this.isBurnInAllowed();
         const subtitleTracks = player?.getAvailableSubtitles() ?? [];
         const enabledSubtitleTracks = subtitlesEnabled ? subtitleTracks : [];
         const audioTracks = player?.getAvailableAudio() ?? [];
@@ -102,15 +112,21 @@ export class PlaybackOptionsCoordinator {
             },
         ];
 
-        // Include tracks fetchable via key or ID-based fallback
-        const eligibleSubtitles = enabledSubtitleTracks.filter(
+        const textTracks = enabledSubtitleTracks.filter(
             (track) => track.isTextCandidate && (track.fetchableViaKey || track.id)
         );
+        const visibleTextTracks = externalOnly
+            ? textTracks.filter((track) => track.fetchableViaKey)
+            : textTracks;
+        const burnInTracks = externalOnly
+            ? []
+            : enabledSubtitleTracks.filter((track) => this.isBurnInTrack(track));
 
-        for (const track of eligibleSubtitles) {
+        for (const track of visibleTextTracks) {
             subtitleOptions.push({
                 id: `playback-subtitle-${track.id}`,
                 label: track.label,
+                meta: track.fetchableViaKey ? 'Direct (key-backed)' : 'Server-extracted',
                 selected: effectiveActiveSubtitleId === track.id,
                 onSelect: (): void => {
                     this.handleSubtitleSelect(track.id);
@@ -118,10 +134,32 @@ export class PlaybackOptionsCoordinator {
             });
         }
 
+        for (const track of burnInTracks) {
+            const burnInDisabled = !allowBurnIn;
+            subtitleOptions.push({
+                id: `playback-subtitle-${track.id}`,
+                label: track.label,
+                meta: burnInDisabled ? 'Burn-in (disabled in settings)' : 'Burn-in (transcode)',
+                selected: effectiveActiveSubtitleId === track.id,
+                onSelect: (): void => {
+                    this.handleSubtitleSelect(track.id);
+                },
+                ...(burnInDisabled
+                    ? {
+                        blocked: true,
+                        onBlockedSelect: (): void => {
+                            this.notifyBurnInDisabled();
+                        },
+                    }
+                    : {}),
+            });
+        }
+
         const hasAnyTracks = subtitleTracks.length > 0;
+        const hasVisibleTracks = visibleTextTracks.length > 0 || burnInTracks.length > 0;
         const subtitleEmptyMessage = !hasAnyTracks
             ? 'No compatible subtitles available'
-            : (subtitlesEnabled && eligibleSubtitles.length === 0
+            : (subtitlesEnabled && !hasVisibleTracks
                 ? 'No compatible subtitles available'
                 : undefined);
 
@@ -139,6 +177,7 @@ export class PlaybackOptionsCoordinator {
             subtitles: {
                 title: 'Subtitles',
                 options: subtitleOptions,
+                helperText: 'Direct subtitles are fastest. Some tracks require server extraction. Image/styled tracks require burn-in (transcoding).',
                 ...(subtitleEmptyMessage ? { emptyMessage: subtitleEmptyMessage } : {}),
             },
             audio: {
@@ -230,6 +269,10 @@ export class PlaybackOptionsCoordinator {
         this.refreshIfOpen();
     }
 
+    private notifyBurnInDisabled(): void {
+        this.deps.notifyToast?.('Burn-in subtitles are disabled in Settings');
+    }
+
     private handleAudioSelect(trackId: string): void {
         const player = this.deps.getVideoPlayer();
         if (!player) return;
@@ -258,16 +301,39 @@ export class PlaybackOptionsCoordinator {
         }
     }
 
-    private getChannelPreferenceKey(channelId: string): string {
-        return `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX}${channelId}`;
+    private isExternalOnlyFilterEnabled(): boolean {
+        try {
+            return isStoredTrue(
+                safeLocalStorageGet(RETUNE_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    private isBurnInAllowed(): boolean {
+        try {
+            return readStoredBoolean(RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN, true);
+        } catch {
+            return true;
+        }
+    }
+
+    private isBurnInTrack(track: SubtitleTrack): boolean {
+        const format = (track.format || track.codec || '').toLowerCase();
+        return BURN_IN_SUBTITLE_FORMATS.includes(format);
+    }
+
+    private getItemPreferenceKey(itemKey: string): string {
+        return `${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_ITEM_PREFIX}${itemKey}`;
     }
 
     private persistSubtitlePreference(track: SubtitleTrack | null): void {
-        const channelId = this.deps.getChannelManager()?.getCurrentChannel()?.id ?? null;
-        const useGlobal = this.useGlobalSubtitlePreference() || !channelId;
+        const itemKey = this.deps.getCurrentProgram()?.item.ratingKey ?? null;
+        const useGlobal = this.useGlobalSubtitlePreference() || !itemKey;
         const storageKey = useGlobal
             ? RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_GLOBAL
-            : this.getChannelPreferenceKey(channelId);
+            : this.getItemPreferenceKey(itemKey);
 
         if (!track) {
             safeLocalStorageRemove(storageKey);

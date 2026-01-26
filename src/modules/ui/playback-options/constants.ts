@@ -13,6 +13,7 @@ export const PLAYBACK_OPTIONS_CLASSES = {
     TITLE: 'playback-options-title',
     SECTION: 'playback-options-section',
     SECTION_TITLE: 'playback-options-section-title',
+    HELPER: 'playback-options-helper',
     LIST: 'playback-options-list',
     EMPTY: 'playback-options-empty',
     ITEM: 'playback-options-item',

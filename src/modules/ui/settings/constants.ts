@@ -39,6 +39,10 @@ export const SETTINGS_STORAGE_KEYS = {
     SUBTITLE_LANGUAGE: RETUNE_STORAGE_KEYS.SUBTITLE_LANGUAGE,
     /** Prefer forced subtitles over full subtitles */
     SUBTITLE_PREFER_FORCED: RETUNE_STORAGE_KEYS.SUBTITLE_PREFER_FORCED,
+    /** Only show external (direct) subtitle tracks */
+    SUBTITLE_FILTER_EXTERNAL_ONLY: RETUNE_STORAGE_KEYS.SUBTITLE_FILTER_EXTERNAL_ONLY,
+    /** Allow burn-in subtitles (PGS/ASS/etc) */
+    SUBTITLE_ALLOW_BURN_IN: RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
 } as const;
 
 /**
@@ -67,6 +71,8 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         useGlobalPreference: false,
         language: null,
         preferForced: false,
+        externalOnly: false,
+        allowBurnIn: true,
     },
 };
 

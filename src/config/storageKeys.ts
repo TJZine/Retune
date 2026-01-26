@@ -28,7 +28,10 @@ export const RETUNE_STORAGE_KEYS = {
     SUBTITLE_LANGUAGE: 'retune_subtitle_language',
     SUBTITLE_PREFERENCE_GLOBAL: 'retune_subtitle_pref_global',
     SUBTITLE_PREFERENCE_GLOBAL_OVERRIDE: 'retune_subtitle_pref_global_override',
+    SUBTITLE_PREFERENCE_BY_ITEM_PREFIX: 'retune_subtitle_pref_item:',
     SUBTITLE_PREFERENCE_BY_CHANNEL_PREFIX: 'retune_subtitle_pref_channel:',
+    SUBTITLE_FILTER_EXTERNAL_ONLY: 'retune_subtitle_filter_external_only',
+    SUBTITLE_ALLOW_BURN_IN: 'retune_subtitle_allow_burn_in',
     /** Prefer forced subtitles over full subtitles */
     SUBTITLE_PREFER_FORCED: 'retune_subtitle_prefer_forced',
 
