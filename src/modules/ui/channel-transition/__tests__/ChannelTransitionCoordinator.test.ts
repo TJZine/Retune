@@ -105,6 +105,16 @@ describe('ChannelTransitionCoordinator', () => {
         expect(overlay.show).not.toHaveBeenCalled();
     });
 
+    it('still shows if idle before delay', () => {
+        const { coordinator, overlay } = setup(makeState('loading'));
+
+        coordinator.armForChannelSwitch('12 Comedy');
+        coordinator.onPlayerStateChange(makeState('idle'));
+        jest.advanceTimersByTime(CHANNEL_TRANSITION_SHOW_DELAY_MS + 10);
+
+        expect(overlay.show).toHaveBeenCalled();
+    });
+
     it('hides immediately on ready', () => {
         const { coordinator, overlay } = setup(makeState('loading'));
 

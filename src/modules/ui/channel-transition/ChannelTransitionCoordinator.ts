@@ -58,7 +58,11 @@ export class ChannelTransitionCoordinator {
             }
             return;
         }
-        if (state.status === 'error' || state.status === 'idle') {
+        if (state.status === 'error') {
+            this.hide();
+            return;
+        }
+        if (state.status === 'idle' && this._isVisible) {
             this.hide();
         }
     }

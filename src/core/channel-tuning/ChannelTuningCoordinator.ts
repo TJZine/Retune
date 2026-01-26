@@ -161,13 +161,17 @@ export class ChannelTuningCoordinator {
                 if (hasNumber && hasName) {
                     return `${channel.number} ${channel.name}`;
                 }
-                if (hasName) {
-                    return channel.name;
-                }
-                return '';
-            })();
+            if (hasName) {
+                return channel.name;
+            }
+            return '';
+        })();
+        try {
             this.deps.armChannelTransitionForSwitch(channelPrefix);
-            videoPlayer.stop();
+        } catch (error: unknown) {
+            console.warn('Failed to arm channel transition:', summarizeErrorForLog(error));
+        }
+        videoPlayer.stop();
             this._triggerChannelSwitchEffect();
 
             // Configure scheduler

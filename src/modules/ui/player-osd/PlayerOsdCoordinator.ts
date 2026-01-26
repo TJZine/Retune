@@ -202,7 +202,8 @@ export class PlayerOsdCoordinator {
 
     private _getPlaybackStatus(): PlayerStatus {
         if (this._lastState) return this._lastState.status;
-        return this.deps.getVideoPlayer()?.getState().status ?? 'idle';
+        const state = this.deps.getVideoPlayer()?.getState();
+        return state?.status ?? 'idle';
     }
 
     private _scheduleAutoHide(): void {

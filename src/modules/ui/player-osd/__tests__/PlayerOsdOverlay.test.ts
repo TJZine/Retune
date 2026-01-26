@@ -7,6 +7,7 @@
  */
 
 import { PlayerOsdOverlay } from '../PlayerOsdOverlay';
+import { PLAYER_OSD_CLASSES } from '../constants';
 import type { PlayerOsdConfig, PlayerOsdViewModel } from '../types';
 
 describe('PlayerOsdOverlay', () => {
@@ -63,16 +64,16 @@ describe('PlayerOsdOverlay', () => {
         overlay.setViewModel(baseViewModel);
         overlay.show();
 
-        expect(container.querySelector('.player-osd-status')?.textContent).toBe('PLAYING');
-        expect(container.querySelector('.player-osd-channel')?.textContent).toBe('12 Comedy');
-        expect(container.querySelector('.player-osd-title')?.textContent).toBe('Test Title');
-        expect(container.querySelector('.player-osd-subtitle')?.textContent).toBe('Test Subtitle');
-        expect(container.querySelector('.player-osd-timecode')?.textContent).toBe('0:10 / 1:40');
-        expect(container.querySelector('.player-osd-ends')?.textContent).toBe('Ends 9:15 PM');
-        expect(container.querySelector('.player-osd-buffertext')?.textContent).toBe('Buffer +30s');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.STATUS}`)?.textContent).toBe('PLAYING');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`)?.textContent).toBe('12 Comedy');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.TITLE}`)?.textContent).toBe('Test Title');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`)?.textContent).toBe('Test Subtitle');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`)?.textContent).toBe('0:10 / 1:40');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.ENDS}`)?.textContent).toBe('Ends 9:15 PM');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`)?.textContent).toBe('Buffer +30s');
 
-        const played = container.querySelector('.player-osd-bar-played') as HTMLElement;
-        const buffered = container.querySelector('.player-osd-bar-buffer') as HTMLElement;
+        const played = container.querySelector(`.${PLAYER_OSD_CLASSES.BAR_PLAYED}`) as HTMLElement;
+        const buffered = container.querySelector(`.${PLAYER_OSD_CLASSES.BAR_BUFFER}`) as HTMLElement;
         expect(parseFloat(played.style.width)).toBeCloseTo(10, 2);
         expect(parseFloat(buffered.style.width)).toBeCloseTo(40, 2);
     });
@@ -87,9 +88,11 @@ describe('PlayerOsdOverlay', () => {
         });
         overlay.show();
 
-        expect((container.querySelector('.player-osd-channel') as HTMLElement).style.display).toBe('none');
-        expect((container.querySelector('.player-osd-subtitle') as HTMLElement).style.display).toBe('none');
-        expect((container.querySelector('.player-osd-ends') as HTMLElement).style.display).toBe('none');
-        expect((container.querySelector('.player-osd-buffertext') as HTMLElement).style.display).toBe('none');
+        expect((container.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`) as HTMLElement).style.display).toBe('none');
+        expect((container.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`) as HTMLElement).style.display).toBe('none');
+        expect((container.querySelector(`.${PLAYER_OSD_CLASSES.ENDS}`) as HTMLElement).style.display).toBe('none');
+        expect((container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`) as HTMLElement).style.display).toBe(
+            'none'
+        );
     });
 });
