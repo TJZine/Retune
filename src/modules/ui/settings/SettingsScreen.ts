@@ -151,12 +151,36 @@ export class SettingsScreen {
         this._container.appendChild(panel);
     }
 
+    private _themeToValue(theme: 'obsidian' | 'broadcast' | 'swiss'): 0 | 1 | 2 {
+        switch (theme) {
+            case 'broadcast':
+                return 1;
+            case 'swiss':
+                return 2;
+            case 'obsidian':
+            default:
+                return 0;
+        }
+    }
+
+    private _valueToTheme(value: number): 'obsidian' | 'broadcast' | 'swiss' {
+        switch (value) {
+            case 1:
+                return 'broadcast';
+            case 2:
+                return 'swiss';
+            case 0:
+            default:
+                return 'obsidian';
+        }
+    }
+
     /**
      * Build section configurations from current settings.
      */
     private _buildSections(): SettingsSectionConfig[] {
         const nowPlayingAutoHide = this._loadClampedNowPlayingAutoHide();
-        const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
+        const themeValue = this._themeToValue(ThemeManager.getInstance().getTheme());
         const keepPlayingInSettings = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
             DEFAULT_SETTINGS.playback.keepPlayingInSettings
@@ -293,11 +317,12 @@ export class SettingsScreen {
                         description: 'Visual style of the application',
                         value: themeValue,
                         options: [
-                            { label: 'Default', value: 0 },
-                            { label: 'Retro', value: 1 },
+                            { label: 'Obsidian Glass', value: 0 },
+                            { label: 'Broadcast Blue', value: 1 },
+                            { label: 'Swiss Minimal', value: 2 },
                         ],
                         onChange: (value: number): void => {
-                            const theme = value === 1 ? 'retro' : 'default';
+                            const theme = this._valueToTheme(value);
                             ThemeManager.getInstance().setTheme(theme);
                         },
                     },
@@ -512,7 +537,7 @@ export class SettingsScreen {
         }
         const themeSelect = this._selectElements.get('settings-theme');
         if (themeSelect) {
-            const themeValue = ThemeManager.getInstance().getTheme() === 'retro' ? 1 : 0;
+            const themeValue = this._themeToValue(ThemeManager.getInstance().getTheme());
             themeSelect.update(themeValue);
         }
         const subtitlesEnabled = this._loadBoolSetting(

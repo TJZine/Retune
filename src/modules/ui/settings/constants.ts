@@ -54,7 +54,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
         preferHdr10OverDv: false,
     },
     display: {
-        theme: 'default',
+        theme: 'obsidian',
         nowPlayingInfoAutoHideMs: 10_000,
     },
     developer: {
@@ -74,6 +74,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
  * Theme CSS class mappings.
  */
 export const THEME_CLASSES = {
-    default: '',
-    retro: 'theme-retro',
+    obsidian: '',
+    broadcast: 'theme-broadcast',
+    swiss: 'theme-swiss',
 } as const;

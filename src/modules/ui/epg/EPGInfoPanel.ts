@@ -44,7 +44,9 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         this.containerElement = document.createElement('div');
         this.containerElement.className = EPG_CLASSES.INFO_PANEL;
         this.containerElement.innerHTML = this.createTemplate();
-        this.containerElement.style.display = 'none';
+        this.containerElement.style.display = 'flex';
+        this.containerElement.style.visibility = 'hidden';
+        this.containerElement.style.opacity = '0';
         parentElement.appendChild(this.containerElement);
 
         this.posterElement = this.containerElement.querySelector(
@@ -83,7 +85,9 @@ export class EPGInfoPanel implements IEPGInfoPanel {
      */
     private createTemplate(): string {
         return `
-      <img class="${EPG_CLASSES.INFO_POSTER}" src="" alt="" />
+      <div class="${EPG_CLASSES.INFO_POSTER_WRAP}">
+        <img class="${EPG_CLASSES.INFO_POSTER}" src="" alt="" />
+      </div>
       <div class="${EPG_CLASSES.INFO_CONTENT}">
         <div class="${EPG_CLASSES.INFO_TITLE}"></div>
         <div class="${EPG_CLASSES.INFO_META}"></div>
@@ -128,7 +132,8 @@ export class EPGInfoPanel implements IEPGInfoPanel {
     hide(): void {
         if (!this.containerElement) return;
 
-        this.containerElement.style.display = 'none';
+        this.containerElement.style.visibility = 'hidden';
+        this.containerElement.style.opacity = '0';
         this.isVisible = false;
     }
 
@@ -152,7 +157,8 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         this.currentProgram = program;
         this.updateContentFast(program);
-        this.containerElement.style.display = 'flex';
+        this.containerElement.style.visibility = 'visible';
+        this.containerElement.style.opacity = '1';
         this.isVisible = true;
     }
 
@@ -166,7 +172,8 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         this.currentProgram = program;
         this.updateContentFull(program);
-        this.containerElement.style.display = 'flex';
+        this.containerElement.style.visibility = 'visible';
+        this.containerElement.style.opacity = '1';
         this.isVisible = true;
     }
 
