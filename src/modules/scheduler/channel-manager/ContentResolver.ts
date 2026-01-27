@@ -349,6 +349,7 @@ export class ContentResolver {
                 if (!merged.directors && parent.directors) merged.directors = parent.directors;
                 if (!merged.contentRating && parent.contentRating) merged.contentRating = parent.contentRating;
                 if ((!merged.year || merged.year === 0) && parent.year) merged.year = parent.year;
+                if (!merged.grandparentThumb && parent.thumb) merged.grandparentThumb = parent.thumb;
                 decorated.push(merged);
             } else {
                 decorated.push(episode);
@@ -506,6 +507,9 @@ export class ContentResolver {
         }
         if (item.grandparentTitle) {
             resolved.showTitle = item.grandparentTitle;
+        }
+        if (item.grandparentThumb) {
+            resolved.showThumb = item.grandparentThumb;
         }
         // Issue 8: Include filterable fields
         if (typeof item.rating === 'number') {

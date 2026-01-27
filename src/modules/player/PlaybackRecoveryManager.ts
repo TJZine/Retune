@@ -571,7 +571,7 @@ export class PlaybackRecoveryManager {
                 trackId,
             });
 
-            const livePosition = (() => {
+            const livePosition = ((): number | null => {
                 try {
                     const value = player.getCurrentTimeMs();
                     return Number.isFinite(value) ? value : null;

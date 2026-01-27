@@ -40,9 +40,9 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         <div class="${NOW_PLAYING_INFO_CLASSES.CONTENT}">
           <div class="${NOW_PLAYING_INFO_CLASSES.TITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.SUBTITLE}"></div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.BADGES}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.DESCRIPTION}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.CONTEXT}"></div>
-          <div class="${NOW_PLAYING_INFO_CLASSES.ACTIONS}">OK • Playback Options</div>
           <pre class="${NOW_PLAYING_INFO_CLASSES.DEBUG}"></pre>
           <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS}">
             <div class="${NOW_PLAYING_INFO_CLASSES.PROGRESS_BAR}">
@@ -148,6 +148,25 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         if (subtitle) {
             subtitle.textContent = viewModel.subtitle || '';
             (subtitle as HTMLElement).style.display = viewModel.subtitle ? 'block' : 'none';
+        }
+
+        const badgesContainer = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.BADGES}`
+        ) as HTMLElement | null;
+        if (badgesContainer) {
+            const badges = viewModel.badges ?? [];
+            badgesContainer.textContent = '';
+            if (badges.length > 0) {
+                for (const badgeText of badges) {
+                    const badge = document.createElement('span');
+                    badge.className = NOW_PLAYING_INFO_CLASSES.BADGE;
+                    badge.textContent = badgeText;
+                    badgesContainer.appendChild(badge);
+                }
+                badgesContainer.style.display = 'flex';
+            } else {
+                badgesContainer.style.display = 'none';
+            }
         }
 
         const description = this.containerElement.querySelector(

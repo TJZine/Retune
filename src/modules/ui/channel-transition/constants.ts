@@ -10,6 +10,7 @@ export const CHANNEL_TRANSITION_CLASSES = {
     VISIBLE: 'visible',
     PANEL: 'channel-transition-panel',
     SPINNER: 'channel-transition-spinner',
+    TEXT: 'channel-transition-text',
     TITLE: 'channel-transition-title',
     SUBTITLE: 'channel-transition-subtitle',
 } as const;

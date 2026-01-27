@@ -79,6 +79,13 @@ describe('NowPlayingInfoOverlay', () => {
         expect(upNext.style.display).toBe('none');
     });
 
+    it('should render quality badges when provided', () => {
+        overlay.show({ ...baseViewModel, badges: ['4K', 'HDR', 'DD+'] });
+        const badges = Array.from(container.querySelectorAll('.now-playing-info-badge'));
+        const texts = badges.map((badge) => badge.textContent);
+        expect(texts).toEqual(['4K', 'HDR', 'DD+']);
+    });
+
     it('should hide poster when no URL is provided', () => {
         overlay.show({ ...baseViewModel, posterUrl: null });
         const poster = container.querySelector('.now-playing-info-poster') as HTMLImageElement;

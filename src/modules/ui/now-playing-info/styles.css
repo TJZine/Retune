@@ -66,6 +66,25 @@
   text-overflow: ellipsis;
 }
 
+.now-playing-info-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.now-playing-info-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .now-playing-info-description {
   font-size: var(--text-base);
   color: var(--color-text-primary);
@@ -81,13 +100,6 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
-}
-
-.now-playing-info-actions {
-  font-size: var(--text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.7);
 }
 
 .now-playing-info-debug {

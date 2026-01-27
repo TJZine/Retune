@@ -20,6 +20,7 @@ export interface NowPlayingInfoViewModel {
     elapsedMs?: number;
     durationMs?: number;
     posterUrl?: string | null;
+    badges?: string[];
     upNext?: {
         title: string;
         startsAtMs: number;
