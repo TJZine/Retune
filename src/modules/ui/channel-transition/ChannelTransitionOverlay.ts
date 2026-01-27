@@ -92,8 +92,10 @@ export class ChannelTransitionOverlay implements IChannelTransitionOverlay {
         return `
       <div class="${CHANNEL_TRANSITION_CLASSES.PANEL}">
         <div class="${CHANNEL_TRANSITION_CLASSES.SPINNER}"></div>
-        <div class="${CHANNEL_TRANSITION_CLASSES.TITLE}"></div>
-        <div class="${CHANNEL_TRANSITION_CLASSES.SUBTITLE}"></div>
+        <div class="${CHANNEL_TRANSITION_CLASSES.TEXT}">
+          <div class="${CHANNEL_TRANSITION_CLASSES.TITLE}"></div>
+          <div class="${CHANNEL_TRANSITION_CLASSES.SUBTITLE}"></div>
+        </div>
       </div>
     `;
     }

@@ -661,6 +661,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             pokePlayerOsd: (reason): void => {
                 this._playerOsdCoordinator?.poke(reason);
             },
+            togglePlayerOsd: (): void => {
+                this._playerOsdCoordinator?.toggle();
+            },
             getSeekIncrementMs: (): number =>
                 (this._config?.playerConfig.seekIncrementSec ?? 10) * 1000,
             isNowPlayingModalOpen: (): boolean => {

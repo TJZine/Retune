@@ -24,26 +24,51 @@
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 10px;
   padding: 18px 22px;
+  color: var(--color-text-primary);
+}
+
+.player-osd-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
 }
 
 .player-osd-status {
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 1px;
-  color: rgba(255, 255, 255, 0.92);
+  text-transform: uppercase;
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.9));
+}
+
+.player-osd-channel {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.8));
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-osd-title {
   font-size: 30px;
   font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.98));
 }
 
 .player-osd-subtitle {
   font-size: 20px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
+  line-height: 1.2;
 }
 
 .player-osd-bar {
+  margin-top: 10px;
   height: 10px;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.10);
@@ -72,6 +97,7 @@
 .player-osd-meta {
   margin-top: 10px;
   display: flex;
+  align-items: center;
   gap: 18px;
   font-size: 18px;
   color: rgba(255, 255, 255, 0.75);

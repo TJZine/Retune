@@ -263,11 +263,14 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         // Update poster: use resolver if available, otherwise validate URL scheme
         const poster = this.posterElement;
         if (poster) {
+            const preferredThumb = item.type === 'episode'
+                ? (item.showThumb && item.showThumb.length ? item.showThumb : item.thumb)
+                : item.thumb;
             // Use resolver callback to convert relative Plex paths to absolute URLs
-            const resolvedUrl = this.thumbResolver?.(item.thumb) ?? null;
+            const resolvedUrl = this.thumbResolver?.(preferredThumb) || null;
             if (resolvedUrl) {
                 poster.src = resolvedUrl;
-                poster.alt = item.title;
+                poster.alt = item.showTitle && item.showTitle.length ? item.showTitle : item.title;
                 poster.style.display = 'block';
             } else {
                 // Hide poster when unresolved (prevents file:/// errors on webOS)

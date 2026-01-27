@@ -247,6 +247,7 @@ export class NowPlayingInfoCoordinator {
         }
 
         const debugText = this.deps.buildDebugText() ?? null;
+        const badges = this.buildQualityBadges(item);
 
         const baseViewModel: NowPlayingInfoViewModel = {
             title,
@@ -254,6 +255,7 @@ export class NowPlayingInfoCoordinator {
             elapsedMs: program.elapsedMs,
             durationMs: program.item.durationMs,
             posterUrl,
+            ...(badges.length > 0 ? { badges } : {}),
             ...(channelName ? { channelName } : {}),
             ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
             ...(debugText ? { debugText } : {}),
@@ -328,6 +330,67 @@ export class NowPlayingInfoCoordinator {
             return `${hours}h`;
         }
         return `${hours}h ${minutes}m`;
+    }
+
+    private buildQualityBadges(item: ScheduledProgram['item']): string[] {
+        const mediaInfo = item.mediaInfo;
+        if (!mediaInfo) return [];
+
+        const badges: string[] = [];
+        if (mediaInfo.resolution) badges.push(mediaInfo.resolution);
+        if (mediaInfo.hdr) badges.push(mediaInfo.hdr);
+        if (mediaInfo.audioCodec) badges.push(this.formatAudioCodec(mediaInfo.audioCodec));
+        const audioDetail = this.formatAudioDetail(mediaInfo);
+        if (audioDetail) badges.push(audioDetail);
+        return badges;
+    }
+
+    private formatAudioCodec(codec: string): string {
+        const normalized = codec.trim().toLowerCase();
+        switch (normalized) {
+            case 'truehd':
+                return 'TRUEHD';
+            case 'eac3':
+                return 'DD+';
+            case 'ac3':
+                return 'DD';
+            case 'dca':
+            case 'dts':
+                return 'DTS';
+            case 'dts-hd':
+            case 'dtshd':
+                return 'DTS-HD';
+            default:
+                return normalized.toUpperCase();
+        }
+    }
+
+    private formatAudioDetail(
+        mediaInfo: ScheduledProgram['item']['mediaInfo'] | undefined
+    ): string | null {
+        if (!mediaInfo) return null;
+
+        if (typeof mediaInfo.audioChannels === 'number' && mediaInfo.audioChannels > 0) {
+            switch (mediaInfo.audioChannels) {
+                case 1:
+                    return '1.0';
+                case 2:
+                    return '2.0';
+                case 6:
+                    return '5.1';
+                case 8:
+                    return '7.1';
+                default:
+                    return `${mediaInfo.audioChannels}ch`;
+            }
+        }
+
+        if (mediaInfo.audioTrackTitle) {
+            const trimmed = mediaInfo.audioTrackTitle.trim();
+            return trimmed.length > 0 ? trimmed.slice(0, 24) : null;
+        }
+
+        return null;
     }
 
     private clearNowPlayingInfoDetails(): void {

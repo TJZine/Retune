@@ -19,15 +19,18 @@
 }
 
 .theme-swiss {
-  --focus-color: #ff4444;
+  --focus-color: #34d399;
+  --color-primary: #34d399;
+  --color-primary-dark: #10b981;
+  --color-primary-light: #6ee7b7;
   --color-bg-deep: #07090a;
-  --color-bg-surface: rgba(14, 16, 18, 0.76);
-  --color-bg-elevated: rgba(18, 20, 22, 0.82);
-  --color-bg-overlay: rgba(10, 12, 14, 0.74);
-  --panel-surface: rgba(14, 16, 18, 0.76);
-  --panel-surface-2: rgba(18, 20, 22, 0.82);
-  --panel-border: 1px solid rgba(255, 255, 255, 0.16);
-  --panel-radius: 16px;
+  --color-bg-surface: rgba(16, 18, 20, 0.8);
+  --color-bg-elevated: rgba(20, 22, 24, 0.86);
+  --color-bg-overlay: rgba(12, 14, 16, 0.78);
+  --panel-surface: rgba(16, 18, 20, 0.8);
+  --panel-surface-2: rgba(20, 22, 24, 0.86);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.12);
+  --panel-radius: 14px;
   --epg-info-panel-fade-to: var(--panel-surface-2);
 }
 

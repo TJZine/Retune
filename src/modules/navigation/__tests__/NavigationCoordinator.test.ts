@@ -91,6 +91,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         getPlexAuth: () => plexAuth,
         stopPlayback: jest.fn(),
         pokePlayerOsd: jest.fn(),
+        togglePlayerOsd: jest.fn(),
         getSeekIncrementMs: jest.fn().mockReturnValue(10_000),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
@@ -155,6 +156,21 @@ describe('NavigationCoordinator', () => {
         expect(epg.hide).not.toHaveBeenCalled();
         expect(navigation.closeModal).not.toHaveBeenCalled();
         expect(navigation.replaceScreen).not.toHaveBeenCalled();
+    });
+
+    it('toggles player OSD on ok when in player screen', () => {
+        const { handlers, deps } = setup();
+        const keyPress = handlers.keyPress;
+        if (!keyPress) {
+            throw new Error('keyPress handler not registered');
+        }
+
+        const event = makeKeyEvent('ok');
+        keyPress(event);
+
+        expect(deps.togglePlayerOsd).toHaveBeenCalledTimes(1);
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
     it('swallows back when now playing modal open', () => {

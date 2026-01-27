@@ -20,6 +20,7 @@ export interface NavigationCoordinatorDeps {
     getPlexAuth: () => IPlexAuth | null;
     stopPlayback: () => void;
     pokePlayerOsd: (reason: 'play' | 'pause' | 'seek') => void;
+    togglePlayerOsd: () => void;
     getSeekIncrementMs: () => number;
 
     isNowPlayingModalOpen: () => boolean;
@@ -278,6 +279,16 @@ export class NavigationCoordinator {
                     return;
                 default:
                     break;
+            }
+        }
+
+        if (event.button === 'ok') {
+            const currentScreen = navigation?.getCurrentScreen();
+            if (currentScreen === 'player' && !modalOpen) {
+                this.deps.togglePlayerOsd();
+                event.handled = true;
+                event.originalEvent.preventDefault();
+                return;
             }
         }
 

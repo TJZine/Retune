@@ -257,6 +257,8 @@ export interface ResolvedContentItem {
     fullTitle: string;
     /** Show title for episodes (fallback for EPG show line) */
     showTitle?: string;
+    /** Show poster thumb for episodes (EPG/Now Playing fallback) */
+    showThumb?: string | null;
     /** Duration in ms */
     durationMs: number;
     /** Poster thumbnail URL (with token) */

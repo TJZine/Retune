@@ -237,6 +237,7 @@ export interface PlexMediaItemMinimal {
     year: number;
     durationMs: number;
     thumb: string | null;
+    grandparentThumb?: string;
     summary?: string;
     media?: PlexMediaFile[];
     grandparentTitle?: string;

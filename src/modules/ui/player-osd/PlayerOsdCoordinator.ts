@@ -46,6 +46,25 @@ export class PlayerOsdCoordinator {
         }
     }
 
+    toggle(): void {
+        const overlay = this.deps.getOverlay();
+        if (!overlay) return;
+
+        if (overlay.isVisible()) {
+            this.hide();
+            return;
+        }
+
+        this._lastUserActionAt = Date.now();
+        this._lastReason = 'status';
+        this._renderAndShow(this._lastReason);
+
+        const status = this._getPlaybackStatus();
+        if (status === 'playing') {
+            this._scheduleAutoHide();
+        }
+    }
+
     hide(): void {
         this._clearAutoHideTimer();
         this.deps.getOverlay()?.hide();

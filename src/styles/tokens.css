@@ -21,10 +21,10 @@
     --color-accent: var(--color-accent-green);
 
     /* Background */
-    --color-bg-deep: #050607;
-    --color-bg-surface: rgba(8, 10, 12, 0.92);
-    --color-bg-elevated: rgba(14, 18, 22, 0.94);
-    --color-bg-overlay: rgba(5, 7, 9, 0.86);
+    --color-bg-deep: #06080a;
+    --color-bg-surface: rgba(10, 12, 14, 0.92);
+    --color-bg-elevated: rgba(16, 20, 24, 0.94);
+    --color-bg-overlay: rgba(6, 8, 10, 0.86);
     --color-surface-hover: rgba(255, 255, 255, 0.08);
 
     /* Text */
@@ -35,7 +35,7 @@
 
     /* Borders */
     --color-border-subtle: rgba(255, 255, 255, 0.08);
-    --color-border-default: rgba(255, 255, 255, 0.12);
+    --color-border-default: rgba(255, 255, 255, 0.10);
     --color-border-focus: var(--color-primary);
 
     /* Status */
@@ -46,7 +46,7 @@
     /* =========================================
        Focus States (Critical for TV)
        ========================================= */
-    --focus-color: #4bc4eb;
+    --focus-color: #5cc9e6;
     --focus-ring-width: 3px;
     --focus-ring-offset: 2px;
 
