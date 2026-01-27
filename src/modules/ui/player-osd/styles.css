@@ -40,13 +40,15 @@
   font-weight: 800;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.9));
 }
 
 .player-osd-channel {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.8));
+  flex: 1 1 0;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -56,12 +58,12 @@
   font-size: 30px;
   font-weight: 700;
   line-height: 1.2;
-  color: rgba(255, 255, 255, 0.98);
+  color: var(--color-text-primary, rgba(255, 255, 255, 0.98));
 }
 
 .player-osd-subtitle {
   font-size: 20px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
   line-height: 1.2;
 }
 

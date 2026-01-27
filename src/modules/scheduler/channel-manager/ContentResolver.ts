@@ -165,6 +165,10 @@ export class ContentResolver {
                     if ((merged.year === 0 || !merged.year) && item.year) {
                         merged.year = item.year;
                     }
+                    const showThumb = item.showThumb ?? item.thumb ?? null;
+                    if (!merged.grandparentThumb && showThumb) {
+                        merged.grandparentThumb = showThumb;
+                    }
 
                     expanded.push(this._toResolvedItem(merged, 0));
                 }

@@ -89,6 +89,37 @@ describe('EPGInfoPanel', () => {
             expect(poster.style.display).toBe('none');
         });
 
+        it('should fall back to item thumb when show thumb is empty', () => {
+            const resolver = jest.fn().mockReturnValue('https://server/library/thumb?token=xxx');
+            panel.setThumbResolver(resolver);
+
+            const program = createMockProgram('/library/metadata/123/thumb', {
+                type: 'episode',
+                showThumb: '',
+                showTitle: '',
+                title: 'Episode Title',
+            });
+            panel.show(program);
+
+            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb');
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            expect(poster.src).toBe('https://server/library/thumb?token=xxx');
+            expect(poster.alt).toBe('Episode Title');
+            expect(poster.style.display).toBe('block');
+        });
+
+        it('should hide poster when resolver returns empty string', () => {
+            const resolver = jest.fn().mockReturnValue('');
+            panel.setThumbResolver(resolver);
+
+            const program = createMockProgram('/library/metadata/123/thumb');
+            panel.show(program);
+
+            expect(resolver).toHaveBeenCalled();
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            expect(poster.style.display).toBe('none');
+        });
+
         it('should hide poster when no resolver is set', () => {
             // No resolver set - should hide poster rather than assign raw path
             const program = createMockProgram('/library/metadata/123/thumb');

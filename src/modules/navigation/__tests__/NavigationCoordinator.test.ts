@@ -165,9 +165,12 @@ describe('NavigationCoordinator', () => {
             throw new Error('keyPress handler not registered');
         }
 
-        keyPress(makeKeyEvent('ok'));
+        const event = makeKeyEvent('ok');
+        keyPress(event);
 
         expect(deps.togglePlayerOsd).toHaveBeenCalledTimes(1);
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
     it('swallows back when now playing modal open', () => {

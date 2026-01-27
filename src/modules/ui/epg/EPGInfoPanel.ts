@@ -264,13 +264,13 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         const poster = this.posterElement;
         if (poster) {
             const preferredThumb = item.type === 'episode'
-                ? item.showThumb ?? item.thumb
+                ? (item.showThumb && item.showThumb.length ? item.showThumb : item.thumb)
                 : item.thumb;
             // Use resolver callback to convert relative Plex paths to absolute URLs
-            const resolvedUrl = this.thumbResolver?.(preferredThumb) ?? null;
+            const resolvedUrl = this.thumbResolver?.(preferredThumb) || null;
             if (resolvedUrl) {
                 poster.src = resolvedUrl;
-                poster.alt = item.showTitle ?? item.title;
+                poster.alt = item.showTitle && item.showTitle.length ? item.showTitle : item.title;
                 poster.style.display = 'block';
             } else {
                 // Hide poster when unresolved (prevents file:/// errors on webOS)
