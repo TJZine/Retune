@@ -80,9 +80,12 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
 
     show(viewModel: NowPlayingInfoViewModel): void {
         if (!this.containerElement) return;
-        this.updateContent(viewModel);
         this.containerElement.classList.add('visible');
         this.isVisibleFlag = true;
+        this.updateContent(viewModel);
+        if (typeof ResizeObserver === 'undefined') {
+            this.scheduleActorReflow();
+        }
         this.resetAutoHideTimer();
     }
 
@@ -311,6 +314,23 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         }
         this.lastActorState = { headshots, totalCount };
         this.renderActorRow(actors, headshots, totalCount);
+    }
+
+    private scheduleActorReflow(): void {
+        if (!this.containerElement || !this.lastActorState) return;
+        const actors = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.ACTORS}`
+        ) as HTMLElement | null;
+        if (!actors) return;
+        if (actors.clientWidth > 0) return;
+        requestAnimationFrame(() => {
+            if (!this.containerElement || !this.isVisibleFlag || !this.lastActorState) return;
+            const actorsEl = this.containerElement.querySelector(
+                `.${NOW_PLAYING_INFO_CLASSES.ACTORS}`
+            ) as HTMLElement | null;
+            if (!actorsEl) return;
+            this.renderActorRow(actorsEl, this.lastActorState.headshots, this.lastActorState.totalCount);
+        });
     }
 
     private renderActorRow(

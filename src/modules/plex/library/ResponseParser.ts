@@ -139,6 +139,7 @@ export function parseMediaItem(data: RawMediaItem): PlexMediaItem {
         const roles = data.Role
             .map((entry) => ({
                 name: entry.tag?.trim() ?? '',
+                role: entry.role?.trim() ?? null,
                 thumb: entry.thumb ?? null,
             }))
             .filter((entry) => entry.name.length > 0);

@@ -156,18 +156,19 @@ export class PlayerOsdCoordinator {
             ? 'Live'
             : `${formatTimecode(clampedTimeMs)} / ${formatTimecode(durationMs)}`;
 
+        const nowMs = Date.now();
         const remainingMs = program
-            ? Math.max(0, program.scheduledEndTime - Date.now())
+            ? Math.max(0, program.scheduledEndTime - nowMs)
             : Math.max(0, durationMs - clampedTimeMs);
 
-        const endsAtText = isLive ? null : formatEndsAt(Date.now(), remainingMs);
+        const endsAtText = isLive ? null : formatEndsAt(nowMs, remainingMs);
 
         const bufferAheadMs = durationMs > 0
             ? Math.max(0, bufferedRatio * durationMs - clampedTimeMs)
             : 0;
 
         const bufferText = formatBufferText(bufferAheadMs);
-        const upNextText = this.buildUpNextText(isLive);
+        const upNextText = this.buildUpNextText(isLive, nowMs);
 
         return {
             reason,
@@ -244,7 +245,7 @@ export class PlayerOsdCoordinator {
         }
     }
 
-    private buildUpNextText(isLive: boolean): string | null {
+    private buildUpNextText(isLive: boolean, nowMs: number): string | null {
         if (isLive) {
             return null;
         }
@@ -253,7 +254,7 @@ export class PlayerOsdCoordinator {
             return null;
         }
         const startsAtMs = next.scheduledStartTime;
-        if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
+        if (!Number.isFinite(startsAtMs) || startsAtMs <= nowMs) {
             return null;
         }
         const title = next.item?.title?.trim();

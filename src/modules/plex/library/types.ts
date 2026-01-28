@@ -322,6 +322,7 @@ export interface RawRole {
  */
 export interface PlexMediaRole {
     name: string;
+    role?: string | null;
     thumb?: string | null;
 }
 
