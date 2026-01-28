@@ -341,9 +341,12 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         const displayCount = computeActorDisplayCount(actors, headshots.length, totalCount);
         const visibleHeadshots = headshots.slice(0, displayCount);
         const moreCount = Math.max(0, totalCount - visibleHeadshots.length);
+        const maxSlots = computeActorMaxSlots(actors);
+        const canShowMore = moreCount > 0 && maxSlots > displayCount;
+        const effectiveMoreCount = canShowMore ? moreCount : 0;
         const signature = `${visibleHeadshots
             .map((entry) => `${entry.name}|${entry.url ?? ''}`)
-            .join(';')}|+${moreCount}`;
+            .join(';')}|+${effectiveMoreCount}`;
         if (actors.dataset.signature !== signature) {
             actors.textContent = '';
             for (const actor of visibleHeadshots) {
@@ -364,10 +367,10 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
                 }
                 actors.appendChild(row);
             }
-            if (moreCount > 0) {
+            if (effectiveMoreCount > 0) {
                 const more = document.createElement('div');
                 more.className = NOW_PLAYING_INFO_CLASSES.ACTOR_MORE;
-                more.textContent = `+${moreCount}`;
+                more.textContent = `+${effectiveMoreCount}`;
                 actors.appendChild(more);
             }
             actors.dataset.signature = signature;
@@ -408,20 +411,35 @@ function computeActorDisplayCount(
     totalCount: number
 ): number {
     if (headshotCount <= 0) return 0;
-    const styles = getComputedStyle(container);
-    const sizePx = readPx(styles.getPropertyValue('--actor-size'), 44);
-    const gapPx = readPx(styles.getPropertyValue('--actor-gap'), 8);
-    const available = container.clientWidth;
+    const metrics = readActorSlotMetrics(container);
+    const { available, maxSlots } = metrics;
     if (available <= 0) {
         return headshotCount;
     }
-    const slot = sizePx + gapPx;
-    const maxSlots = slot > 0 ? Math.max(1, Math.floor((available + gapPx) / slot)) : 1;
     let visible = Math.min(headshotCount, maxSlots);
     if (totalCount > visible && visible > 1) {
         visible -= 1;
     }
     return Math.max(1, visible);
+}
+
+function computeActorMaxSlots(container: HTMLElement): number {
+    const { available, maxSlots } = readActorSlotMetrics(container);
+    if (available <= 0) return 0;
+    return maxSlots;
+}
+
+function readActorSlotMetrics(container: HTMLElement): {
+    available: number;
+    maxSlots: number;
+} {
+    const styles = getComputedStyle(container);
+    const sizePx = readPx(styles.getPropertyValue('--actor-size'), 44);
+    const gapPx = readPx(styles.getPropertyValue('--actor-gap'), 8);
+    const available = container.clientWidth;
+    const slot = sizePx + gapPx;
+    const maxSlots = slot > 0 ? Math.max(1, Math.floor((available + gapPx) / slot)) : 1;
+    return { available, maxSlots };
 }
 
 function readPx(value: string, fallback: number): number {

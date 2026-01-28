@@ -168,7 +168,7 @@ export class PlayerOsdCoordinator {
             : 0;
 
         const bufferText = formatBufferText(bufferAheadMs);
-        const upNextText = this.buildUpNextText(isLive, nowMs);
+        const upNextText = this._buildUpNextText(isLive, nowMs);
 
         return {
             reason,
@@ -245,7 +245,7 @@ export class PlayerOsdCoordinator {
         }
     }
 
-    private buildUpNextText(isLive: boolean, nowMs: number): string | null {
+    private _buildUpNextText(isLive: boolean, nowMs: number): string | null {
         if (isLive) {
             return null;
         }

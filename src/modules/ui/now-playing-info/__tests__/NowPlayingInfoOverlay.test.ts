@@ -102,11 +102,22 @@ describe('NowPlayingInfoOverlay', () => {
         const images = Array.from(
             container.querySelectorAll('.now-playing-info-actor-image')
         ) as HTMLImageElement[];
-        const more = container.querySelector('.now-playing-info-actor-more') as HTMLElement;
         expect(actorsRow.style.display).toBe('flex');
         expect(images[0]?.getAttribute('src')).toBe('https://example.com/a.jpg');
         expect(actorItems[1]?.classList.contains('fallback')).toBe(true);
         expect(actorItems[1]?.textContent).toBe('AB');
+    });
+
+    it('should render +N when space is available', () => {
+        const actorsRow = container.querySelector('.now-playing-info-actors') as HTMLElement;
+        Object.defineProperty(actorsRow, 'clientWidth', { value: 120, configurable: true });
+        overlay.show({
+            ...baseViewModel,
+            actorHeadshots: [{ name: 'Actor A', url: 'https://example.com/a.jpg' }],
+            actorMoreCount: 2,
+        });
+        const more = container.querySelector('.now-playing-info-actor-more') as HTMLElement;
+        expect(actorsRow.style.display).toBe('flex');
         expect(more.textContent).toBe('+2');
     });
 
