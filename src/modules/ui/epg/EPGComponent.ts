@@ -611,7 +611,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             focusTimeMs
         );
         if (didScroll || !cellElement) {
-            this.renderGrid();
+            this.renderGridInternal();
         }
         this.state.focusTimeMs = focusTimeMs;
         this.state.focusedCell = {
@@ -790,10 +790,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private focusPlaceholder(channelIndex: number, targetTime: number): void {
         if (channelIndex < 0 || channelIndex >= this.state.channels.length) return;
 
-        const didScroll = this.ensureTimeVisible(targetTime);
-        if (didScroll) {
-            this.renderGrid();
-        }
+        this.ensureChannelVisible(channelIndex);
+        this.ensureTimeVisible(targetTime);
 
         const visibleStartMs = this.state.gridAnchorTime + (this.state.scrollPosition.timeOffset * 60000);
         const visibleEndMs = this.state.gridAnchorTime +
@@ -817,8 +815,29 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.channelList.setFocusedChannel(channelIndex);
         this._clearInfoPanelFullUpdateTimer();
         this.infoPanel.hide();
-        this.renderGrid();
+        this.renderGridInternal();
         this.emit('focusChange', this.state.focusedCell);
+    }
+
+    private ensureChannelVisible(channelIndex: number): boolean {
+        const { visibleChannels } = this.config;
+        const { channelOffset } = this.state.scrollPosition;
+        let didScroll = false;
+
+        if (channelIndex < channelOffset) {
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            didScroll = true;
+        } else if (channelIndex >= channelOffset + visibleChannels) {
+            const targetOffset = channelIndex - visibleChannels + 1;
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            didScroll = true;
+        }
+
+        return didScroll;
     }
 
     private _clearInfoPanelFullUpdateTimer(): void {

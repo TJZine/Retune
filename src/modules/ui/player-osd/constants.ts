@@ -20,4 +20,7 @@ export const PLAYER_OSD_CLASSES = {
     TIMECODE: 'player-osd-timecode',
     ENDS: 'player-osd-ends',
     BUFFER_TEXT: 'player-osd-buffertext',
+    ACTIONS: 'player-osd-actions',
+    ACTION: 'player-osd-action',
+    PLAYBACK_TAG: 'player-osd-playback',
 } as const;

@@ -221,7 +221,7 @@
   box-sizing: border-box;
   margin: 2px;
   contain: layout paint;
-  transition: transform 120ms ease-out, background-color 120ms ease-out;
+  transition: transform 80ms ease-out;
   cursor: pointer;
 }
 

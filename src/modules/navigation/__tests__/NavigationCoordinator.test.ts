@@ -99,7 +99,10 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         showNowPlayingInfoOverlay: jest.fn(),
         hideNowPlayingInfoOverlay: jest.fn(),
         playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
-        preparePlaybackOptionsModal: jest.fn().mockReturnValue({ focusableIds: ['playback-subtitle-off'], preferredFocusId: 'playback-subtitle-off' }),
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        }),
         showPlaybackOptionsModal: jest.fn(),
         hidePlaybackOptionsModal: jest.fn(),
         setLastChannelChangeSourceRemote: jest.fn(),
@@ -228,7 +231,7 @@ describe('NavigationCoordinator', () => {
 
         handlers.keyPress?.(event);
 
-        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalled();
+        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalledWith('subtitles');
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
         expect(navigation.openModal).toHaveBeenCalledWith(
             PLAYBACK_OPTIONS_MODAL_ID,

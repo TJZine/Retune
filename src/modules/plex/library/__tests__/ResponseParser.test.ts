@@ -140,6 +140,8 @@ describe('ResponseParser', () => {
                 type: 'episode',
                 title: 'Episode Title',
                 grandparentTitle: 'Show Name',
+                grandparentThumb: '/show/thumb',
+                parentThumb: '/season/thumb',
                 parentTitle: 'Season 1',
                 parentIndex: 1,
                 index: 5,
@@ -150,6 +152,8 @@ describe('ResponseParser', () => {
 
             expect(result.type).toBe('episode');
             expect(result.grandparentTitle).toBe('Show Name');
+            expect(result.grandparentThumb).toBe('/show/thumb');
+            expect(result.parentThumb).toBe('/season/thumb');
             expect(result.parentTitle).toBe('Season 1');
             expect(result.seasonNumber).toBe(1);
             expect(result.episodeNumber).toBe(5);

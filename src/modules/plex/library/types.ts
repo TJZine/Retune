@@ -66,6 +66,8 @@ export interface PlexMediaItem {
     actorRoles?: PlexMediaRole[];
     grandparentTitle?: string;
     parentTitle?: string;
+    grandparentThumb?: string | null;
+    parentThumb?: string | null;
     seasonNumber?: number;
     episodeNumber?: number;
     viewOffset?: number;
@@ -289,6 +291,8 @@ export interface RawMediaItem {
     Studio?: RawTag[];
     grandparentTitle?: string;
     parentTitle?: string;
+    grandparentThumb?: string;
+    parentThumb?: string;
     parentIndex?: number;
     index?: number;
     viewOffset?: number;

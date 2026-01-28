@@ -3,14 +3,21 @@
  * @module modules/ui/player-osd/PlayerOsdCoordinator
  */
 
+import type { INavigationManager } from '../../navigation';
 import type { IVideoPlayer } from '../../player';
 import type { PlaybackState, PlayerStatus, TimeRange } from '../../player/types';
 import type { ChannelConfig } from '../../scheduler/channel-manager';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { IPlayerOsdOverlay } from './interfaces';
 import type { PlayerOsdReason, PlayerOsdViewModel } from './types';
+import type { PlaybackOptionsSectionId } from '../playback-options/types';
+import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../utils/playbackSummary';
 
 const RECENT_USER_ACTION_MS = 2000;
+const PLAYER_OSD_ACTION_IDS = {
+    subtitles: 'player-osd-action-subtitles',
+    audio: 'player-osd-action-audio',
+} as const;
 
 const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
@@ -24,6 +31,12 @@ export interface PlayerOsdCoordinatorDeps {
     getCurrentChannel: () => ChannelConfig | null;
     getVideoPlayer: () => IVideoPlayer | null;
     getAutoHideMs: () => number;
+    getNavigation: () => INavigationManager | null;
+    playbackOptionsModalId: string;
+    preparePlaybackOptionsModal: (
+        preferredSection: PlaybackOptionsSectionId
+    ) => { focusableIds: string[]; preferredFocusId: string | null };
+    getPlaybackInfoSnapshot: () => PlaybackInfoSnapshotLike | null;
 }
 
 export class PlayerOsdCoordinator {
@@ -33,6 +46,7 @@ export class PlayerOsdCoordinator {
     private _lastState: PlaybackState | null = null;
     private _lastTimeUpdate: { currentTimeMs: number; durationMs: number } | null = null;
     private _bufferedRanges: TimeRange[] = [];
+    private _actionsRegistered = false;
 
     constructor(private readonly deps: PlayerOsdCoordinatorDeps) {}
 
@@ -68,6 +82,7 @@ export class PlayerOsdCoordinator {
 
     hide(): void {
         this._clearAutoHideTimer();
+        this._unregisterActions();
         this.deps.getOverlay()?.hide();
     }
 
@@ -131,6 +146,7 @@ export class PlayerOsdCoordinator {
         if (!overlay) return;
         overlay.setViewModel(this._buildViewModel(reason));
         overlay.show();
+        this._registerActions();
     }
 
     private _buildViewModel(reason: PlayerOsdReason): PlayerOsdViewModel {
@@ -169,6 +185,7 @@ export class PlayerOsdCoordinator {
 
         const bufferText = formatBufferText(bufferAheadMs);
         const upNextText = this._buildUpNextText(isLive, nowMs);
+        const playback = buildPlaybackSummary(this.deps.getPlaybackInfoSnapshot());
 
         return {
             reason,
@@ -185,6 +202,8 @@ export class PlayerOsdCoordinator {
             endsAtText,
             bufferText,
             ...(upNextText ? { upNextText } : {}),
+            actionIds: { ...PLAYER_OSD_ACTION_IDS },
+            playbackText: playback.tag,
         };
     }
 
@@ -263,6 +282,55 @@ export class PlayerOsdCoordinator {
         }
         const formatted = TIME_FORMATTER.format(new Date(startsAtMs));
         return `Up next • ${formatted} — ${title}`;
+    }
+
+    private _registerActions(): void {
+        if (this._actionsRegistered) return;
+        const navigation = this.deps.getNavigation();
+        if (!navigation) return;
+        if (typeof document === 'undefined') return;
+
+        const subtitlesEl = document.getElementById(PLAYER_OSD_ACTION_IDS.subtitles) as HTMLElement | null;
+        const audioEl = document.getElementById(PLAYER_OSD_ACTION_IDS.audio) as HTMLElement | null;
+        if (!subtitlesEl || !audioEl) return;
+
+        navigation.registerFocusable({
+            id: PLAYER_OSD_ACTION_IDS.subtitles,
+            element: subtitlesEl,
+            neighbors: { right: PLAYER_OSD_ACTION_IDS.audio },
+            onSelect: () => this._openPlaybackOptions('subtitles'),
+        });
+        navigation.registerFocusable({
+            id: PLAYER_OSD_ACTION_IDS.audio,
+            element: audioEl,
+            neighbors: { left: PLAYER_OSD_ACTION_IDS.subtitles },
+            onSelect: () => this._openPlaybackOptions('audio'),
+        });
+
+        navigation.setFocus(PLAYER_OSD_ACTION_IDS.subtitles);
+        this._actionsRegistered = true;
+    }
+
+    private _unregisterActions(): void {
+        if (!this._actionsRegistered) return;
+        const navigation = this.deps.getNavigation();
+        if (!navigation) return;
+        navigation.unregisterFocusable(PLAYER_OSD_ACTION_IDS.subtitles);
+        navigation.unregisterFocusable(PLAYER_OSD_ACTION_IDS.audio);
+        this._actionsRegistered = false;
+    }
+
+    private _openPlaybackOptions(section: PlaybackOptionsSectionId): void {
+        const navigation = this.deps.getNavigation();
+        if (!navigation) return;
+        if (navigation.isModalOpen()) return;
+
+        const prep = this.deps.preparePlaybackOptionsModal(section);
+        this.hide();
+        navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
+        if (prep.preferredFocusId) {
+            navigation.setFocus(prep.preferredFocusId);
+        }
     }
 }
 

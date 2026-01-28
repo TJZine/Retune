@@ -126,6 +126,8 @@ const setup = (
         maybeFetchStreamDecisionForDebugHud: jest.fn().mockResolvedValue(undefined) as () => Promise<void>,
         getAutoHideMs: (): number => 5000,
         getCurrentProgramForPlayback: (): ScheduledProgram => makeProgram(),
+        getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
+        refreshPlaybackInfoSnapshot: jest.fn().mockResolvedValue({ stream: null }),
         ...overrides,
     };
     return {
@@ -376,7 +378,7 @@ describe('NowPlayingInfoCoordinator', () => {
         coordinator.onProgramStart(programA);
         coordinator.onProgramStart(programB);
 
-        expect((overlay.update as jest.Mock).mock.calls.length).toBe(2);
+        expect((overlay.update as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
 
         const first = deferreds[0];
         const second = deferreds[1];
@@ -391,7 +393,10 @@ describe('NowPlayingInfoCoordinator', () => {
         } as PlexMediaItem);
         await first!.promise;
 
-        expect((overlay.update as jest.Mock).mock.calls.length).toBe(2);
+        const descriptionsAfterFirst = (overlay.update as jest.Mock).mock.calls
+            .map((call) => (call[0] as { description?: string }).description)
+            .filter(Boolean);
+        expect(descriptionsAfterFirst).not.toContain('Old summary');
 
         second!.resolve({
             ratingKey: 'b',
@@ -401,8 +406,8 @@ describe('NowPlayingInfoCoordinator', () => {
         } as PlexMediaItem);
         await second!.promise;
 
-        expect((overlay.update as jest.Mock).mock.calls.length).toBe(3);
-        const lastUpdate = (overlay.update as jest.Mock).mock.calls[2]?.[0] as { description?: string };
+        const calls = (overlay.update as jest.Mock).mock.calls;
+        const lastUpdate = calls[calls.length - 1]?.[0] as { description?: string };
         expect(lastUpdate.description).toBe('New summary');
     });
 });

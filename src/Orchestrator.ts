@@ -499,6 +499,15 @@ export class AppOrchestrator implements IAppOrchestrator {
             },
             switchToChannel: (channelId: string): Promise<void> => this.switchToChannel(channelId),
         });
+        if (this._config?.epgConfig) {
+            const previousOnVisibleRangeChange = this._config.epgConfig.onVisibleRangeChange ?? null;
+            this._config.epgConfig.onVisibleRangeChange = (range): void => {
+                if (previousOnVisibleRangeChange) {
+                    previousOnVisibleRangeChange(range);
+                }
+                this._epgCoordinator?.refreshEpgSchedulesForRange(range, { reason: 'visible-range' });
+            };
+        }
 
         this._channelSetup = new ChannelSetupCoordinator({
             getPlexLibrary: (): IPlexLibrary | null => this._plexLibrary,
@@ -550,6 +559,10 @@ export class AppOrchestrator implements IAppOrchestrator {
                 getNowPlayingInfoAutoHideMs(this._config?.nowPlayingInfoConfig),
             getCurrentProgramForPlayback: (): ScheduledProgram | null =>
                 this._currentProgramForPlayback,
+            getPlaybackInfoSnapshot: (): PlaybackInfoSnapshot | null =>
+                this.getPlaybackInfoSnapshot(),
+            refreshPlaybackInfoSnapshot: (): Promise<PlaybackInfoSnapshot> =>
+                this.refreshPlaybackInfoSnapshot(),
         });
 
         this._playerOsdCoordinator = new PlayerOsdCoordinator({
@@ -562,6 +575,15 @@ export class AppOrchestrator implements IAppOrchestrator {
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
             getAutoHideMs: (): number =>
                 this._config?.playerConfig.hideControlsAfterMs ?? 3000,
+            getNavigation: (): INavigationManager | null => this._navigation,
+            playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
+            preparePlaybackOptionsModal: (
+                preferredSection
+            ): { focusableIds: string[]; preferredFocusId: string | null } =>
+                this._playbackOptionsCoordinator?.prepareModal(preferredSection) ??
+                { focusableIds: [], preferredFocusId: null },
+            getPlaybackInfoSnapshot: (): PlaybackInfoSnapshot | null =>
+                this.getPlaybackInfoSnapshot(),
         });
 
         this._channelTransitionCoordinator = new ChannelTransitionCoordinator({
@@ -633,9 +655,6 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._pendingNowPlayingChannelId = channelId;
             },
             getPendingNowPlayingChannelId: (): string | null => this._pendingNowPlayingChannelId,
-            notifyNowPlaying: (program: ScheduledProgram): void => {
-                this._notifyNowPlaying(program);
-            },
             resetPlaybackGuardsForNewChannel: (): void => {
                 this._playbackRecovery?.resetPlaybackFailureGuard();
                 this._playbackRecovery?.resetDirectFallbackAttempts();
@@ -682,8 +701,11 @@ export class AppOrchestrator implements IAppOrchestrator {
             hideNowPlayingInfoOverlay: (): void =>
                 this._nowPlayingInfoCoordinator?.handleModalClose(NOW_PLAYING_INFO_MODAL_ID),
             playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
-            preparePlaybackOptionsModal: (): { focusableIds: string[]; preferredFocusId: string | null } =>
-                this._playbackOptionsCoordinator?.prepareModal() ?? { focusableIds: [], preferredFocusId: null },
+            preparePlaybackOptionsModal: (
+                preferredSection
+            ): { focusableIds: string[]; preferredFocusId: string | null } =>
+                this._playbackOptionsCoordinator?.prepareModal(preferredSection) ??
+                { focusableIds: [], preferredFocusId: null },
             showPlaybackOptionsModal: (): void =>
                 this._playbackOptionsCoordinator?.handleModalOpen(PLAYBACK_OPTIONS_MODAL_ID),
             hidePlaybackOptionsModal: (): void =>
@@ -1891,7 +1913,10 @@ export class AppOrchestrator implements IAppOrchestrator {
 
         this._currentProgramForPlayback = program;
         const programAtStart = program;
-        this._notifyNowPlaying(program);
+        if (this._pendingNowPlayingChannelId) {
+            this._playerOsdCoordinator?.poke('status');
+            this._pendingNowPlayingChannelId = null;
+        }
         this._nowPlayingInfoCoordinator?.onProgramStart(program);
         this._epgCoordinator?.refreshEpgScheduleForLiveChannel();
 
@@ -1933,34 +1958,6 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _stopPlayback(): void {
         this._stopActiveTranscodeSession();
         this._videoPlayer?.stop();
-    }
-
-    private _notifyNowPlaying(program: ScheduledProgram): void {
-        if (!this._nowPlayingHandler || !this._channelManager) {
-            return;
-        }
-
-        const pendingId = this._pendingNowPlayingChannelId;
-        if (!pendingId) {
-            return;
-        }
-        const currentChannel = this._channelManager.getCurrentChannel();
-        const pendingChannel = pendingId ? this._channelManager.getChannel(pendingId) : null;
-        const resolvedChannel = pendingChannel ?? currentChannel;
-        const channelId = resolvedChannel?.id ?? null;
-        const channelName = resolvedChannel?.name ?? 'Channel';
-        const channelNumber = resolvedChannel?.number;
-        const prefix = channelNumber ? `${channelNumber} ${channelName}` : channelName;
-
-        const subtitle = program.item.fullTitle && program.item.fullTitle !== program.item.title
-            ? ` • ${program.item.fullTitle}`
-            : '';
-        const message = `${prefix} • ${program.item.title}${subtitle}`;
-        this._nowPlayingHandler(message);
-
-        if (pendingId && pendingId === channelId) {
-            this._pendingNowPlayingChannelId = null;
-        }
     }
 
     private _toggleNowPlayingInfoOverlay(): void {

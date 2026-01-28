@@ -7,6 +7,7 @@ import type { NowPlayingInfoConfig } from './types';
 import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from './constants';
 import { safeLocalStorageGet } from '../../../utils/storage';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
+import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../utils/playbackSummary';
 
 export interface NowPlayingInfoCoordinatorDeps {
     nowPlayingModalId: string;
@@ -30,6 +31,10 @@ export interface NowPlayingInfoCoordinatorDeps {
 
     // Current program fallback (Orchestrator-owned snapshot)
     getCurrentProgramForPlayback: () => ScheduledProgram | null;
+
+    // Playback snapshot for mode/details
+    getPlaybackInfoSnapshot: () => PlaybackInfoSnapshotLike | null;
+    refreshPlaybackInfoSnapshot: () => Promise<PlaybackInfoSnapshotLike>;
 }
 
 export class NowPlayingInfoCoordinator {
@@ -74,6 +79,7 @@ export class NowPlayingInfoCoordinator {
         overlay.show(viewModel);
         this.startLiveUpdates();
         void this.fetchNowPlayingInfoDetails(program, channel);
+        void this.refreshPlaybackSummary(program, channel);
         void this.deps.maybeFetchStreamDecisionForDebugHud();
     }
 
@@ -97,6 +103,7 @@ export class NowPlayingInfoCoordinator {
         overlay.setAutoHideMs(this.deps.getAutoHideMs());
         overlay.update(viewModel);
         void this.fetchNowPlayingInfoDetails(program, channel);
+        void this.refreshPlaybackSummary(program, channel);
     }
 
     refreshIfOpen(): void {
@@ -250,6 +257,7 @@ export class NowPlayingInfoCoordinator {
         const badges = this.buildQualityBadges(item);
         const metaLines = this.buildMetaLines(item, details);
         const actorHeadshots = this.buildActorHeadshots(details);
+        const playback = buildPlaybackSummary(this.deps.getPlaybackInfoSnapshot());
 
         const baseViewModel: NowPlayingInfoViewModel = {
             title,
@@ -259,6 +267,8 @@ export class NowPlayingInfoCoordinator {
             posterUrl,
             ...(badges.length > 0 ? { badges } : {}),
             ...(metaLines.length > 0 ? { metaLines } : {}),
+            ...(playback.summary ? { playbackSummary: playback.summary } : {}),
+            ...(playback.details.length > 0 ? { playbackDetails: playback.details } : {}),
             ...(actorHeadshots.headshots.length > 0 ? { actorHeadshots: actorHeadshots.headshots } : {}),
             ...(actorHeadshots.headshots.length > 0 ? { actorTotalCount: actorHeadshots.totalCount } : {}),
             ...(channelName ? { channelName } : {}),
@@ -277,6 +287,26 @@ export class NowPlayingInfoCoordinator {
         }
 
         return withUpNext;
+    }
+
+    private async refreshPlaybackSummary(
+        program: ScheduledProgram,
+        channel: ChannelConfig | null
+    ): Promise<void> {
+        try {
+            await this.deps.refreshPlaybackInfoSnapshot();
+        } catch {
+            return;
+        }
+
+        const overlay = this.deps.getNowPlayingInfo();
+        const navigation = this.deps.getNavigation();
+        if (!overlay || !navigation?.isModalOpen(this.deps.nowPlayingModalId)) {
+            return;
+        }
+        const details = this.getCachedDetailsForProgram(program);
+        const viewModel = this.buildNowPlayingInfoViewModel(program, channel, details);
+        overlay.update(viewModel);
     }
 
     private buildUpNext(): NowPlayingInfoViewModel['upNext'] | undefined {

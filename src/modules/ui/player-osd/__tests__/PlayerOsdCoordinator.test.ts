@@ -1,5 +1,6 @@
 import { PlayerOsdCoordinator } from '../PlayerOsdCoordinator';
 import type { IPlayerOsdOverlay } from '../interfaces';
+import type { INavigationManager } from '../../../navigation';
 import type { IVideoPlayer } from '../../../player';
 import type { PlaybackState } from '../../../player/types';
 import type { ChannelConfig } from '../../../scheduler/channel-manager';
@@ -70,6 +71,13 @@ const setup = (): {
     videoPlayer: IVideoPlayer;
 } => {
     const overlay = makeOverlay();
+    const navigation = {
+        registerFocusable: jest.fn(),
+        unregisterFocusable: jest.fn(),
+        setFocus: jest.fn(),
+        isModalOpen: jest.fn().mockReturnValue(false),
+        openModal: jest.fn(),
+    } as unknown as INavigationManager;
     const videoPlayer = {
         getState: jest.fn(() => makeState('playing')),
     } as unknown as IVideoPlayer;
@@ -81,6 +89,13 @@ const setup = (): {
         getCurrentChannel: (): ChannelConfig => makeChannel(),
         getVideoPlayer: (): IVideoPlayer => videoPlayer,
         getAutoHideMs: (): number => AUTO_HIDE_MS,
+        getNavigation: (): INavigationManager => navigation,
+        playbackOptionsModalId: 'playback-options',
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        }),
+        getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
     });
 
     return { coordinator, overlay, videoPlayer };
@@ -145,6 +160,19 @@ describe('PlayerOsdCoordinator', () => {
             getCurrentChannel: (): ChannelConfig => makeChannel(),
             getVideoPlayer: (): IVideoPlayer => videoPlayer,
             getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
         });
 
         coordinator.onPlayerStateChange(makeState('playing'));
@@ -176,6 +204,19 @@ describe('PlayerOsdCoordinator', () => {
             getCurrentChannel: (): ChannelConfig => makeChannel(),
             getVideoPlayer: (): IVideoPlayer => videoPlayer,
             getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
         });
 
         coordinator.poke('play');

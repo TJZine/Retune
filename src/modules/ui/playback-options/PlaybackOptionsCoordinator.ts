@@ -5,7 +5,11 @@
 
 import type { INavigationManager, FocusableElement } from '../../navigation';
 import type { IPlaybackOptionsModal } from './interfaces';
-import type { PlaybackOptionsViewModel, PlaybackOptionsItem } from './types';
+import type {
+    PlaybackOptionsViewModel,
+    PlaybackOptionsItem,
+    PlaybackOptionsSectionId,
+} from './types';
 import type { IVideoPlayer } from '../../player';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { AudioTrack, SubtitleTrack } from '../../player/types';
@@ -34,14 +38,18 @@ export class PlaybackOptionsCoordinator {
     private pendingFocusableIds: string[] = [];
     private pendingPreferredFocusId: string | null = null;
     private registeredFocusableIds: string[] = [];
+    private preferredSection: PlaybackOptionsSectionId = 'subtitles';
 
     constructor(private readonly deps: PlaybackOptionsCoordinatorDeps) { }
 
-    prepareModal(): { focusableIds: string[]; preferredFocusId: string | null } {
+    prepareModal(
+        preferredSection: PlaybackOptionsSectionId = 'subtitles'
+    ): { focusableIds: string[]; preferredFocusId: string | null } {
         const viewModel = this.buildViewModel();
         this.pendingViewModel = viewModel;
         this.pendingFocusableIds = this.collectFocusableIds(viewModel);
-        this.pendingPreferredFocusId = this.resolvePreferredFocusId(viewModel);
+        this.preferredSection = preferredSection;
+        this.pendingPreferredFocusId = this.resolvePreferredFocusId(viewModel, preferredSection);
         return {
             focusableIds: [...this.pendingFocusableIds],
             preferredFocusId: this.pendingPreferredFocusId,
@@ -86,7 +94,10 @@ export class PlaybackOptionsCoordinator {
         const viewModel = this.buildViewModel();
         modal.update(viewModel);
         this.unregisterFocusables();
-        this.registerFocusables(viewModel, this.resolvePreferredFocusId(viewModel));
+        this.registerFocusables(
+            viewModel,
+            this.resolvePreferredFocusId(viewModel, this.preferredSection)
+        );
     }
 
     private buildViewModel(): PlaybackOptionsViewModel {
@@ -202,13 +213,26 @@ export class PlaybackOptionsCoordinator {
         ];
     }
 
-    private resolvePreferredFocusId(viewModel: PlaybackOptionsViewModel): string | null {
+    private resolvePreferredFocusId(
+        viewModel: PlaybackOptionsViewModel,
+        preferredSection: PlaybackOptionsSectionId
+    ): string | null {
         const selectedSubtitle = viewModel.subtitles.options.find((option) => option.selected);
-        if (selectedSubtitle) return selectedSubtitle.id;
         const selectedAudio = viewModel.audio.options.find((option) => option.selected);
+
+        if (preferredSection === 'audio') {
+            if (selectedAudio) return selectedAudio.id;
+            const firstAudio = viewModel.audio.options[0];
+            if (firstAudio) return firstAudio.id;
+            if (selectedSubtitle) return selectedSubtitle.id;
+            return viewModel.subtitles.options[0]?.id ?? null;
+        }
+
+        if (selectedSubtitle) return selectedSubtitle.id;
+        const firstSubtitle = viewModel.subtitles.options[0];
+        if (firstSubtitle) return firstSubtitle.id;
         if (selectedAudio) return selectedAudio.id;
-        const first = viewModel.subtitles.options[0] ?? viewModel.audio.options[0];
-        return first?.id ?? null;
+        return viewModel.audio.options[0]?.id ?? null;
     }
 
     private registerFocusables(

@@ -48,6 +48,10 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
           <div class="${NOW_PLAYING_INFO_CLASSES.TITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.SUBTITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.BADGES}"></div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.PLAYBACK}">
+            <div class="${NOW_PLAYING_INFO_CLASSES.PLAYBACK_SUMMARY}"></div>
+            <div class="${NOW_PLAYING_INFO_CLASSES.PLAYBACK_DETAILS}"></div>
+          </div>
           <div class="${NOW_PLAYING_INFO_CLASSES.META}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.ACTORS}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.DESCRIPTION}"></div>
@@ -233,6 +237,31 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
             } else {
                 meta.style.display = 'none';
             }
+        }
+
+        const playback = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.PLAYBACK}`
+        ) as HTMLElement | null;
+        const playbackSummary = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.PLAYBACK_SUMMARY}`
+        ) as HTMLElement | null;
+        const playbackDetails = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.PLAYBACK_DETAILS}`
+        ) as HTMLElement | null;
+        if (playback && playbackSummary && playbackDetails) {
+            const summaryText = viewModel.playbackSummary ?? '';
+            const detailLines = viewModel.playbackDetails ?? [];
+            playbackSummary.textContent = summaryText;
+            playbackDetails.textContent = '';
+            if (detailLines.length > 0) {
+                for (const line of detailLines) {
+                    const row = document.createElement('div');
+                    row.textContent = line;
+                    playbackDetails.appendChild(row);
+                }
+            }
+            const shouldShow = summaryText.length > 0 || detailLines.length > 0;
+            playback.style.display = shouldShow ? 'flex' : 'none';
         }
 
         const context = this.containerElement.querySelector(

@@ -7,6 +7,8 @@ export interface PlaybackOptionsConfig {
     containerId: string;
 }
 
+export type PlaybackOptionsSectionId = 'subtitles' | 'audio';
+
 export interface PlaybackOptionsItem {
     id: string;
     label: string;

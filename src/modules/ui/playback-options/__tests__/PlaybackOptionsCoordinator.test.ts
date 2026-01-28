@@ -121,6 +121,25 @@ describe('PlaybackOptionsCoordinator', () => {
         expect(optionIds).not.toContain('playback-subtitle-burn');
     });
 
+    it('prefers audio section when requested', () => {
+        const player = createPlayer(
+            [makeTextTrack({ id: 'sub-1' })],
+            [{ id: 'audio-1', language: 'en', codec: 'aac', channels: 2 } as AudioTrack]
+        );
+
+        const coordinator = new PlaybackOptionsCoordinator({
+            playbackOptionsModalId: 'playback-options',
+            getNavigation: (): null => null,
+            getPlaybackOptionsModal: (): null => null,
+            getVideoPlayer: (): IVideoPlayer => player,
+            getCurrentProgram: (): ScheduledProgram | null => makeProgram(),
+        });
+
+        const prep = coordinator.prepareModal('audio');
+
+        expect(prep.preferredFocusId).toBe('playback-audio-audio-1');
+    });
+
     it('marks burn-in tracks disabled when burn-in is off', () => {
         localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLES_ENABLED, '1');
         localStorage.setItem(RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN, '0');

@@ -3,6 +3,7 @@ import type { IEPGComponent } from '../ui/epg';
 import type { IVideoPlayer } from '../player';
 import type { IPlexAuth } from '../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../ui/now-playing-info';
+import type { PlaybackOptionsSectionId } from '../ui/playback-options/types';
 import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
 import { readStoredBoolean } from '../../utils/storage';
 
@@ -28,7 +29,9 @@ export interface NavigationCoordinatorDeps {
     showNowPlayingInfoOverlay: () => void;
     hideNowPlayingInfoOverlay: () => void;
     playbackOptionsModalId: string;
-    preparePlaybackOptionsModal: () => { focusableIds: string[]; preferredFocusId: string | null };
+    preparePlaybackOptionsModal: (
+        preferredSection?: PlaybackOptionsSectionId
+    ) => { focusableIds: string[]; preferredFocusId: string | null };
     showPlaybackOptionsModal: () => void;
     hidePlaybackOptionsModal: () => void;
 
@@ -223,13 +226,13 @@ export class NavigationCoordinator {
         if (isNowPlayingModalOpen && event.button === 'back') {
             return;
         }
-        if (isNowPlayingModalOpen && event.button === 'ok') {
-            const navigation = this.deps.getNavigation();
-            if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
-                const prep = this.deps.preparePlaybackOptionsModal();
-                navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-                navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
-                if (prep.preferredFocusId) {
+            if (isNowPlayingModalOpen && event.button === 'ok') {
+                const navigation = this.deps.getNavigation();
+                if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
+                    const prep = this.deps.preparePlaybackOptionsModal('subtitles');
+                    navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+                    navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
+                    if (prep.preferredFocusId) {
                     navigation.setFocus(prep.preferredFocusId);
                 }
             }

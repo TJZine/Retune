@@ -9,6 +9,11 @@ export interface PlayerOsdConfig {
 
 export type PlayerOsdReason = 'play' | 'pause' | 'seek' | 'status';
 
+export interface PlayerOsdActionIds {
+    subtitles: string;
+    audio: string;
+}
+
 export interface PlayerOsdViewModel {
     reason: PlayerOsdReason;
 
@@ -30,4 +35,6 @@ export interface PlayerOsdViewModel {
     endsAtText: string | null;
     bufferText: string | null;
     upNextText?: string | null;
+    playbackText?: string | null;
+    actionIds?: PlayerOsdActionIds;
 }

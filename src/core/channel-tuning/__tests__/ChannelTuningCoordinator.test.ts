@@ -45,7 +45,6 @@ type CoordinatorHarness = {
         setActiveScheduleDayKey: jest.Mock<void, [number]>;
         setPendingNowPlayingChannelId: jest.Mock<void, [string | null]>;
         getPendingNowPlayingChannelId: jest.Mock<string | null, []>;
-        notifyNowPlaying: jest.Mock<void, [unknown]>;
         resetPlaybackGuardsForNewChannel: jest.Mock<void, []>;
         stopActiveTranscodeSession: jest.Mock<void, []>;
         armChannelTransitionForSwitch: jest.Mock<void, [string]>;
@@ -94,7 +93,6 @@ const createCoordinator = (): CoordinatorHarness => {
         setActiveScheduleDayKey: jest.fn<void, [number]>(),
         setPendingNowPlayingChannelId: jest.fn<void, [string | null]>(),
         getPendingNowPlayingChannelId: jest.fn<string | null, []>().mockReturnValue(null),
-        notifyNowPlaying: jest.fn<void, [unknown]>(),
         resetPlaybackGuardsForNewChannel: jest.fn<void, []>(),
         stopActiveTranscodeSession: jest.fn<void, []>(),
         armChannelTransitionForSwitch: jest.fn<void, [string]>(),

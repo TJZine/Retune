@@ -32,6 +32,14 @@ export interface EPGCoordinatorDeps {
 
 export class EPGCoordinator {
     private _epgScheduleLoadToken = 0;
+    private _visibleRangeTimer: ReturnType<typeof setTimeout> | null = null;
+    private _pendingVisibleRange: {
+        channelStart: number;
+        channelEnd: number;
+        timeStartMs: number;
+        timeEndMs: number;
+    } | null = null;
+    private _pendingVisibleRangeReason: string | null = null;
 
     constructor(private readonly deps: EPGCoordinatorDeps) {}
 
@@ -90,109 +98,15 @@ export class EPGCoordinator {
 
     async refreshEpgSchedules(options?: { reason?: string }): Promise<void> {
         const epg = this.deps.getEpg();
-        const channelManager = this.deps.getChannelManager();
-        const scheduler = this.deps.getScheduler();
-        if (!epg || !channelManager) return;
-        if (this.deps.getEpgUiStatus() !== 'ready') return;
-
-        const range = this._getEpgScheduleRangeMs();
-        if (!range) return;
-
-        const { startTime, endTime } = range;
-        epg.setGridAnchorTime(startTime);
-        const channels = channelManager.getAllChannels();
-        if (channels.length === 0) return;
-
-        const loadToken = ++this._epgScheduleLoadToken;
-        const shuffler = new ShuffleGenerator();
-
-        const MAX_CHANNELS_TO_PRELOAD = 100;
-        const liveChannelId = channelManager.getCurrentChannel()?.id ?? null;
+        if (!epg) return;
         const epgState = epg.getState();
-        const focusedChannelId = epgState.focusedCell
-            ? channels[epgState.focusedCell.channelIndex]?.id ?? null
-            : null;
-        const visibleChannels = channels.slice(
-            epgState.viewWindow.startChannelIndex,
-            epgState.viewWindow.endChannelIndex
-        );
-
-        const prioritized: ChannelConfig[] = [];
-        const addChannel = (channel: ChannelConfig | null | undefined): void => {
-            if (!channel) return;
-            if (prioritized.some((existing) => existing.id === channel.id)) return;
-            prioritized.push(channel);
+        const range = {
+            channelStart: epgState.viewWindow.startChannelIndex,
+            channelEnd: epgState.viewWindow.endChannelIndex,
+            timeStartMs: epgState.viewWindow.startTime,
+            timeEndMs: epgState.viewWindow.endTime,
         };
-
-        if (liveChannelId) {
-            addChannel(channels.find((c) => c.id === liveChannelId));
-        }
-        if (focusedChannelId) {
-            addChannel(channels.find((c) => c.id === focusedChannelId));
-        }
-        for (const channel of visibleChannels) {
-            addChannel(channel);
-        }
-        for (const channel of channels) {
-            addChannel(channel);
-        }
-
-        const channelsToLoad = prioritized.slice(0, MAX_CHANNELS_TO_PRELOAD);
-
-        if (this._isDebugEnabled()) {
-            const payload = {
-                reason: options?.reason ?? 'manual',
-                channelCount: channels.length,
-                preloadCount: channelsToLoad.length,
-                liveChannelId,
-                focusedChannelId,
-                visibleRange: {
-                    start: epgState.viewWindow.startChannelIndex,
-                    end: epgState.viewWindow.endChannelIndex,
-                },
-            };
-            console.warn('[EPGCoordinator] refreshEpgSchedules', payload);
-            appendEpgDebugLog('EPG.refreshEpgSchedules', payload);
-        }
-
-        for (const channel of channelsToLoad) {
-            if (loadToken !== this._epgScheduleLoadToken) return;
-            try {
-                if (liveChannelId && channel.id === liveChannelId && scheduler) {
-                    const state = scheduler.getState();
-                    if (state.isActive && state.channelId === channel.id) {
-                        const window = scheduler.getScheduleWindow(startTime, endTime);
-                        epg.loadScheduleForChannel(channel.id, {
-                            ...window,
-                            programs: [...window.programs],
-                        });
-                        continue;
-                    }
-                }
-
-                const resolved = await channelManager.resolveChannelContent(channel.id);
-                const scheduleConfig = this.deps.buildDailyScheduleConfig(
-                    channel,
-                    resolved.items,
-                    startTime
-                );
-                const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
-                const programs = ScheduleCalculator.generateScheduleWindow(
-                    startTime,
-                    endTime,
-                    index,
-                    scheduleConfig.anchorTime
-                );
-
-                epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
-            } catch (error) {
-                console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
-            }
-        }
-
-        if (loadToken === this._epgScheduleLoadToken && epg.isVisible() && !epg.getFocusedProgram()) {
-            epg.focusNow();
-        }
+        await this._refreshEpgSchedulesForRange(range, options?.reason ?? 'manual');
     }
 
     refreshEpgScheduleForLiveChannel(): void {
@@ -223,6 +137,34 @@ export class EPGCoordinator {
         } catch (error) {
             console.warn('[Orchestrator] Failed to refresh live EPG schedule:', error);
         }
+    }
+
+    async refreshEpgSchedulesForRange(range: {
+        channelStart: number;
+        channelEnd: number;
+        timeStartMs: number;
+        timeEndMs: number;
+    }, options?: { reason?: string; debounceMs?: number }): Promise<void> {
+        const debounceMs = Math.max(0, options?.debounceMs ?? 120);
+        const reason = options?.reason ?? 'visible-range';
+        if (debounceMs === 0) {
+            await this._refreshEpgSchedulesForRange(range, reason);
+            return;
+        }
+        this._pendingVisibleRange = range;
+        this._pendingVisibleRangeReason = reason;
+        if (this._visibleRangeTimer) {
+            return;
+        }
+        this._visibleRangeTimer = setTimeout(() => {
+            this._visibleRangeTimer = null;
+            const pending = this._pendingVisibleRange;
+            const reason = this._pendingVisibleRangeReason;
+            this._pendingVisibleRange = null;
+            this._pendingVisibleRangeReason = null;
+            if (!pending) return;
+            void this._refreshEpgSchedulesForRange(pending, reason ?? 'visible-range');
+        }, debounceMs);
     }
 
     wireEpgEvents(): Array<() => void> {
@@ -275,6 +217,115 @@ export class EPGCoordinator {
         );
         const endTime = startTime + totalHours * 60 * 60 * 1000;
         return { startTime, endTime };
+    }
+
+    private async _refreshEpgSchedulesForRange(
+        range: { channelStart: number; channelEnd: number; timeStartMs: number; timeEndMs: number },
+        reason: string
+    ): Promise<void> {
+        const epg = this.deps.getEpg();
+        const channelManager = this.deps.getChannelManager();
+        const scheduler = this.deps.getScheduler();
+        if (!epg || !channelManager) return;
+        if (this.deps.getEpgUiStatus() !== 'ready') return;
+
+        const scheduleRange = this._getEpgScheduleRangeMs();
+        if (!scheduleRange) return;
+
+        const { startTime, endTime } = scheduleRange;
+        epg.setGridAnchorTime(startTime);
+        const channels = channelManager.getAllChannels();
+        if (channels.length === 0) return;
+
+        const buffer = 4;
+        const startIndex = Math.max(0, range.channelStart - buffer);
+        const endIndex = Math.min(channels.length, range.channelEnd + buffer);
+        const rangeChannels = channels.slice(startIndex, endIndex);
+
+        const loadToken = ++this._epgScheduleLoadToken;
+        const shuffler = new ShuffleGenerator();
+
+        const liveChannelId = channelManager.getCurrentChannel()?.id ?? null;
+        const epgState = epg.getState();
+        const focusedChannelId = epgState.focusedCell
+            ? channels[epgState.focusedCell.channelIndex]?.id ?? null
+            : null;
+
+        const prioritized: ChannelConfig[] = [];
+        const addChannel = (channel: ChannelConfig | null | undefined): void => {
+            if (!channel) return;
+            if (prioritized.some((existing) => existing.id === channel.id)) return;
+            prioritized.push(channel);
+        };
+
+        if (liveChannelId) {
+            addChannel(channels.find((c) => c.id === liveChannelId));
+        }
+        if (focusedChannelId) {
+            addChannel(channels.find((c) => c.id === focusedChannelId));
+        }
+        for (const channel of rangeChannels) {
+            addChannel(channel);
+        }
+
+        if (this._isDebugEnabled()) {
+            const payload = {
+                reason,
+                channelCount: channels.length,
+                preloadCount: prioritized.length,
+                liveChannelId,
+                focusedChannelId,
+                visibleRange: {
+                    start: range.channelStart,
+                    end: range.channelEnd,
+                },
+                bufferedRange: {
+                    start: startIndex,
+                    end: endIndex,
+                },
+            };
+            console.warn('[EPGCoordinator] refreshEpgSchedulesForRange', payload);
+            appendEpgDebugLog('EPG.refreshEpgSchedulesForRange', payload);
+        }
+
+        for (const channel of prioritized) {
+            if (loadToken !== this._epgScheduleLoadToken) return;
+            try {
+                if (liveChannelId && channel.id === liveChannelId && scheduler) {
+                    const state = scheduler.getState();
+                    if (state.isActive && state.channelId === channel.id) {
+                        const window = scheduler.getScheduleWindow(startTime, endTime);
+                        epg.loadScheduleForChannel(channel.id, {
+                            ...window,
+                            programs: [...window.programs],
+                        });
+                        continue;
+                    }
+                }
+
+                const resolved = await channelManager.resolveChannelContent(channel.id);
+                const scheduleConfig = this.deps.buildDailyScheduleConfig(
+                    channel,
+                    resolved.items,
+                    startTime
+                );
+                const index = ScheduleCalculator.buildScheduleIndex(scheduleConfig, shuffler);
+                const programs = ScheduleCalculator.generateScheduleWindow(
+                    startTime,
+                    endTime,
+                    index,
+                    scheduleConfig.anchorTime
+                );
+
+                epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
+            } catch (error) {
+                console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
+            }
+        }
+
+        if (loadToken === this._epgScheduleLoadToken && epg.isVisible() && !epg.getFocusedProgram()) {
+            epg.focusNow();
+        }
     }
 
     private _focusEpgOnCurrentChannel(): void {
