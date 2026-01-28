@@ -555,6 +555,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             getOverlay: (): IPlayerOsdOverlay | null => this._playerOsd,
             getCurrentProgram: (): ScheduledProgram | null =>
                 this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
+            getNextProgram: (): ScheduledProgram | null => this._scheduler?.getNextProgram() ?? null,
             getCurrentChannel: (): ChannelConfig | null =>
                 this._channelManager?.getCurrentChannel() ?? null,
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,

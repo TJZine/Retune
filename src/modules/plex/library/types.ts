@@ -61,6 +61,9 @@ export interface PlexMediaItem {
     contentRating?: string;
     genres?: string[];
     directors?: string[];
+    actors?: string[];
+    studios?: string[];
+    actorRoles?: PlexMediaRole[];
     grandparentTitle?: string;
     parentTitle?: string;
     seasonNumber?: number;
@@ -282,6 +285,8 @@ export interface RawMediaItem {
     contentRating?: string;
     Genre?: RawTag[];
     Director?: RawTag[];
+    Role?: RawRole[];
+    Studio?: RawTag[];
     grandparentTitle?: string;
     parentTitle?: string;
     parentIndex?: number;
@@ -300,6 +305,25 @@ export interface RawMediaItem {
 export interface RawTag {
     id?: number;
     tag?: string;
+}
+
+/**
+ * Raw role tag from Plex API (actors).
+ */
+export interface RawRole {
+    id?: number;
+    tag?: string;
+    role?: string;
+    thumb?: string;
+}
+
+/**
+ * Parsed role/actor entry for media items.
+ */
+export interface PlexMediaRole {
+    name: string;
+    role?: string | null;
+    thumb?: string | null;
 }
 
 /**

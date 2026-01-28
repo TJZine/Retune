@@ -98,6 +98,10 @@ describe('ResponseParser', () => {
                 rating: 8.5,
                 audienceRating: 9.0,
                 contentRating: 'PG-13',
+                Genre: [{ id: 1, tag: 'Action' }],
+                Director: [{ id: 2, tag: 'Director One' }],
+                Role: [{ id: 3, tag: 'Actor One', role: 'Lead', thumb: '/actor/thumb' }],
+                Studio: [{ id: 4, tag: 'Studio One' }],
                 viewOffset: 1000,
                 viewCount: 2,
                 lastViewedAt: 1704240000,
@@ -120,6 +124,11 @@ describe('ResponseParser', () => {
             expect(result.rating).toBe(8.5);
             expect(result.audienceRating).toBe(9.0);
             expect(result.contentRating).toBe('PG-13');
+            expect(result.genres).toEqual(['Action']);
+            expect(result.directors).toEqual(['Director One']);
+            expect(result.actors).toEqual(['Actor One']);
+            expect(result.actorRoles).toEqual([{ name: 'Actor One', role: 'Lead', thumb: '/actor/thumb' }]);
+            expect(result.studios).toEqual(['Studio One']);
             expect(result.viewOffset).toBe(1000);
             expect(result.viewCount).toBe(2);
         });

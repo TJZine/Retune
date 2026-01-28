@@ -20,6 +20,7 @@ const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
 export interface PlayerOsdCoordinatorDeps {
     getOverlay: () => IPlayerOsdOverlay | null;
     getCurrentProgram: () => ScheduledProgram | null;
+    getNextProgram: () => ScheduledProgram | null;
     getCurrentChannel: () => ChannelConfig | null;
     getVideoPlayer: () => IVideoPlayer | null;
     getAutoHideMs: () => number;
@@ -155,17 +156,19 @@ export class PlayerOsdCoordinator {
             ? 'Live'
             : `${formatTimecode(clampedTimeMs)} / ${formatTimecode(durationMs)}`;
 
+        const nowMs = Date.now();
         const remainingMs = program
-            ? Math.max(0, program.scheduledEndTime - Date.now())
+            ? Math.max(0, program.scheduledEndTime - nowMs)
             : Math.max(0, durationMs - clampedTimeMs);
 
-        const endsAtText = isLive ? null : formatEndsAt(Date.now(), remainingMs);
+        const endsAtText = isLive ? null : formatEndsAt(nowMs, remainingMs);
 
         const bufferAheadMs = durationMs > 0
             ? Math.max(0, bufferedRatio * durationMs - clampedTimeMs)
             : 0;
 
         const bufferText = formatBufferText(bufferAheadMs);
+        const upNextText = this._buildUpNextText(isLive, nowMs);
 
         return {
             reason,
@@ -181,6 +184,7 @@ export class PlayerOsdCoordinator {
             timecode,
             endsAtText,
             bufferText,
+            ...(upNextText ? { upNextText } : {}),
         };
     }
 
@@ -239,6 +243,26 @@ export class PlayerOsdCoordinator {
             globalThis.clearTimeout(this._autoHideTimer);
             this._autoHideTimer = null;
         }
+    }
+
+    private _buildUpNextText(isLive: boolean, nowMs: number): string | null {
+        if (isLive) {
+            return null;
+        }
+        const next = this.deps.getNextProgram();
+        if (!next) {
+            return null;
+        }
+        const startsAtMs = next.scheduledStartTime;
+        if (!Number.isFinite(startsAtMs) || startsAtMs <= nowMs) {
+            return null;
+        }
+        const title = next.item?.title?.trim();
+        if (!title) {
+            return null;
+        }
+        const formatted = TIME_FORMATTER.format(new Date(startsAtMs));
+        return `Up next • ${formatted} — ${title}`;
     }
 }
 

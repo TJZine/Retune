@@ -61,13 +61,16 @@ describe('PlayerOsdOverlay', () => {
     });
 
     it('renders text and progress values', () => {
-        overlay.setViewModel(baseViewModel);
+        overlay.setViewModel({ ...baseViewModel, upNextText: 'Up next • 9:30 PM — Next' });
         overlay.show();
 
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.STATUS}`)?.textContent).toBe('PLAYING');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`)?.textContent).toBe('12 Comedy');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.TITLE}`)?.textContent).toBe('Test Title');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`)?.textContent).toBe('Test Subtitle');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.UP_NEXT}`)?.textContent).toBe(
+            'Up next • 9:30 PM — Next'
+        );
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`)?.textContent).toBe('0:10 / 1:40');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.ENDS}`)?.textContent).toBe('Ends 9:15 PM');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`)?.textContent).toBe('Buffer +30s');
@@ -85,11 +88,13 @@ describe('PlayerOsdOverlay', () => {
             subtitle: null,
             endsAtText: null,
             bufferText: null,
+            upNextText: null,
         });
         overlay.show();
 
         expect((container.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`) as HTMLElement).style.display).toBe('none');
         expect((container.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`) as HTMLElement).style.display).toBe('none');
+        expect((container.querySelector(`.${PLAYER_OSD_CLASSES.UP_NEXT}`) as HTMLElement).style.display).toBe('none');
         expect((container.querySelector(`.${PLAYER_OSD_CLASSES.ENDS}`) as HTMLElement).style.display).toBe('none');
         expect((container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`) as HTMLElement).style.display).toBe(
             'none'

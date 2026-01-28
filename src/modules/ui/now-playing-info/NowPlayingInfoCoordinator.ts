@@ -248,6 +248,8 @@ export class NowPlayingInfoCoordinator {
 
         const debugText = this.deps.buildDebugText() ?? null;
         const badges = this.buildQualityBadges(item);
+        const metaLines = this.buildMetaLines(item, details);
+        const actorHeadshots = this.buildActorHeadshots(details);
 
         const baseViewModel: NowPlayingInfoViewModel = {
             title,
@@ -256,6 +258,9 @@ export class NowPlayingInfoCoordinator {
             durationMs: program.item.durationMs,
             posterUrl,
             ...(badges.length > 0 ? { badges } : {}),
+            ...(metaLines.length > 0 ? { metaLines } : {}),
+            ...(actorHeadshots.headshots.length > 0 ? { actorHeadshots: actorHeadshots.headshots } : {}),
+            ...(actorHeadshots.headshots.length > 0 ? { actorTotalCount: actorHeadshots.totalCount } : {}),
             ...(channelName ? { channelName } : {}),
             ...(typeof channelNumber === 'number' ? { channelNumber } : {}),
             ...(debugText ? { debugText } : {}),
@@ -299,6 +304,131 @@ export class NowPlayingInfoCoordinator {
         } catch {
             return undefined;
         }
+    }
+
+    private buildMetaLines(
+        item: ScheduledProgram['item'],
+        details: PlexMediaItem | null
+    ): string[] {
+        const genres = this.pickFirstNonEmpty(details?.genres, item.genres);
+        const directors = this.pickFirstNonEmpty(details?.directors, item.directors);
+        const actors = this.pickFirstNonEmpty(details?.actors);
+        const studios = this.pickFirstNonEmpty(details?.studios);
+
+        const metaLines: string[] = [];
+        const maxStudios = actors.length > 0 ? 1 : 2;
+        const trimmedGenres = genres.slice(0, 3);
+        const trimmedStudios = studios.slice(0, maxStudios);
+
+        if (trimmedGenres.length > 0 || trimmedStudios.length > 0) {
+            const lineParts: string[] = [];
+            if (trimmedGenres.length > 0) {
+                lineParts.push(trimmedGenres.join(' • '));
+            }
+            if (trimmedStudios.length > 0) {
+                if (trimmedGenres.length === 0) {
+                    const label = trimmedStudios.length > 1 ? 'Studios' : 'Studio';
+                    lineParts.push(`${label}: ${trimmedStudios.join(' • ')}`);
+                } else {
+                    lineParts.push(trimmedStudios.join(' • '));
+                }
+            }
+            if (lineParts.length > 0) {
+                metaLines.push(lineParts.join(' • '));
+            }
+        }
+
+        if (actors.length > 0) {
+            const shown = actors.slice(0, 3);
+            let castLine = `Cast: ${shown.join(' • ')}`;
+            const remaining = actors.length - shown.length;
+            if (remaining > 0) {
+                castLine += ` +${remaining}`;
+            }
+            metaLines.push(castLine);
+        } else if (directors.length > 0) {
+            const shown = directors.slice(0, 2);
+            const label = shown.length > 1 ? 'Directors' : 'Director';
+            metaLines.push(`${label}: ${shown.join(' • ')}`);
+        }
+
+        return metaLines;
+    }
+
+    private buildActorHeadshots(
+        details: PlexMediaItem | null
+    ): { headshots: Array<{ name: string; url: string | null }>; totalCount: number } {
+        if (!details?.actorRoles || details.actorRoles.length === 0) {
+            return { headshots: [], totalCount: 0 };
+        }
+        const roles = this.cleanActorRoles(details.actorRoles);
+        if (roles.length === 0) {
+            return { headshots: [], totalCount: 0 };
+        }
+
+        const config = this.deps.getNowPlayingInfoConfig();
+        const thumbSize = config?.actorThumbSize ?? NOW_PLAYING_INFO_DEFAULTS.actorThumbSize;
+        const maxCountRaw = config?.actorHeadshotCount ?? NOW_PLAYING_INFO_DEFAULTS.actorHeadshotCount;
+        const maxCount = Number.isFinite(maxCountRaw)
+            ? Math.max(1, Math.min(6, Math.floor(maxCountRaw)))
+            : NOW_PLAYING_INFO_DEFAULTS.actorHeadshotCount;
+        const plexLibrary = this.deps.getPlexLibrary();
+
+        const headshots = roles.slice(0, maxCount).map((role) => {
+            const thumb = role.thumb ?? null;
+            let url: string | null = null;
+            if (thumb) {
+                if (plexLibrary) {
+                    const resized = plexLibrary.getImageUrl(thumb, thumbSize, thumbSize);
+                    url = resized || null;
+                }
+                if (!url) {
+                    url = this.deps.buildPlexResourceUrl(thumb);
+                }
+            }
+            return { name: role.name, url };
+        });
+        return { headshots, totalCount: roles.length };
+    }
+
+    private cleanActorRoles(roles: PlexMediaItem['actorRoles']): Array<{ name: string; thumb?: string | null }> {
+        if (!roles || roles.length === 0) {
+            return [];
+        }
+        const seen = new Set<string>();
+        const cleaned: Array<{ name: string; thumb?: string | null }> = [];
+        for (const role of roles) {
+            const trimmed = role.name.trim();
+            if (!trimmed) continue;
+            const key = trimmed.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            cleaned.push({ name: trimmed, thumb: role.thumb ?? null });
+        }
+        return cleaned;
+    }
+
+    private pickFirstNonEmpty(...lists: Array<string[] | null | undefined>): string[] {
+        for (const list of lists) {
+            const cleaned = this.cleanTagList(list);
+            if (cleaned.length > 0) {
+                return cleaned;
+            }
+        }
+        return [];
+    }
+
+    private cleanTagList(list: string[] | null | undefined): string[] {
+        if (!list || list.length === 0) return [];
+        const seen = new Set<string>();
+        const cleaned: string[] = [];
+        for (const entry of list) {
+            const trimmed = entry?.trim();
+            if (!trimmed || seen.has(trimmed)) continue;
+            seen.add(trimmed);
+            cleaned.push(trimmed);
+        }
+        return cleaned;
     }
 
     private formatEpisodeCode(seasonNumber?: number, episodeNumber?: number): string {

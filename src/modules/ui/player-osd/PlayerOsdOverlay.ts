@@ -12,6 +12,7 @@ type PlayerOsdElements = {
     channel: HTMLElement | null;
     title: HTMLElement | null;
     subtitle: HTMLElement | null;
+    upNext: HTMLElement | null;
     barBuffer: HTMLElement | null;
     barPlayed: HTMLElement | null;
     timecode: HTMLElement | null;
@@ -27,6 +28,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
         channel: null,
         title: null,
         subtitle: null,
+        upNext: null,
         barBuffer: null,
         barPlayed: null,
         timecode: null,
@@ -59,6 +61,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             channel: null,
             title: null,
             subtitle: null,
+            upNext: null,
             barBuffer: null,
             barPlayed: null,
             timecode: null,
@@ -100,6 +103,10 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             this.elements.subtitle.textContent = vm.subtitle ?? '';
             this.elements.subtitle.style.display = vm.subtitle ? 'block' : 'none';
         }
+        if (this.elements.upNext) {
+            this.elements.upNext.textContent = vm.upNextText ?? '';
+            this.elements.upNext.style.display = vm.upNextText ? 'block' : 'none';
+        }
         if (this.elements.barPlayed) {
             const playedPercent = Math.max(0, Math.min(1, vm.playedRatio)) * 100;
             this.elements.barPlayed.style.width = `${playedPercent.toFixed(2)}%`;
@@ -128,6 +135,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             channel: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`),
             title: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TITLE}`),
             subtitle: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`),
+            upNext: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.UP_NEXT}`),
             barBuffer: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_BUFFER}`),
             barPlayed: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_PLAYED}`),
             timecode: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`),
@@ -146,6 +154,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
 
         <div class="${PLAYER_OSD_CLASSES.TITLE}"></div>
         <div class="${PLAYER_OSD_CLASSES.SUBTITLE}"></div>
+        <div class="${PLAYER_OSD_CLASSES.UP_NEXT}"></div>
 
         <div class="${PLAYER_OSD_CLASSES.BAR}">
           <div class="${PLAYER_OSD_CLASSES.BAR_BUFFER}"></div>

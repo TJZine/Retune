@@ -14,6 +14,12 @@ export const NOW_PLAYING_INFO_CLASSES = {
     SUBTITLE: 'now-playing-info-subtitle',
     BADGES: 'now-playing-info-badges',
     BADGE: 'now-playing-info-badge',
+    META: 'now-playing-info-meta',
+    META_LINE: 'now-playing-info-meta-line',
+    ACTORS: 'now-playing-info-actors',
+    ACTOR: 'now-playing-info-actor',
+    ACTOR_IMAGE: 'now-playing-info-actor-image',
+    ACTOR_MORE: 'now-playing-info-actor-more',
     DESCRIPTION: 'now-playing-info-description',
     CONTEXT: 'now-playing-info-context',
     DEBUG: 'now-playing-info-debug',
@@ -28,6 +34,8 @@ export const NOW_PLAYING_INFO_DEFAULTS = {
     autoHideMs: 10_000,
     posterWidth: 320,
     posterHeight: 480,
+    actorThumbSize: 96,
+    actorHeadshotCount: 4,
 } as const;
 
 export const NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS = [

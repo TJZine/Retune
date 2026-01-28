@@ -21,9 +21,12 @@
   grid-template-columns: clamp(260px, 22vw, 340px) minmax(0, 1fr);
   gap: 0;
   height: clamp(360px, 50vh, 520px);
-  background: var(--panel-inner-glow), var(--panel-surface);
+  background: var(--panel-inner-glow),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.25)),
+    var(--panel-surface);
   border: var(--panel-border);
   border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-lg);
   padding: 0;
   max-width: 90%;
   overflow: hidden;
@@ -83,6 +86,68 @@
   letter-spacing: 0.3px;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.now-playing-info-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.now-playing-info-meta-line {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-info-actors {
+  display: flex;
+  align-items: center;
+  gap: var(--actor-gap, 8px);
+  min-height: 0;
+  --actor-size: 44px;
+  --actor-gap: 8px;
+}
+
+.now-playing-info-actor {
+  width: var(--actor-size, 44px);
+  height: var(--actor-size, 44px);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  flex: 0 0 auto;
+}
+
+.now-playing-info-actor-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.now-playing-info-actor.fallback {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.now-playing-info-actor-more {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
 }
 
 .now-playing-info-description {
@@ -163,5 +228,9 @@
 
   .now-playing-info-subtitle {
     font-size: var(--text-base);
+  }
+
+  .now-playing-info-actor {
+    --actor-size: 36px;
   }
 }

@@ -135,6 +135,23 @@ export function parseMediaItem(data: RawMediaItem): PlexMediaItem {
         const directors = data.Director.map((tag) => tag.tag).filter((tag): tag is string => !!tag);
         if (directors.length > 0) item.directors = directors;
     }
+    if (data.Role && data.Role.length > 0) {
+        const roles = data.Role
+            .map((entry) => ({
+                name: entry.tag?.trim() ?? '',
+                role: entry.role?.trim() ?? null,
+                thumb: entry.thumb ?? null,
+            }))
+            .filter((entry) => entry.name.length > 0);
+        if (roles.length > 0) {
+            item.actorRoles = roles;
+            item.actors = roles.map((role) => role.name);
+        }
+    }
+    if (data.Studio && data.Studio.length > 0) {
+        const studios = data.Studio.map((tag) => tag.tag).filter((tag): tag is string => !!tag);
+        if (studios.length > 0) item.studios = studios;
+    }
     if (data.grandparentTitle !== undefined) item.grandparentTitle = data.grandparentTitle;
     if (data.parentTitle !== undefined) item.parentTitle = data.parentTitle;
     if (data.grandparentRatingKey !== undefined) item.grandparentRatingKey = data.grandparentRatingKey;
