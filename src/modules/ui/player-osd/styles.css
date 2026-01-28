@@ -20,9 +20,11 @@
 .player-osd-panel {
   width: min(1600px, 92vw);
   margin: 0 0 48px 0;
-  background: rgba(0, 0, 0, 0.62);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.4)),
+    rgba(0, 0, 0, 0.62);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 10px;
+  box-shadow: var(--shadow-md);
   padding: 18px 22px;
   color: var(--color-text-primary);
 }
@@ -65,6 +67,15 @@
   font-size: 20px;
   color: var(--color-text-secondary, rgba(255, 255, 255, 0.75));
   line-height: 1.2;
+}
+
+.player-osd-up-next {
+  margin-top: 6px;
+  font-size: 18px;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-osd-bar {

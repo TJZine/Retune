@@ -13,6 +13,11 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
     private autoHideTimer: number | null = null;
     private autoHideMs: number = NOW_PLAYING_INFO_DEFAULTS.autoHideMs;
     private onAutoHide: (() => void) | null = null;
+    private actorResizeObserver: ResizeObserver | null = null;
+    private lastActorState: {
+        headshots: Array<{ name: string; url: string | null }>;
+        totalCount: number;
+    } | null = null;
 
     initialize(config: NowPlayingInfoConfig): void {
         const container = document.getElementById(config.containerId);
@@ -31,6 +36,8 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         if (config.onAutoHide) {
             this.setOnAutoHide(config.onAutoHide);
         }
+
+        this.setupActorResizeObserver();
     }
 
     private createTemplate(): string {
@@ -41,6 +48,8 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
           <div class="${NOW_PLAYING_INFO_CLASSES.TITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.SUBTITLE}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.BADGES}"></div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.META}"></div>
+          <div class="${NOW_PLAYING_INFO_CLASSES.ACTORS}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.DESCRIPTION}"></div>
           <div class="${NOW_PLAYING_INFO_CLASSES.CONTEXT}"></div>
           <pre class="${NOW_PLAYING_INFO_CLASSES.DEBUG}"></pre>
@@ -58,6 +67,9 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
 
     destroy(): void {
         this.clearAutoHideTimer();
+        this.actorResizeObserver?.disconnect();
+        this.actorResizeObserver = null;
+        this.lastActorState = null;
         if (this.containerElement) {
             this.containerElement.innerHTML = '';
             this.containerElement.classList.remove('visible');
@@ -121,6 +133,23 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         }
     }
 
+    private setupActorResizeObserver(): void {
+        if (typeof ResizeObserver === 'undefined') return;
+        if (!this.containerElement) return;
+
+        const actors = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.ACTORS}`
+        ) as HTMLElement | null;
+        if (!actors) return;
+
+        this.actorResizeObserver?.disconnect();
+        this.actorResizeObserver = new ResizeObserver(() => {
+            if (!this.isVisibleFlag || !this.lastActorState) return;
+            this.renderActorRow(actors, this.lastActorState.headshots, this.lastActorState.totalCount);
+        });
+        this.actorResizeObserver.observe(actors);
+    }
+
     private updateContent(viewModel: NowPlayingInfoViewModel): void {
         if (!this.containerElement) return;
 
@@ -175,6 +204,32 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
         if (description) {
             description.textContent = viewModel.description || '';
             description.style.display = viewModel.description ? 'block' : 'none';
+        }
+
+        const actors = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.ACTORS}`
+        ) as HTMLElement | null;
+        if (actors) {
+            this.updateActorRow(actors, viewModel);
+        }
+
+        const meta = this.containerElement.querySelector(
+            `.${NOW_PLAYING_INFO_CLASSES.META}`
+        ) as HTMLElement | null;
+        if (meta) {
+            meta.textContent = '';
+            const lines = viewModel.metaLines ?? [];
+            if (lines.length > 0) {
+                for (const line of lines) {
+                    const row = document.createElement('div');
+                    row.className = NOW_PLAYING_INFO_CLASSES.META_LINE;
+                    row.textContent = line;
+                    meta.appendChild(row);
+                }
+                meta.style.display = 'flex';
+            } else {
+                meta.style.display = 'none';
+            }
         }
 
         const context = this.containerElement.querySelector(
@@ -241,6 +296,64 @@ export class NowPlayingInfoOverlay implements INowPlayingInfoOverlay {
             }
         }
     }
+
+    private updateActorRow(actors: HTMLElement, viewModel: NowPlayingInfoViewModel): void {
+        const headshots = viewModel.actorHeadshots ?? [];
+        const totalCount =
+            viewModel.actorTotalCount ??
+            (headshots.length + (viewModel.actorMoreCount ?? 0));
+        if (headshots.length === 0 || totalCount <= 0) {
+            this.lastActorState = null;
+            actors.textContent = '';
+            actors.dataset.signature = '';
+            actors.style.display = 'none';
+            return;
+        }
+        this.lastActorState = { headshots, totalCount };
+        this.renderActorRow(actors, headshots, totalCount);
+    }
+
+    private renderActorRow(
+        actors: HTMLElement,
+        headshots: Array<{ name: string; url: string | null }>,
+        totalCount: number
+    ): void {
+        const displayCount = computeActorDisplayCount(actors, headshots.length, totalCount);
+        const visibleHeadshots = headshots.slice(0, displayCount);
+        const moreCount = Math.max(0, totalCount - visibleHeadshots.length);
+        const signature = `${visibleHeadshots
+            .map((entry) => `${entry.name}|${entry.url ?? ''}`)
+            .join(';')}|+${moreCount}`;
+        if (actors.dataset.signature !== signature) {
+            actors.textContent = '';
+            for (const actor of visibleHeadshots) {
+                const row = document.createElement('div');
+                row.className = NOW_PLAYING_INFO_CLASSES.ACTOR;
+                if (actor.url) {
+                    const image = document.createElement('img');
+                    image.className = NOW_PLAYING_INFO_CLASSES.ACTOR_IMAGE;
+                    image.alt = actor.name;
+                    image.title = actor.name;
+                    image.loading = 'lazy';
+                    image.src = actor.url;
+                    row.appendChild(image);
+                } else {
+                    row.classList.add('fallback');
+                    row.textContent = formatInitials(actor.name);
+                    row.title = actor.name;
+                }
+                actors.appendChild(row);
+            }
+            if (moreCount > 0) {
+                const more = document.createElement('div');
+                more.className = NOW_PLAYING_INFO_CLASSES.ACTOR_MORE;
+                more.textContent = `+${moreCount}`;
+                actors.appendChild(more);
+            }
+            actors.dataset.signature = signature;
+        }
+        actors.style.display = visibleHeadshots.length > 0 ? 'flex' : 'none';
+    }
 }
 
 const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -261,4 +374,37 @@ function formatTimecode(ms: number): string {
         return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatInitials(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '');
+    return initials.join('');
+}
+
+function computeActorDisplayCount(
+    container: HTMLElement,
+    headshotCount: number,
+    totalCount: number
+): number {
+    if (headshotCount <= 0) return 0;
+    const styles = getComputedStyle(container);
+    const sizePx = readPx(styles.getPropertyValue('--actor-size'), 44);
+    const gapPx = readPx(styles.getPropertyValue('--actor-gap'), 8);
+    const available = container.clientWidth;
+    if (available <= 0) {
+        return headshotCount;
+    }
+    const slot = sizePx + gapPx;
+    const maxSlots = slot > 0 ? Math.max(1, Math.floor((available + gapPx) / slot)) : 1;
+    let visible = Math.min(headshotCount, maxSlots);
+    if (totalCount > visible && visible > 1) {
+        visible -= 1;
+    }
+    return Math.max(1, visible);
+}
+
+function readPx(value: string, fallback: number): number {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
 }

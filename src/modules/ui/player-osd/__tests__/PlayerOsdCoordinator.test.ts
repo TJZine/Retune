@@ -77,6 +77,7 @@ const setup = (): {
     const coordinator = new PlayerOsdCoordinator({
         getOverlay: (): IPlayerOsdOverlay => overlay,
         getCurrentProgram: (): ScheduledProgram => makeProgram(),
+        getNextProgram: (): ScheduledProgram | null => null,
         getCurrentChannel: (): ChannelConfig => makeChannel(),
         getVideoPlayer: (): IVideoPlayer => videoPlayer,
         getAutoHideMs: (): number => AUTO_HIDE_MS,
@@ -125,5 +126,63 @@ describe('PlayerOsdCoordinator', () => {
         coordinator.onTimeUpdate({ currentTimeMs: 1000, durationMs: 10_000 });
 
         expect(overlay.setViewModel).not.toHaveBeenCalled();
+    });
+
+    it('includes up next when available and not live', () => {
+        const overlay = makeOverlay();
+        const nextProgram = {
+            ...makeProgram(),
+            scheduledStartTime: 60_000,
+            item: { ...makeProgram().item, title: 'Next Program' },
+        } as ScheduledProgram;
+        const videoPlayer = {
+            getState: jest.fn(() => makeState('playing')),
+        } as unknown as IVideoPlayer;
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => makeProgram(),
+            getNextProgram: (): ScheduledProgram | null => nextProgram,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => videoPlayer,
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+        });
+
+        coordinator.onPlayerStateChange(makeState('playing'));
+
+        const viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            upNextText?: string;
+        };
+        const expectedTime = new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(new Date(60_000));
+        expect(viewModel.upNextText).toBe(`Up next • ${expectedTime} — Next Program`);
+    });
+
+    it('omits up next when playback is live', () => {
+        const overlay = makeOverlay();
+        const nextProgram = {
+            ...makeProgram(),
+            scheduledStartTime: 60_000,
+            item: { ...makeProgram().item, title: 'Next Program' },
+        } as ScheduledProgram;
+        const videoPlayer = {
+            getState: jest.fn(() => ({ ...makeState('playing'), durationMs: 0 })),
+        } as unknown as IVideoPlayer;
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => makeProgram(),
+            getNextProgram: (): ScheduledProgram | null => nextProgram,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => videoPlayer,
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+        });
+
+        coordinator.poke('play');
+
+        const viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            upNextText?: string;
+        };
+        expect(viewModel.upNextText).toBeUndefined();
     });
 });

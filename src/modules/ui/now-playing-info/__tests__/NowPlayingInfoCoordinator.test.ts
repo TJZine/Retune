@@ -201,6 +201,96 @@ describe('NowPlayingInfoCoordinator', () => {
         coordinator.handleModalClose(modalId);
     });
 
+    it('handleModalOpen uses scheduled metadata when details are unavailable', () => {
+        const program = makeProgram({
+            item: {
+                ...makeProgram().item,
+                genres: ['Action', 'Drama'],
+                directors: ['Director One'],
+            },
+        });
+        const scheduler = makeScheduler({
+            getCurrentProgram: jest.fn().mockReturnValue(program),
+        });
+        const { coordinator, overlay } = setup({
+            getScheduler: () => scheduler,
+        });
+
+        coordinator.handleModalOpen(modalId);
+
+        const viewModel = (overlay.show as jest.Mock).mock.calls[0]?.[0] as {
+            metaLines?: string[];
+        };
+        expect(viewModel.metaLines).toEqual(['Action • Drama', 'Director: Director One']);
+        coordinator.handleModalClose(modalId);
+    });
+
+    it('details metadata renders cast + studio line', async () => {
+        const plexLibrary = makePlexLibrary({
+            getItem: jest.fn().mockResolvedValue({
+                ratingKey: 'rk1',
+                title: 'Detail Title',
+                type: 'movie',
+                summary: 'Detail summary',
+                genres: ['Sci-Fi', 'Action', 'Adventure'],
+                studios: ['Studio One', 'Studio Two'],
+                actors: ['Actor A', 'Actor B', 'Actor C', 'Actor D'],
+            } as PlexMediaItem),
+        });
+        const { coordinator, overlay } = setup({
+            getPlexLibrary: () => plexLibrary,
+        });
+
+        coordinator.handleModalOpen(modalId);
+        await Promise.resolve();
+
+        const updates = (overlay.update as jest.Mock).mock.calls;
+        const lastUpdate = updates[updates.length - 1]?.[0] as { metaLines?: string[] };
+        expect(lastUpdate.metaLines).toEqual([
+            'Sci-Fi • Action • Adventure • Studio One',
+            'Cast: Actor A • Actor B • Actor C +1',
+        ]);
+        coordinator.handleModalClose(modalId);
+    });
+
+    it('details metadata includes actor headshots with more count', async () => {
+        const plexLibrary = makePlexLibrary({
+            getImageUrl: jest.fn((path: string) => `http://image${path}`),
+            getItem: jest.fn().mockResolvedValue({
+                ratingKey: 'rk1',
+                title: 'Detail Title',
+                type: 'movie',
+                actorRoles: [
+                    { name: 'Actor A', thumb: '/actor/a' },
+                    { name: 'Actor B', thumb: '/actor/b' },
+                    { name: 'Actor C', thumb: '/actor/c' },
+                    { name: 'Actor D', thumb: '/actor/d' },
+                    { name: 'Actor E', thumb: '/actor/e' },
+                ],
+            } as PlexMediaItem),
+        });
+        const { coordinator, overlay } = setup({
+            getPlexLibrary: () => plexLibrary,
+        });
+
+        coordinator.handleModalOpen(modalId);
+        await Promise.resolve();
+
+        const updates = (overlay.update as jest.Mock).mock.calls;
+        const lastUpdate = updates[updates.length - 1]?.[0] as {
+            actorHeadshots?: Array<{ name: string; url: string | null }>;
+            actorTotalCount?: number;
+        };
+        expect(lastUpdate.actorHeadshots).toEqual([
+            { name: 'Actor A', url: 'http://image/actor/a' },
+            { name: 'Actor B', url: 'http://image/actor/b' },
+            { name: 'Actor C', url: 'http://image/actor/c' },
+            { name: 'Actor D', url: 'http://image/actor/d' },
+        ]);
+        expect(lastUpdate.actorTotalCount).toBe(5);
+        coordinator.handleModalClose(modalId);
+    });
+
     it('live updates call update while modal remains open', () => {
         jest.useFakeTimers();
         const { coordinator, overlay } = setup();

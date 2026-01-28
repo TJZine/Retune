@@ -86,6 +86,36 @@ describe('NowPlayingInfoOverlay', () => {
         expect(texts).toEqual(['4K', 'HDR', 'DD+']);
     });
 
+    it('should render actor headshots when provided', () => {
+        overlay.show({
+            ...baseViewModel,
+            actorHeadshots: [
+                { name: 'Actor A', url: 'https://example.com/a.jpg' },
+                { name: 'Actor B', url: null },
+            ],
+            actorMoreCount: 2,
+        });
+        const actorsRow = container.querySelector('.now-playing-info-actors') as HTMLElement;
+        const actorItems = Array.from(
+            container.querySelectorAll('.now-playing-info-actor')
+        ) as HTMLElement[];
+        const images = Array.from(
+            container.querySelectorAll('.now-playing-info-actor-image')
+        ) as HTMLImageElement[];
+        const more = container.querySelector('.now-playing-info-actor-more') as HTMLElement;
+        expect(actorsRow.style.display).toBe('flex');
+        expect(images[0]?.getAttribute('src')).toBe('https://example.com/a.jpg');
+        expect(actorItems[1]?.classList.contains('fallback')).toBe(true);
+        expect(actorItems[1]?.textContent).toBe('AB');
+        expect(more.textContent).toBe('+2');
+    });
+
+    it('should hide actor headshots when missing', () => {
+        overlay.show(baseViewModel);
+        const actorsRow = container.querySelector('.now-playing-info-actors') as HTMLElement;
+        expect(actorsRow.style.display).toBe('none');
+    });
+
     it('should hide poster when no URL is provided', () => {
         overlay.show({ ...baseViewModel, posterUrl: null });
         const poster = container.querySelector('.now-playing-info-poster') as HTMLImageElement;

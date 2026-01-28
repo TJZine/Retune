@@ -29,4 +29,5 @@ export interface PlayerOsdViewModel {
     timecode: string;
     endsAtText: string | null;
     bufferText: string | null;
+    upNextText?: string | null;
 }

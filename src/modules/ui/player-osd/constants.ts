@@ -12,6 +12,7 @@ export const PLAYER_OSD_CLASSES = {
     CHANNEL: 'player-osd-channel',
     TITLE: 'player-osd-title',
     SUBTITLE: 'player-osd-subtitle',
+    UP_NEXT: 'player-osd-up-next',
     BAR: 'player-osd-bar',
     BAR_BUFFER: 'player-osd-bar-buffer',
     BAR_PLAYED: 'player-osd-bar-played',

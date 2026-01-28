@@ -20,6 +20,7 @@ const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
 export interface PlayerOsdCoordinatorDeps {
     getOverlay: () => IPlayerOsdOverlay | null;
     getCurrentProgram: () => ScheduledProgram | null;
+    getNextProgram: () => ScheduledProgram | null;
     getCurrentChannel: () => ChannelConfig | null;
     getVideoPlayer: () => IVideoPlayer | null;
     getAutoHideMs: () => number;
@@ -166,6 +167,7 @@ export class PlayerOsdCoordinator {
             : 0;
 
         const bufferText = formatBufferText(bufferAheadMs);
+        const upNextText = this.buildUpNextText(isLive);
 
         return {
             reason,
@@ -181,6 +183,7 @@ export class PlayerOsdCoordinator {
             timecode,
             endsAtText,
             bufferText,
+            ...(upNextText ? { upNextText } : {}),
         };
     }
 
@@ -239,6 +242,26 @@ export class PlayerOsdCoordinator {
             globalThis.clearTimeout(this._autoHideTimer);
             this._autoHideTimer = null;
         }
+    }
+
+    private buildUpNextText(isLive: boolean): string | null {
+        if (isLive) {
+            return null;
+        }
+        const next = this.deps.getNextProgram();
+        if (!next) {
+            return null;
+        }
+        const startsAtMs = next.scheduledStartTime;
+        if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
+            return null;
+        }
+        const title = next.item?.title?.trim();
+        if (!title) {
+            return null;
+        }
+        const formatted = TIME_FORMATTER.format(new Date(startsAtMs));
+        return `Up next • ${formatted} — ${title}`;
     }
 }
 
