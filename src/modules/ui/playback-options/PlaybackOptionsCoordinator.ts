@@ -292,6 +292,7 @@ export class PlaybackOptionsCoordinator {
         });
         this.persistSubtitlePreference(track);
         this.refreshIfOpen();
+        this.closeModalAndReturnFocus();
     }
 
     private notifyBurnInDisabled(): void {
@@ -306,6 +307,15 @@ export class PlaybackOptionsCoordinator {
         }).finally(() => {
             this.refreshIfOpen();
         });
+        this.closeModalAndReturnFocus();
+    }
+
+    private closeModalAndReturnFocus(): void {
+        const navigation = this.deps.getNavigation();
+        if (!navigation) return;
+        if (navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
+            navigation.closeModal(this.deps.playbackOptionsModalId);
+        }
     }
 
     private isSubtitlesEnabled(): boolean {

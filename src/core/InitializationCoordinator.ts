@@ -605,8 +605,20 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             // Wire thumb resolver callback to convert relative Plex paths to absolute URLs
             const epgConfigWithResolver = {
                 ...this._config.epgConfig,
-                resolveThumbUrl: (pathOrUrl: string | null): string | null => {
+                resolveThumbUrl: (
+                    pathOrUrl: string | null,
+                    width?: number,
+                    height?: number
+                ): string | null => {
                     if (!pathOrUrl) return null;
+                    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+                        return pathOrUrl;
+                    }
+                    const plexLibrary = this._deps.plexLibrary;
+                    if (plexLibrary) {
+                        const resized = plexLibrary.getImageUrl(pathOrUrl, width, height);
+                        if (resized) return resized;
+                    }
                     return this._callbacks.buildPlexResourceUrl(pathOrUrl);
                 },
                 isVideoPlaying: (): boolean => this._deps.videoPlayer?.isPlaying?.() ?? false,

@@ -37,4 +37,7 @@ export interface PlayerOsdViewModel {
     upNextText?: string | null;
     playbackText?: string | null;
     actionIds?: PlayerOsdActionIds;
+    audioLabel?: string | null;
+    subtitleLabel?: string | null;
+    controlHint?: string | null;
 }

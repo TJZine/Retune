@@ -388,13 +388,13 @@ describe('EPGComponent', () => {
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             const description = container.querySelector('.epg-info-description') as HTMLElement;
 
-            expect(poster.getAttribute('src')).toBe('');
-            expect(poster.style.display).toBe('none');
+            expect(poster.getAttribute('src')).toContain('poster-b.jpg');
+            expect(poster.style.display).toBe('block');
             expect(description.textContent).toBe('');
             expect(description.style.display).toBe('none');
 
             jest.advanceTimersByTime(199);
-            expect(poster.getAttribute('src')).toBe('');
+            expect(poster.getAttribute('src')).toContain('poster-b.jpg');
             expect(description.textContent).toBe('');
 
             jest.advanceTimersByTime(1);
@@ -417,7 +417,7 @@ describe('EPGComponent', () => {
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             const description = container.querySelector('.epg-info-description') as HTMLElement;
 
-            expect(poster.getAttribute('src')).toBe('');
+            expect(poster.getAttribute('src')).toContain('poster-a.jpg');
             expect(description.textContent).toBe('');
         });
     });

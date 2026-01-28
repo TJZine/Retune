@@ -22,7 +22,8 @@ export class EPGInfoPanel implements IEPGInfoPanel {
     private descriptionElement: HTMLElement | null = null;
     private isVisible: boolean = false;
     private currentProgram: ScheduledProgram | null = null;
-    private thumbResolver: ((pathOrUrl: string | null) => string | null) | null = null;
+    private thumbResolver:
+        ((pathOrUrl: string | null, width?: number, height?: number) => string | null) | null = null;
     private qualityBadges: HTMLElement[] = [];
 
     /**
@@ -31,7 +32,9 @@ export class EPGInfoPanel implements IEPGInfoPanel {
      *
      * @param resolver - Callback that converts paths to full URLs
      */
-    setThumbResolver(resolver: ((pathOrUrl: string | null) => string | null) | null): void {
+    setThumbResolver(
+        resolver: ((pathOrUrl: string | null, width?: number, height?: number) => string | null) | null
+    ): void {
         this.thumbResolver = resolver;
     }
 
@@ -185,11 +188,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         const { item } = program;
 
-        // Hide poster during fast nav without touching src (avoid churn)
-        const poster = this.posterElement;
-        if (poster && poster.style.display !== 'none') {
-            poster.style.display = 'none';
-        }
+        this.updatePoster(program, 'fast');
 
         // Update title
         const title = this.titleElement;
@@ -260,24 +259,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
 
         const { item } = program;
 
-        // Update poster: use resolver if available, otherwise validate URL scheme
-        const poster = this.posterElement;
-        if (poster) {
-            const preferredThumb = item.type === 'episode'
-                ? (item.showThumb && item.showThumb.length ? item.showThumb : item.thumb)
-                : item.thumb;
-            // Use resolver callback to convert relative Plex paths to absolute URLs
-            const resolvedUrl = this.thumbResolver?.(preferredThumb) || null;
-            if (resolvedUrl) {
-                poster.src = resolvedUrl;
-                poster.alt = item.showTitle && item.showTitle.length ? item.showTitle : item.title;
-                poster.style.display = 'block';
-            } else {
-                // Hide poster when unresolved (prevents file:/// errors on webOS)
-                poster.src = '';
-                poster.style.display = 'none';
-            }
-        }
+        this.updatePoster(program, 'full');
 
         // Update description
         const description = this.descriptionElement;
@@ -334,6 +316,33 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         }
 
         return null;
+    }
+
+    private updatePoster(program: ScheduledProgram, mode: 'fast' | 'full'): void {
+        const poster = this.posterElement;
+        if (!poster) return;
+
+        const { item } = program;
+        const preferredThumb = item.type === 'episode'
+            ? (item.showThumb && item.showThumb.length ? item.showThumb : item.thumb)
+            : item.thumb;
+
+        const width = mode === 'fast' ? 140 : 280;
+        const height = mode === 'fast' ? 210 : 420;
+        const resolvedUrl = this.thumbResolver?.(preferredThumb, width, height) || null;
+        if (resolvedUrl) {
+            poster.src = resolvedUrl;
+            poster.alt = item.showTitle && item.showTitle.length ? item.showTitle : item.title;
+            poster.style.display = 'block';
+            return;
+        }
+
+        if (poster.src && poster.style.display === 'block') {
+            return;
+        }
+        // Hide poster when unresolved (prevents file:/// errors on webOS)
+        poster.src = '';
+        poster.style.display = 'none';
     }
 
     /**

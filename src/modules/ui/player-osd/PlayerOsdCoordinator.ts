@@ -5,7 +5,7 @@
 
 import type { INavigationManager } from '../../navigation';
 import type { IVideoPlayer } from '../../player';
-import type { PlaybackState, PlayerStatus, TimeRange } from '../../player/types';
+import type { AudioTrack, PlaybackState, PlayerStatus, TimeRange } from '../../player/types';
 import type { ChannelConfig } from '../../scheduler/channel-manager';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { IPlayerOsdOverlay } from './interfaces';
@@ -152,6 +152,7 @@ export class PlayerOsdCoordinator {
     private _buildViewModel(reason: PlayerOsdReason): PlayerOsdViewModel {
         const channel = this.deps.getCurrentChannel();
         const program = this.deps.getCurrentProgram();
+        const player = this.deps.getVideoPlayer();
         const status = this._getPlaybackStatus();
         const lastUpdate = this._lastTimeUpdate;
 
@@ -185,7 +186,18 @@ export class PlayerOsdCoordinator {
 
         const bufferText = formatBufferText(bufferAheadMs);
         const upNextText = this._buildUpNextText(isLive, nowMs);
-        const playback = buildPlaybackSummary(this.deps.getPlaybackInfoSnapshot());
+        const playbackSnapshot = this.deps.getPlaybackInfoSnapshot();
+        const directPlayResolution = playbackSnapshot?.stream?.isDirectPlay
+            ? program?.item.mediaInfo?.resolution ?? null
+            : null;
+        const playback = buildPlaybackSummary(playbackSnapshot, {
+            resolutionOverride: directPlayResolution,
+        });
+
+        const state = this._lastState ?? player?.getState();
+        const audioLabel = this._buildAudioLabel(player, state?.activeAudioId ?? null);
+        const subtitleLabel = this._buildSubtitleLabel(player, state?.activeSubtitleId ?? null);
+        const controlHint = 'D-pad Navigate | OK Select | Back Close';
 
         return {
             reason,
@@ -204,6 +216,9 @@ export class PlayerOsdCoordinator {
             ...(upNextText ? { upNextText } : {}),
             actionIds: { ...PLAYER_OSD_ACTION_IDS },
             playbackText: playback.tag,
+            audioLabel,
+            subtitleLabel,
+            controlHint,
         };
     }
 
@@ -334,6 +349,30 @@ export class PlayerOsdCoordinator {
             navigation.setFocus(prep.preferredFocusId);
         }
     }
+
+    private _buildAudioLabel(player: IVideoPlayer | null, activeAudioId: string | null): string | null {
+        const tracks = player?.getAvailableAudio() ?? [];
+        if (!activeAudioId) {
+            return tracks.length > 0 ? 'Unknown' : null;
+        }
+        const active = tracks.find((track) => track.id === activeAudioId) ?? null;
+        if (!active) {
+            return tracks.length > 0 ? 'Unknown' : null;
+        }
+        return formatAudioLabel(active);
+    }
+
+    private _buildSubtitleLabel(player: IVideoPlayer | null, activeSubtitleId: string | null): string | null {
+        const tracks = player?.getAvailableSubtitles() ?? [];
+        if (!activeSubtitleId) {
+            return 'Off';
+        }
+        const active = tracks.find((track) => track.id === activeSubtitleId) ?? null;
+        if (!active) {
+            return tracks.length > 0 ? 'On' : 'Off';
+        }
+        return active.label || 'On';
+    }
 }
 
 function formatChannelPrefix(channel: ChannelConfig | null): string {
@@ -405,6 +444,13 @@ function sanitizeAutoHideMs(value: number): number {
         return 3000;
     }
     return Math.floor(value);
+}
+
+function formatAudioLabel(track: AudioTrack): string {
+    const language = track.language || track.title || 'Unknown';
+    const codec = track.codec ? track.codec.toUpperCase() : 'Unknown';
+    const channels = track.channels > 0 ? ` ${track.channels}ch` : '';
+    return `${language} (${codec}${channels})`;
 }
 
 function clamp01(value: number): number {

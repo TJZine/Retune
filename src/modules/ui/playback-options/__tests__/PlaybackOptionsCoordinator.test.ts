@@ -1,5 +1,6 @@
 import { PlaybackOptionsCoordinator } from '../PlaybackOptionsCoordinator';
 import type { IVideoPlayer } from '../../../player';
+import type { INavigationManager } from '../../../navigation';
 import type { PlaybackOptionsViewModel } from '../types';
 import type { ScheduledProgram } from '../../../scheduler/scheduler';
 import type { SubtitleTrack, AudioTrack } from '../../../player/types';
@@ -211,5 +212,32 @@ describe('PlaybackOptionsCoordinator', () => {
 
         const stored = localStorage.getItem(`${RETUNE_STORAGE_KEYS.SUBTITLE_PREFERENCE_BY_ITEM_PREFIX}item-99`);
         expect(stored).toContain('sub-99');
+    });
+
+    it('closes modal after selecting subtitle or audio', () => {
+        const navigation: INavigationManager = {
+            isModalOpen: jest.fn().mockReturnValue(true),
+            closeModal: jest.fn(),
+        } as unknown as INavigationManager;
+        const player = createPlayer(
+            [makeTextTrack({ id: 'sub-1' })],
+            [{ id: 'audio-1', language: 'en', codec: 'aac', channels: 2 } as AudioTrack]
+        );
+
+        const coordinator = new PlaybackOptionsCoordinator({
+            playbackOptionsModalId: 'playback-options',
+            getNavigation: (): INavigationManager => navigation,
+            getPlaybackOptionsModal: (): null => null,
+            getVideoPlayer: (): IVideoPlayer => player,
+            getCurrentProgram: (): ScheduledProgram | null => makeProgram(),
+        });
+
+        const viewModel = getViewModel(coordinator);
+        const subtitleOption = viewModel.subtitles.options.find((option) => option.id === 'playback-subtitle-sub-1');
+        subtitleOption?.onSelect?.();
+        const audioOption = viewModel.audio.options.find((option) => option.id === 'playback-audio-audio-1');
+        audioOption?.onSelect?.();
+
+        expect(navigation.closeModal).toHaveBeenCalledWith('playback-options');
     });
 });

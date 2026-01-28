@@ -19,19 +19,21 @@ export type PlaybackSummary = {
 };
 
 export function buildPlaybackSummary(
-    snapshot: PlaybackInfoSnapshotLike | null | undefined
+    snapshot: PlaybackInfoSnapshotLike | null | undefined,
+    options?: { resolutionOverride?: string | null }
 ): PlaybackSummary {
     const stream = snapshot?.stream;
     if (!stream) {
         return { summary: null, tag: null, details: [] };
     }
 
+    const overrideResolution = options?.resolutionOverride?.trim() || null;
     const mode = stream.isDirectPlay
         ? 'Direct Play'
         : (stream.isTranscoding ? 'Transcode' : 'Stream');
     const video = formatVideoCodec(stream.videoCodec);
     const audio = formatAudioCodec(stream.audioCodec);
-    const resolution = formatResolution(stream.width, stream.height);
+    const resolution = overrideResolution || formatResolution(stream.width, stream.height);
     const codecLine = video && audio ? `${video}/${audio}` : (video || audio || '');
 
     const parts = [mode];

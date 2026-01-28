@@ -49,7 +49,7 @@ export interface EPGConfig {
         timeEndMs: number;
     }) => void;
     /** Optional callback to resolve relative Plex thumb paths to absolute URLs */
-    resolveThumbUrl?: (pathOrUrl: string | null) => string | null;
+    resolveThumbUrl?: (pathOrUrl: string | null, width?: number, height?: number) => string | null;
     /** Optional callback to detect if video is currently playing */
     isVideoPlaying?: () => boolean;
 }

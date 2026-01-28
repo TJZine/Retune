@@ -32,6 +32,7 @@ export interface EPGCoordinatorDeps {
 
 export class EPGCoordinator {
     private _epgScheduleLoadToken = 0;
+    private _epgScheduleAbortController: AbortController | null = null;
     private _visibleRangeTimer: ReturnType<typeof setTimeout> | null = null;
     private _pendingVisibleRange: {
         channelStart: number;
@@ -260,12 +261,18 @@ export class EPGCoordinator {
         const channels = channelManager.getAllChannels();
         if (channels.length === 0) return;
 
-        const buffer = 4;
+        const buffer = 6;
         const startIndex = Math.max(0, range.channelStart - buffer);
         const endIndex = Math.min(channels.length, range.channelEnd + buffer);
         const rangeChannels = channels.slice(startIndex, endIndex);
 
         const loadToken = ++this._epgScheduleLoadToken;
+        if (this._epgScheduleAbortController) {
+            this._epgScheduleAbortController.abort();
+        }
+        const abortController = new AbortController();
+        this._epgScheduleAbortController = abortController;
+        const { signal } = abortController;
         const shuffler = new ShuffleGenerator();
 
         const liveChannelId = channelManager.getCurrentChannel()?.id ?? null;
@@ -311,8 +318,8 @@ export class EPGCoordinator {
             appendEpgDebugLog('EPG.refreshEpgSchedulesForRange', payload);
         }
 
-        for (const channel of prioritized) {
-            if (loadToken !== this._epgScheduleLoadToken) return;
+        const runForChannel = async (channel: ChannelConfig): Promise<void> => {
+            if (loadToken !== this._epgScheduleLoadToken || signal.aborted) return;
             try {
                 if (liveChannelId && channel.id === liveChannelId && scheduler) {
                     const state = scheduler.getState();
@@ -322,11 +329,13 @@ export class EPGCoordinator {
                             ...window,
                             programs: [...window.programs],
                         });
-                        continue;
+                        return;
                     }
                 }
 
-                const resolved = await channelManager.resolveChannelContent(channel.id);
+                const resolved = await channelManager.resolveChannelContent(channel.id, { signal });
+                if (loadToken !== this._epgScheduleLoadToken || signal.aborted) return;
+
                 const scheduleConfig = this.deps.buildDailyScheduleConfig(
                     channel,
                     resolved.items,
@@ -342,9 +351,29 @@ export class EPGCoordinator {
 
                 epg.loadScheduleForChannel(channel.id, { startTime, endTime, programs });
             } catch (error) {
+                if (signal.aborted || loadToken !== this._epgScheduleLoadToken) {
+                    return;
+                }
+                if ((error as { name?: string }).name === 'AbortError') {
+                    return;
+                }
                 console.warn('[Orchestrator] Failed to build EPG schedule for channel:', channel.id, error);
             }
-        }
+        };
+
+        const concurrency = 4;
+        let cursor = 0;
+        const workers = Array.from({ length: concurrency }, async () => {
+            while (true) {
+                if (loadToken !== this._epgScheduleLoadToken || signal.aborted) {
+                    return;
+                }
+                const channel = prioritized[cursor++];
+                if (!channel) return;
+                await runForChannel(channel);
+            }
+        });
+        await Promise.all(workers);
 
         if (loadToken === this._epgScheduleLoadToken && epg.isVisible() && !epg.getFocusedProgram()) {
             epg.focusNow();
