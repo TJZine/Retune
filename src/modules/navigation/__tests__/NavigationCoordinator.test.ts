@@ -72,6 +72,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         handleNavigation: jest.fn().mockReturnValue(false),
         handleSelect: jest.fn().mockReturnValue(false),
         handleBack: jest.fn().mockReturnValue(false),
+        focusNow: jest.fn(),
         hide: jest.fn(),
     } as unknown as IEPGComponent;
     const videoPlayer: IVideoPlayer = {
@@ -93,12 +94,16 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         pokePlayerOsd: jest.fn(),
         togglePlayerOsd: jest.fn(),
         getSeekIncrementMs: jest.fn().mockReturnValue(10_000),
+        isPlayerOsdVisible: jest.fn().mockReturnValue(false),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
         hideNowPlayingInfoOverlay: jest.fn(),
         playbackOptionsModalId: PLAYBACK_OPTIONS_MODAL_ID,
-        preparePlaybackOptionsModal: jest.fn().mockReturnValue({ focusableIds: ['playback-subtitle-off'], preferredFocusId: 'playback-subtitle-off' }),
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        }),
         showPlaybackOptionsModal: jest.fn(),
         hidePlaybackOptionsModal: jest.fn(),
         setLastChannelChangeSourceRemote: jest.fn(),
@@ -196,6 +201,20 @@ describe('NavigationCoordinator', () => {
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
+    it('hides player OSD on back before exit-confirm', () => {
+        const { handlers, deps, navigation } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(true),
+        });
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.hidePlayerOsd).toHaveBeenCalledTimes(1);
+        expect(navigation.openModal).not.toHaveBeenCalled();
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
     it('does not open exit-confirm when back stack is available', () => {
         const { handlers, navigation } = setup();
         (navigation.getState as jest.Mock).mockReturnValue({
@@ -227,7 +246,7 @@ describe('NavigationCoordinator', () => {
 
         handlers.keyPress?.(event);
 
-        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalled();
+        expect(deps.preparePlaybackOptionsModal).toHaveBeenCalledWith('subtitles');
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
         expect(navigation.openModal).toHaveBeenCalledWith(
             PLAYBACK_OPTIONS_MODAL_ID,
@@ -280,6 +299,21 @@ describe('NavigationCoordinator', () => {
         handlers.keyPress?.(makeKeyEvent('play'));
 
         expect(deps.pokePlayerOsd).toHaveBeenCalledWith('play');
+    });
+
+    it('play jumps to now when EPG is visible', () => {
+        const { handlers, epg, deps, videoPlayer, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+
+        const event = makeKeyEvent('play');
+        handlers.keyPress?.(event);
+
+        expect(epg.focusNow).toHaveBeenCalledTimes(1);
+        expect(deps.pokePlayerOsd).not.toHaveBeenCalledWith('play');
+        expect(videoPlayer.play).not.toHaveBeenCalled();
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
     it('pause triggers pokePlayerOsd', () => {

@@ -5,7 +5,7 @@
   pointer-events: none;
   display: none;
   align-items: flex-start;
-  justify-content: flex-end;
+  justify-content: flex-start;
   padding: 16px 20px;
   background: transparent;
 }
@@ -52,19 +52,21 @@
 }
 
 .channel-transition-title {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.95);
   text-align: left;
+  line-height: 1.25;
 }
 
 .channel-transition-subtitle {
-  font-size: 13px;
+  font-size: 15px;
   color: rgba(255, 255, 255, 0.7);
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.25;
 }
 
 @media (prefers-reduced-motion: reduce) {

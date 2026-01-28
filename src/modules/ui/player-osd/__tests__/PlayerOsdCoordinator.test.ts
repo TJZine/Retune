@@ -1,5 +1,9 @@
+/**
+ * @jest-environment jsdom
+ */
 import { PlayerOsdCoordinator } from '../PlayerOsdCoordinator';
 import type { IPlayerOsdOverlay } from '../interfaces';
+import type { INavigationManager } from '../../../navigation';
 import type { IVideoPlayer } from '../../../player';
 import type { PlaybackState } from '../../../player/types';
 import type { ChannelConfig } from '../../../scheduler/channel-manager';
@@ -68,8 +72,22 @@ const setup = (): {
     coordinator: PlayerOsdCoordinator;
     overlay: IPlayerOsdOverlay & { _visible: boolean };
     videoPlayer: IVideoPlayer;
+    navigation: INavigationManager;
 } => {
     const overlay = makeOverlay();
+    const subtitles = document.createElement('button');
+    subtitles.id = 'player-osd-action-subtitles';
+    document.body.appendChild(subtitles);
+    const audio = document.createElement('button');
+    audio.id = 'player-osd-action-audio';
+    document.body.appendChild(audio);
+    const navigation = {
+        registerFocusable: jest.fn(),
+        unregisterFocusable: jest.fn(),
+        setFocus: jest.fn(),
+        isModalOpen: jest.fn().mockReturnValue(false),
+        openModal: jest.fn(),
+    } as unknown as INavigationManager;
     const videoPlayer = {
         getState: jest.fn(() => makeState('playing')),
     } as unknown as IVideoPlayer;
@@ -81,13 +99,21 @@ const setup = (): {
         getCurrentChannel: (): ChannelConfig => makeChannel(),
         getVideoPlayer: (): IVideoPlayer => videoPlayer,
         getAutoHideMs: (): number => AUTO_HIDE_MS,
+        getNavigation: (): INavigationManager => navigation,
+        playbackOptionsModalId: 'playback-options',
+        preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+            focusableIds: ['playback-subtitle-off'],
+            preferredFocusId: 'playback-subtitle-off',
+        }),
+        getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
     });
 
-    return { coordinator, overlay, videoPlayer };
+    return { coordinator, overlay, videoPlayer, navigation };
 };
 
 describe('PlayerOsdCoordinator', () => {
     beforeEach(() => {
+        document.body.innerHTML = '';
         jest.useFakeTimers();
         jest.setSystemTime(0);
     });
@@ -145,6 +171,19 @@ describe('PlayerOsdCoordinator', () => {
             getCurrentChannel: (): ChannelConfig => makeChannel(),
             getVideoPlayer: (): IVideoPlayer => videoPlayer,
             getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
         });
 
         coordinator.onPlayerStateChange(makeState('playing'));
@@ -176,6 +215,19 @@ describe('PlayerOsdCoordinator', () => {
             getCurrentChannel: (): ChannelConfig => makeChannel(),
             getVideoPlayer: (): IVideoPlayer => videoPlayer,
             getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
         });
 
         coordinator.poke('play');
@@ -184,5 +236,15 @@ describe('PlayerOsdCoordinator', () => {
             upNextText?: string;
         };
         expect(viewModel.upNextText).toBeUndefined();
+    });
+
+    it('does not steal focus when a modal is open', () => {
+        const { coordinator, navigation } = setup();
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
+
+        coordinator.onPlayerStateChange(makeState('paused'));
+
+        expect(navigation.registerFocusable).toHaveBeenCalledTimes(2);
+        expect(navigation.setFocus).not.toHaveBeenCalled();
     });
 });

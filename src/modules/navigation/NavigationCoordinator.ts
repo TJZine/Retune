@@ -3,6 +3,7 @@ import type { IEPGComponent } from '../ui/epg';
 import type { IVideoPlayer } from '../player';
 import type { IPlexAuth } from '../plex/auth';
 import { NOW_PLAYING_INFO_MODAL_ID } from '../ui/now-playing-info';
+import type { PlaybackOptionsSectionId } from '../ui/playback-options/types';
 import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
 import { readStoredBoolean } from '../../utils/storage';
 
@@ -22,13 +23,16 @@ export interface NavigationCoordinatorDeps {
     pokePlayerOsd: (reason: 'play' | 'pause' | 'seek') => void;
     togglePlayerOsd: () => void;
     getSeekIncrementMs: () => number;
+    isPlayerOsdVisible: () => boolean;
 
     isNowPlayingModalOpen: () => boolean;
     toggleNowPlayingInfoOverlay: () => void;
     showNowPlayingInfoOverlay: () => void;
     hideNowPlayingInfoOverlay: () => void;
     playbackOptionsModalId: string;
-    preparePlaybackOptionsModal: () => { focusableIds: string[]; preferredFocusId: string | null };
+    preparePlaybackOptionsModal: (
+        preferredSection?: PlaybackOptionsSectionId
+    ) => { focusableIds: string[]; preferredFocusId: string | null };
     showPlaybackOptionsModal: () => void;
     hidePlaybackOptionsModal: () => void;
 
@@ -226,7 +230,7 @@ export class NavigationCoordinator {
         if (isNowPlayingModalOpen && event.button === 'ok') {
             const navigation = this.deps.getNavigation();
             if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
-                const prep = this.deps.preparePlaybackOptionsModal();
+                const prep = this.deps.preparePlaybackOptionsModal('subtitles');
                 navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
                 navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
                 if (prep.preferredFocusId) {
@@ -265,6 +269,14 @@ export class NavigationCoordinator {
                         this._startEpgRepeat(event.button);
                     }
                     return;
+                case 'play':
+                    // When the guide is open, PLAY acts as "Jump to Now" instead of controlling playback.
+                    // This mirrors common 10-foot UI conventions and avoids accidental playback toggles.
+                    this._stopEpgRepeat('play');
+                    epg.focusNow();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
                 case 'ok':
                     this._stopEpgRepeat('ok');
                     epg.handleSelect();
@@ -295,6 +307,12 @@ export class NavigationCoordinator {
         if (event.button === 'back') {
             const currentScreen = navigation?.getCurrentScreen();
             if (currentScreen === 'player' && navigation && !navigation.isModalOpen()) {
+                if (this.deps.isPlayerOsdVisible()) {
+                    this.deps.hidePlayerOsd();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
+                }
                 const state = navigation.getState();
                 const canGoBack = state.screenStack.length > 0;
                 if (!canGoBack) {

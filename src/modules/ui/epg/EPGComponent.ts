@@ -112,6 +112,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.timeHeader.initialize(this.gridElement, this.config, this.state.gridAnchorTime);
             this.channelList.initialize(this.gridElement, this.config);
             this.infoPanel.initialize(this.containerElement);
+            // Keep the key legend at the very bottom (below the info panel).
+            const legend = this.containerElement.querySelector(`.${EPG_CLASSES.LEGEND}`);
+            if (legend) {
+                this.containerElement.appendChild(legend);
+            }
 
             // Wire thumb resolver to info panel
             if (this.config.resolveThumbUrl) {
@@ -217,6 +222,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.containerElement.innerHTML = `
       <div class="${EPG_CLASSES.GRID}">
         <div class="${EPG_CLASSES.PROGRAM_AREA}"></div>
+      </div>
+      <div class="${EPG_CLASSES.LEGEND}" aria-hidden="true">
+        <div class="epg-legend-item"><span class="epg-legend-key">PLAY</span><span class="epg-legend-text">Jump to Now</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-key">OK</span><span class="epg-legend-text">Select</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-key">BACK</span><span class="epg-legend-text">Close</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch green"></span><span class="epg-legend-text">Guide</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch yellow"></span><span class="epg-legend-text">Settings</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch red"></span><span class="epg-legend-text">Now Playing</span></div>
       </div>
     `;
 
@@ -598,7 +611,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             focusTimeMs
         );
         if (didScroll || !cellElement) {
-            this.renderGrid();
+            this.renderGridInternal();
         }
         this.state.focusTimeMs = focusTimeMs;
         this.state.focusedCell = {
@@ -710,22 +723,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     private ensureCellVisible(channelIndex: number, program: ScheduledProgram): boolean {
         const { scrollPosition } = this.state;
-        const { visibleChannels, visibleHours } = this.config;
-        let didScroll = false;
-
-        // Check vertical visibility
-        if (channelIndex < scrollPosition.channelOffset) {
-            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
-            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
-            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            didScroll = true;
-        } else if (channelIndex >= scrollPosition.channelOffset + visibleChannels) {
-            const targetOffset = channelIndex - visibleChannels + 1;
-            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
-            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
-            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            didScroll = true;
-        }
+        const { visibleHours } = this.config;
+        let didScroll = this.ensureChannelVisible(channelIndex);
 
         // Check horizontal visibility
         const programStartMinutes = (program.scheduledStartTime - this.state.gridAnchorTime) / 60000;
@@ -777,10 +776,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private focusPlaceholder(channelIndex: number, targetTime: number): void {
         if (channelIndex < 0 || channelIndex >= this.state.channels.length) return;
 
-        const didScroll = this.ensureTimeVisible(targetTime);
-        if (didScroll) {
-            this.renderGrid();
-        }
+        this.ensureChannelVisible(channelIndex);
+        this.ensureTimeVisible(targetTime);
 
         const visibleStartMs = this.state.gridAnchorTime + (this.state.scrollPosition.timeOffset * 60000);
         const visibleEndMs = this.state.gridAnchorTime +
@@ -804,8 +801,29 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.channelList.setFocusedChannel(channelIndex);
         this._clearInfoPanelFullUpdateTimer();
         this.infoPanel.hide();
-        this.renderGrid();
+        this.renderGridInternal();
         this.emit('focusChange', this.state.focusedCell);
+    }
+
+    private ensureChannelVisible(channelIndex: number): boolean {
+        const { visibleChannels } = this.config;
+        const { channelOffset } = this.state.scrollPosition;
+        let didScroll = false;
+
+        if (channelIndex < channelOffset) {
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            didScroll = true;
+        } else if (channelIndex >= channelOffset + visibleChannels) {
+            const targetOffset = channelIndex - visibleChannels + 1;
+            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
+            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
+            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
+            didScroll = true;
+        }
+
+        return didScroll;
     }
 
     private _clearInfoPanelFullUpdateTimer(): void {

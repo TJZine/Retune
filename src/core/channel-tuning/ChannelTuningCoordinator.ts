@@ -9,7 +9,6 @@ import type {
 } from '../../modules/scheduler/channel-manager';
 import type {
     IChannelScheduler,
-    ScheduledProgram,
     ScheduleConfig,
 } from '../../modules/scheduler/scheduler';
 
@@ -28,8 +27,6 @@ export interface ChannelTuningCoordinatorDeps {
 
     setPendingNowPlayingChannelId: (channelId: string | null) => void;
     getPendingNowPlayingChannelId: () => string | null;
-
-    notifyNowPlaying: (program: ScheduledProgram) => void;
 
     resetPlaybackGuardsForNewChannel: () => void;
     stopActiveTranscodeSession: () => void;
@@ -77,6 +74,7 @@ export class ChannelTuningCoordinator {
         this.deps.resetPlaybackGuardsForNewChannel();
 
         this._isChannelSwitching = true;
+        let didRequestProgramStart = false;
 
         try {
             const channel = channelManager.getChannel(channelId);
@@ -182,14 +180,14 @@ export class ChannelTuningCoordinator {
             scheduler.loadChannel(scheduleConfig);
             this.deps.setActiveScheduleDayKey(this.deps.getLocalDayKey(now));
 
-            const currentProgram = scheduler.getCurrentProgram?.();
-            if (currentProgram) {
-                this.deps.notifyNowPlaying(currentProgram);
-            }
-            this.deps.setPendingNowPlayingChannelId(null);
-
             // Sync to current time (this will emit programStart)
-            scheduler.syncToCurrentTime();
+            try {
+                scheduler.syncToCurrentTime();
+                didRequestProgramStart = true;
+            } catch (error: unknown) {
+                console.error('Failed to sync schedule time:', summarizeErrorForLog(error));
+                throw error;
+            }
 
             // Update current channel
             channelManager.setCurrentChannel(channelId);
@@ -198,7 +196,7 @@ export class ChannelTuningCoordinator {
             await this.deps.saveLifecycleState();
         } finally {
             this._isChannelSwitching = false;
-            if (this.deps.getPendingNowPlayingChannelId() === channelId) {
+            if (!didRequestProgramStart && this.deps.getPendingNowPlayingChannelId() === channelId) {
                 this.deps.setPendingNowPlayingChannelId(null);
             }
         }

@@ -401,6 +401,24 @@ describe('ContentResolver', () => {
             await expect(resolver.resolveSource(source)).rejects.toMatchObject({ name: 'AbortError' });
             nowSpy.mockRestore();
         });
+
+        it('propagates grandparentThumb into showThumb for episodes', async () => {
+            const episode = createMockEpisode(1, 1, {
+                thumb: '/thumb/episode',
+                grandparentThumb: '/thumb/show',
+            });
+            mockLibrary.getShowEpisodes.mockResolvedValue([episode]);
+
+            const source: ShowContentSource = {
+                type: 'show',
+                showKey: 'show-1',
+                showName: 'Test Show',
+            };
+
+            const result = await resolver.resolveSource(source);
+
+            expect(result[0]?.showThumb).toBe('/thumb/show');
+        });
     });
 
     describe('mediaInfo HDR detection', () => {

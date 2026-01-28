@@ -79,7 +79,7 @@ export class EPGChannelList {
                 this.containerElement.classList.remove(EPG_CLASSES.CHANNEL_LIST_WRAP_FLASH);
             }
             this.wrapFlashTimer = null;
-        }, 120);
+        }, 300);
     }
 
     /**

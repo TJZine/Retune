@@ -28,6 +28,11 @@ describe('PlayerOsdOverlay', () => {
         timecode: '0:10 / 1:40',
         endsAtText: 'Ends 9:15 PM',
         bufferText: 'Buffer +30s',
+        playbackText: 'Direct Play • H.264/AAC • 1080p',
+        actionIds: {
+            subtitles: 'player-osd-action-subtitles',
+            audio: 'player-osd-action-audio',
+        },
     };
 
     beforeEach(() => {
@@ -74,6 +79,15 @@ describe('PlayerOsdOverlay', () => {
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`)?.textContent).toBe('0:10 / 1:40');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.ENDS}`)?.textContent).toBe('Ends 9:15 PM');
         expect(container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`)?.textContent).toBe('Buffer +30s');
+        expect(container.querySelector(`.${PLAYER_OSD_CLASSES.PLAYBACK_TAG}`)?.textContent).toBe(
+            'Direct Play • H.264/AAC • 1080p'
+        );
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="subtitles"]`) as HTMLElement).id
+        ).toBe('player-osd-action-subtitles');
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="audio"]`) as HTMLElement).id
+        ).toBe('player-osd-action-audio');
 
         const played = container.querySelector(`.${PLAYER_OSD_CLASSES.BAR_PLAYED}`) as HTMLElement;
         const buffered = container.querySelector(`.${PLAYER_OSD_CLASSES.BAR_BUFFER}`) as HTMLElement;
@@ -99,5 +113,21 @@ describe('PlayerOsdOverlay', () => {
         expect((container.querySelector(`.${PLAYER_OSD_CLASSES.BUFFER_TEXT}`) as HTMLElement).style.display).toBe(
             'none'
         );
+    });
+
+    it('clears action IDs when view model omits them', () => {
+        overlay.setViewModel(baseViewModel);
+        overlay.show();
+
+        const withoutActionIds = { ...baseViewModel } as PlayerOsdViewModel;
+        delete (withoutActionIds as Partial<PlayerOsdViewModel>).actionIds;
+        overlay.setViewModel(withoutActionIds);
+
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="subtitles"]`) as HTMLElement).id
+        ).toBe('');
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="audio"]`) as HTMLElement).id
+        ).toBe('');
     });
 });

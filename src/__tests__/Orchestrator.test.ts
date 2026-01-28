@@ -606,6 +606,9 @@ describe('AppOrchestrator', () => {
                 maybeFetchStreamDecisionForDebugHud: (): Promise<void> => Promise.resolve(),
                 getAutoHideMs: (): number => 0,
                 getCurrentProgramForPlayback: (): null => null,
+                getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
+                refreshPlaybackInfoSnapshot: (): Promise<{ stream: null }> =>
+                    Promise.resolve({ stream: null }),
             });
             coordinator.onProgramStart(program as unknown as ScheduledProgram);
 
@@ -1247,11 +1250,13 @@ describe('AppOrchestrator', () => {
             const instance = (nowPlayingModule.NowPlayingInfoOverlay as jest.Mock).mock.results[0]?.value;
             expect((instance.update as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
 
-            const firstUpdateVm = (instance.update as jest.Mock).mock.calls[0]?.[0];
-            const secondUpdateVm = (instance.update as jest.Mock).mock.calls[1]?.[0];
-            expect(typeof firstUpdateVm.elapsedMs).toBe('number');
-            expect(typeof secondUpdateVm.elapsedMs).toBe('number');
-            expect(secondUpdateVm.elapsedMs).toBeGreaterThan(firstUpdateVm.elapsedMs);
+            const elapsedValues = (instance.update as jest.Mock).mock.calls
+                .map((call: [{ elapsedMs?: number }]) => call[0]?.elapsedMs)
+                .filter((value: number | undefined): value is number => typeof value === 'number');
+            expect(elapsedValues.length).toBeGreaterThanOrEqual(2);
+            const firstElapsed = elapsedValues[0] ?? 0;
+            const lastElapsed = elapsedValues[elapsedValues.length - 1] ?? 0;
+            expect(lastElapsed).toBeGreaterThan(firstElapsed);
 
             // Closing should stop the timer (no further updates).
             const callCount = (instance.update as jest.Mock).mock.calls.length;

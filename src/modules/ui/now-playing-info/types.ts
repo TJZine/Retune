@@ -17,6 +17,8 @@ export interface NowPlayingInfoViewModel {
     title: string;
     subtitle?: string;
     metaLines?: string[];
+    playbackSummary?: string;
+    playbackDetails?: string[];
     actorHeadshots?: Array<{ name: string; url: string | null }>;
     actorTotalCount?: number;
     actorMoreCount?: number;

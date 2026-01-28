@@ -166,7 +166,7 @@ describe('EPGCoordinator', () => {
         expect(epg.loadChannels).toHaveBeenCalled();
     });
 
-    it('refreshEpgSchedules limits preload to 100 and focuses when visible with no focus', async () => {
+    it('refreshEpgSchedules loads visible range and focuses when visible with no focus', async () => {
         const manyChannels = Array.from({ length: 105 }, (_, i) => makeChannel(`c${i}`, i + 1));
         const base = makeDeps().deps.getChannelManager()!;
         const { deps, epg } = makeDeps({
@@ -184,8 +184,55 @@ describe('EPGCoordinator', () => {
 
         await coordinator.refreshEpgSchedules();
 
-        expect((epg.loadScheduleForChannel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(100);
+        expect((epg.loadScheduleForChannel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(7);
         expect(epg.focusNow).toHaveBeenCalled();
+    });
+
+    it('refreshEpgSchedulesForRange loads schedules for scrolled-into channels', async () => {
+        const manyChannels = Array.from({ length: 120 }, (_, i) => makeChannel(`c${i}`, i + 1));
+        const base = makeDeps().deps.getChannelManager()!;
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...base,
+                    getAllChannels: () => manyChannels,
+                    getCurrentChannel: () => manyChannels[0],
+                    resolveChannelContent: base.resolveChannelContent,
+                } as IChannelManager),
+        });
+        const coordinator = new EPGCoordinator(deps);
+
+        await coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 100, channelEnd: 103, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 0, reason: 'visible-range' }
+        );
+
+        const loadedIds = (epg.loadScheduleForChannel as jest.Mock).mock.calls.map((call) => call[0]);
+        expect(loadedIds).toContain('c100');
+        expect(loadedIds).toContain('c102');
+        expect(epg.setGridAnchorTime).toHaveBeenCalled();
+    });
+
+    it('refreshEpgSchedulesForRange resolves after debounce completes', async () => {
+        jest.useFakeTimers();
+        const { deps, epg } = makeDeps();
+        const coordinator = new EPGCoordinator(deps);
+
+        const promise = coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 0, channelEnd: 1, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 50, reason: 'visible-range' }
+        );
+        const secondPromise = coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 0, channelEnd: 1, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 50, reason: 'visible-range' }
+        );
+        expect(epg.loadScheduleForChannel).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(50);
+        await Promise.all([promise, secondPromise]);
+
+        expect(epg.loadScheduleForChannel).toHaveBeenCalled();
+        jest.useRealTimers();
     });
 
     it('refreshEpgScheduleForLiveChannel uses scheduler window for current channel', () => {

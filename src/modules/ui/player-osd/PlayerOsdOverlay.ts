@@ -13,6 +13,9 @@ type PlayerOsdElements = {
     title: HTMLElement | null;
     subtitle: HTMLElement | null;
     upNext: HTMLElement | null;
+    playbackTag: HTMLElement | null;
+    actionSubtitles: HTMLElement | null;
+    actionAudio: HTMLElement | null;
     barBuffer: HTMLElement | null;
     barPlayed: HTMLElement | null;
     timecode: HTMLElement | null;
@@ -29,6 +32,9 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
         title: null,
         subtitle: null,
         upNext: null,
+        playbackTag: null,
+        actionSubtitles: null,
+        actionAudio: null,
         barBuffer: null,
         barPlayed: null,
         timecode: null,
@@ -62,6 +68,9 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             title: null,
             subtitle: null,
             upNext: null,
+            playbackTag: null,
+            actionSubtitles: null,
+            actionAudio: null,
             barBuffer: null,
             barPlayed: null,
             timecode: null,
@@ -107,6 +116,17 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             this.elements.upNext.textContent = vm.upNextText ?? '';
             this.elements.upNext.style.display = vm.upNextText ? 'block' : 'none';
         }
+        if (this.elements.playbackTag) {
+            const playbackText = vm.playbackText ?? '';
+            this.elements.playbackTag.textContent = playbackText;
+            this.elements.playbackTag.style.display = playbackText ? 'inline-flex' : 'none';
+        }
+        if (this.elements.actionSubtitles) {
+            this.elements.actionSubtitles.id = vm.actionIds?.subtitles ?? '';
+        }
+        if (this.elements.actionAudio) {
+            this.elements.actionAudio.id = vm.actionIds?.audio ?? '';
+        }
         if (this.elements.barPlayed) {
             const playedPercent = Math.max(0, Math.min(1, vm.playedRatio)) * 100;
             this.elements.barPlayed.style.width = `${playedPercent.toFixed(2)}%`;
@@ -136,6 +156,13 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             title: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TITLE}`),
             subtitle: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`),
             upNext: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.UP_NEXT}`),
+            playbackTag: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.PLAYBACK_TAG}`),
+            actionSubtitles: this.containerElement.querySelector(
+                `.${PLAYER_OSD_CLASSES.ACTION}[data-action="subtitles"]`
+            ),
+            actionAudio: this.containerElement.querySelector(
+                `.${PLAYER_OSD_CLASSES.ACTION}[data-action="audio"]`
+            ),
             barBuffer: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_BUFFER}`),
             barPlayed: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_PLAYED}`),
             timecode: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`),
@@ -155,6 +182,12 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
         <div class="${PLAYER_OSD_CLASSES.TITLE}"></div>
         <div class="${PLAYER_OSD_CLASSES.SUBTITLE}"></div>
         <div class="${PLAYER_OSD_CLASSES.UP_NEXT}"></div>
+
+        <div class="${PLAYER_OSD_CLASSES.ACTIONS}">
+          <button type="button" class="${PLAYER_OSD_CLASSES.ACTION}" data-action="subtitles">Subtitles</button>
+          <button type="button" class="${PLAYER_OSD_CLASSES.ACTION}" data-action="audio">Audio</button>
+          <div class="${PLAYER_OSD_CLASSES.PLAYBACK_TAG}"></div>
+        </div>
 
         <div class="${PLAYER_OSD_CLASSES.BAR}">
           <div class="${PLAYER_OSD_CLASSES.BAR_BUFFER}"></div>

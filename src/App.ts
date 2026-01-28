@@ -26,6 +26,7 @@ import { SplashScreen } from './modules/ui/splash';
 import { SettingsScreen } from './modules/ui/settings';
 import { AudioSetupScreen } from './modules/ui/audio-setup';
 import { ThemeManager } from './modules/ui/theme';
+import { normalizeToastInput, type ToastInput, type ToastType } from './modules/ui/toast/types';
 import { STORAGE_KEYS } from './types';
 import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import {
@@ -195,18 +196,18 @@ export class App {
         if (!this._orchestrator) return;
 
         this._orchestrator.onLifecycleEvent('persistenceWarning', () => {
-            this._showToast('Some settings could not be saved.');
+            this._showToast({ message: 'Some settings could not be saved.', type: 'warning' });
         });
 
         this._orchestrator.onLifecycleEvent('networkWarning', () => {
-            this._showToast('Network connection looks unstable.');
+            this._showToast({ message: 'Network connection looks unstable.', type: 'warning' });
         });
     }
 
     private _wireNowPlayingToasts(): void {
         if (!this._orchestrator) return;
-        this._orchestrator.setNowPlayingHandler((message) => {
-            this._showToast(message);
+        this._orchestrator.setNowPlayingHandler((toast) => {
+            this._showToast(toast);
         });
     }
 
@@ -377,6 +378,10 @@ export class App {
         // Toast container (non-blocking warnings)
         const toastContainer = document.createElement('div');
         toastContainer.id = 'app-toast';
+        toastContainer.className = 'app-toast';
+        toastContainer.setAttribute('role', 'status');
+        toastContainer.setAttribute('aria-live', 'polite');
+        toastContainer.setAttribute('aria-atomic', 'true');
         toastContainer.style.position = 'fixed';
         toastContainer.style.left = '50%';
         toastContainer.style.bottom = '64px';
@@ -385,10 +390,12 @@ export class App {
         toastContainer.style.background = 'rgba(0, 0, 0, 0.8)';
         toastContainer.style.color = '#fff';
         toastContainer.style.padding = '12px 20px';
+        toastContainer.style.borderLeft = '4px solid transparent';
+        toastContainer.style.boxSizing = 'border-box';
         toastContainer.style.borderRadius = '8px';
         toastContainer.style.fontSize = '20px';
         toastContainer.style.lineHeight = '1.2';
-        toastContainer.style.textAlign = 'center';
+        toastContainer.style.textAlign = 'left';
         toastContainer.style.opacity = '0';
         toastContainer.style.transition = 'opacity 200ms ease';
         toastContainer.style.pointerEvents = 'none';
@@ -716,21 +723,31 @@ export class App {
         }
     }
 
-	    /**
-	     * Show a non-blocking toast message.
-	     */
-	    private _showToast(message: string): void {
-	        if (!this._toastContainer) {
-	            return;
-	        }
+    /**
+     * Show a non-blocking toast message.
+     */
+    private _showToast(input: ToastInput): void {
+        if (!this._toastContainer) {
+            return;
+        }
 
-	        const now = Date.now();
-	        if (now - this._lastToastAt < 1500) {
-	            return;
-	        }
+        const now = Date.now();
+        if (now - this._lastToastAt < 1500) {
+            return;
+        }
         this._lastToastAt = now;
 
-        this._toastContainer.textContent = message;
+        const { message, type } = normalizeToastInput(input);
+        const iconByType: Record<ToastType, string> = {
+            info: 'ℹ️',
+            success: '✓',
+            warning: '⚠️',
+            error: '❌',
+        };
+        const icon = iconByType[type] ?? 'ℹ️';
+
+        this._toastContainer.dataset.toastType = type;
+        this._toastContainer.textContent = `${icon} ${message}`;
         this._toastContainer.style.display = 'block';
         this._toastContainer.style.opacity = '1';
 
@@ -746,8 +763,8 @@ export class App {
                     container.style.display = 'none';
                 }
             }, 200) as unknown as number;
-	        }, 5000) as unknown as number;
-	    }
+        }, 5000) as unknown as number;
+    }
 
     private async _copyToClipboard(text: string): Promise<boolean> {
         try {
@@ -996,7 +1013,7 @@ export class App {
                 RETUNE_STORAGE_KEYS.TRANSCODE_PROFILE_VERSION,
                 getInput('#dev-transcode-profile-version')
             );
-            this._showToast('Saved transcode overrides');
+            this._showToast({ message: 'Saved transcode overrides', type: 'success' });
         });
 
 		        this._devMenuContainer.querySelector('#dev-transcode-clear')?.addEventListener('click', () => {
@@ -1019,7 +1036,7 @@ export class App {
                 'retune_transcode_profile_version',
             ];
             for (const k of keys) safeLocalStorageRemove(k);
-            this._showToast('Cleared transcode overrides');
+            this._showToast({ message: 'Cleared transcode overrides', type: 'success' });
             // Re-render to reflect cleared state
             this._renderDevMenu();
 	        });
@@ -1028,22 +1045,22 @@ export class App {
 	            const pre = this._devMenuContainer?.querySelector('#dev-playback-info') as HTMLPreElement | null;
 	            const text = pre?.dataset?.summary ?? '';
 	            if (!text) {
-	                this._showToast('Nothing to copy (refresh first)');
+	                this._showToast({ message: 'Nothing to copy (refresh first)', type: 'warning' });
 	                return;
 	            }
 	            const ok = await this._copyToClipboard(text);
-	            this._showToast(ok ? 'Copied summary' : 'Copy not supported');
+	            this._showToast({ message: ok ? 'Copied summary' : 'Copy not supported', type: ok ? 'success' : 'warning' });
 	        });
 
 	        this._devMenuContainer.querySelector('#dev-playback-copy-raw')?.addEventListener('click', async () => {
 	            const pre = this._devMenuContainer?.querySelector('#dev-playback-info') as HTMLPreElement | null;
 	            const text = pre?.dataset?.raw ?? '';
 	            if (!text) {
-	                this._showToast('Nothing to copy (refresh first)');
+	                this._showToast({ message: 'Nothing to copy (refresh first)', type: 'warning' });
 	                return;
 	            }
 	            const ok = await this._copyToClipboard(text);
-	            this._showToast(ok ? 'Copied raw JSON' : 'Copy not supported');
+	            this._showToast({ message: ok ? 'Copied raw JSON' : 'Copy not supported', type: ok ? 'success' : 'warning' });
 	        });
     }
 
