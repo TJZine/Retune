@@ -11,6 +11,7 @@ import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { AudioTrack, SubtitleTrack } from '../../player/types';
 import { BURN_IN_SUBTITLE_FORMATS } from '../../player/constants';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
+import type { ToastType } from '../toast/types';
 import {
     isStoredTrue,
     readStoredBoolean,
@@ -25,7 +26,7 @@ export interface PlaybackOptionsCoordinatorDeps {
     getPlaybackOptionsModal: () => IPlaybackOptionsModal | null;
     getVideoPlayer: () => IVideoPlayer | null;
     getCurrentProgram: () => ScheduledProgram | null;
-    notifyToast?: (message: string) => void;
+    notifyToast?: (message: string, type?: ToastType) => void;
 }
 
 export class PlaybackOptionsCoordinator {
@@ -270,7 +271,7 @@ export class PlaybackOptionsCoordinator {
     }
 
     private notifyBurnInDisabled(): void {
-        this.deps.notifyToast?.('Burn-in subtitles are disabled in Settings');
+        this.deps.notifyToast?.('Burn-in subtitles are disabled in Settings', 'warning');
     }
 
     private handleAudioSelect(trackId: string): void {

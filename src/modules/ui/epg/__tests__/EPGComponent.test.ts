@@ -47,6 +47,12 @@ describe('EPGComponent', () => {
         return { epg: instance, container: instanceContainer };
     };
 
+    it('renders the key legend at the bottom of the container', () => {
+        const legend = container.querySelector(`.${EPG_CLASSES.LEGEND}`);
+        expect(legend).not.toBeNull();
+        expect(container.lastElementChild).toBe(legend);
+    });
+
     const createMockChannel = (index: number): ChannelConfig => ({
         id: `ch${index}`,
         number: index + 1,

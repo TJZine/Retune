@@ -143,7 +143,7 @@ describe('PlaybackOptionsCoordinator', () => {
         expect(burnOption?.blocked).toBe(true);
         expect(burnOption?.meta).toBe('Burn-in (disabled in settings)');
         burnOption?.onBlockedSelect?.();
-        expect(notifyToast).toHaveBeenCalledWith('Burn-in subtitles are disabled in Settings');
+        expect(notifyToast).toHaveBeenCalledWith('Burn-in subtitles are disabled in Settings', 'warning');
     });
 
     it('labels direct vs server-extracted text tracks', () => {

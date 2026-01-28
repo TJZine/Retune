@@ -265,6 +265,14 @@ export class NavigationCoordinator {
                         this._startEpgRepeat(event.button);
                     }
                     return;
+                case 'play':
+                    // When the guide is open, PLAY acts as "Jump to Now" instead of controlling playback.
+                    // This mirrors common 10-foot UI conventions and avoids accidental playback toggles.
+                    this._stopEpgRepeat('play');
+                    epg.focusNow();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
                 case 'ok':
                     this._stopEpgRepeat('ok');
                     epg.handleSelect();

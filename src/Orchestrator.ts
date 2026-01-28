@@ -142,6 +142,7 @@ import { RETUNE_STORAGE_KEYS } from './config/storageKeys';
 import { getRecoveryActions as getRecoveryActionsHelper } from './core/error-recovery/RecoveryActions';
 import { toLifecycleAppError as toLifecycleAppErrorHelper } from './core/error-recovery/LifecycleErrorAdapter';
 import type { ErrorRecoveryAction } from './core/error-recovery/types';
+import type { ToastInput } from './modules/ui/toast/types';
 
 // ============================================
 // Types
@@ -284,7 +285,7 @@ export interface IAppOrchestrator {
         handler: (payload: LifecycleEventMap[K]) => void
     ): IDisposable;
     getNavigation(): INavigationManager | null;
-    setNowPlayingHandler(handler: ((message: string) => void) | null): void;
+    setNowPlayingHandler(handler: ((toast: ToastInput) => void) | null): void;
 }
 
 // Re-export AppErrorCode for consumers
@@ -328,7 +329,7 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _playbackRecovery: PlaybackRecoveryManager | null = null;
     private _channelTuning: ChannelTuningCoordinator | null = null;
     private _navigationCoordinator: NavigationCoordinator | null = null;
-    private _nowPlayingHandler: ((message: string) => void) | null = null;
+    private _nowPlayingHandler: ((toast: ToastInput) => void) | null = null;
     private _pendingNowPlayingChannelId: string | null = null;
     private _lastChannelChangeSource: 'remote' | 'number' | 'guide' | null = null;
     private _activeScheduleDayKey: number | null = null;
@@ -576,8 +577,9 @@ export class AppOrchestrator implements IAppOrchestrator {
             getVideoPlayer: (): IVideoPlayer | null => this._videoPlayer,
             getCurrentProgram: (): ScheduledProgram | null =>
                 this._scheduler?.getCurrentProgram() ?? this._currentProgramForPlayback,
-            notifyToast: (message: string): void => {
-                this._nowPlayingHandler?.(message);
+            notifyToast: (message, type): void => {
+                if (!this._nowPlayingHandler) return;
+                this._nowPlayingHandler(type ? { message, type } : message);
             },
         });
 
@@ -607,7 +609,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._plexAuth?.getCurrentUser()?.preferredSubtitleLanguage ?? null,
             notifySubtitleUnavailable: (): void => {
                 if (this._nowPlayingHandler) {
-                    this._nowPlayingHandler('Subtitles unavailable for this item');
+                    this._nowPlayingHandler({ message: 'Subtitles unavailable for this item', type: 'warning' });
                 }
             },
             handleGlobalError: (error: AppError, context: string): void =>
@@ -1682,7 +1684,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             const allowBurnIn = readStoredBoolean(RETUNE_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN, true);
             if (!allowBurnIn) {
                 if (this._nowPlayingHandler) {
-                    this._nowPlayingHandler('Burn-in subtitles are disabled in Settings');
+                    this._nowPlayingHandler({ message: 'Burn-in subtitles are disabled in Settings', type: 'warning' });
                 }
                 void this._videoPlayer.setSubtitleTrack(null).catch(() => undefined);
                 return;
@@ -2050,7 +2052,7 @@ export class AppOrchestrator implements IAppOrchestrator {
         }
     }
 
-    setNowPlayingHandler(handler: ((message: string) => void) | null): void {
+    setNowPlayingHandler(handler: ((toast: ToastInput) => void) | null): void {
         this._nowPlayingHandler = handler;
     }
 }

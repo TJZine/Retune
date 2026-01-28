@@ -112,6 +112,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             this.timeHeader.initialize(this.gridElement, this.config, this.state.gridAnchorTime);
             this.channelList.initialize(this.gridElement, this.config);
             this.infoPanel.initialize(this.containerElement);
+            // Keep the key legend at the very bottom (below the info panel).
+            const legend = this.containerElement.querySelector(`.${EPG_CLASSES.LEGEND}`);
+            if (legend) {
+                this.containerElement.appendChild(legend);
+            }
 
             // Wire thumb resolver to info panel
             if (this.config.resolveThumbUrl) {
@@ -217,6 +222,14 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.containerElement.innerHTML = `
       <div class="${EPG_CLASSES.GRID}">
         <div class="${EPG_CLASSES.PROGRAM_AREA}"></div>
+      </div>
+      <div class="${EPG_CLASSES.LEGEND}" aria-hidden="true">
+        <div class="epg-legend-item"><span class="epg-legend-key">PLAY</span><span class="epg-legend-text">Jump to Now</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-key">OK</span><span class="epg-legend-text">Select</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-key">BACK</span><span class="epg-legend-text">Close</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch green"></span><span class="epg-legend-text">Guide</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch yellow"></span><span class="epg-legend-text">Settings</span></div>
+        <div class="epg-legend-item"><span class="epg-legend-swatch red"></span><span class="epg-legend-text">Now Playing</span></div>
       </div>
     `;
 

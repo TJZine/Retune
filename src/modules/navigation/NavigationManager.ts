@@ -78,6 +78,7 @@ export class NavigationManager
     private _pointerHideTimer: number | null = null;
     private _keyDownDisposable: IDisposable | null = null;
     private _keyUpDisposable: IDisposable | null = null;
+    private _boundFocusInHandler: (event: FocusEvent) => void;
     private _isInitialized: boolean = false;
     private _clickHandlers: Map<string, () => void> = new Map();
     private _dpadRepeatDelayTimer: number | null = null;
@@ -94,6 +95,7 @@ export class NavigationManager
         super();
         this._focusManager = new FocusManager();
         this._remoteHandler = new RemoteHandler();
+        this._boundFocusInHandler = this._handleFocusIn.bind(this);
         this._state = {
             config: DEFAULT_NAVIGATION_CONFIG,
             currentScreen: INITIAL_SCREEN,
@@ -127,6 +129,12 @@ export class NavigationManager
         this._keyUpDisposable = this._remoteHandler.on('keyUp', ({ button }) => {
             this._handleKeyUp(button);
         });
+
+        // Focus desync repair (lightweight): catches cases where browser focus drops to <body>
+        // (e.g., after modal close) while the app still has a tracked focus id.
+        if (typeof document !== 'undefined') {
+            document.addEventListener('focusin', this._boundFocusInHandler, { passive: true });
+        }
 
         // Set up pointer mode if enabled
         if (this._state.config.enablePointerMode) {
@@ -167,6 +175,7 @@ export class NavigationManager
         // Remove pointer mode listeners
         document.removeEventListener('mousemove', this._handlePointerMove);
         document.removeEventListener('click', this._handlePointerClick);
+        document.removeEventListener('focusin', this._boundFocusInHandler);
 
         // Clean up remote handler subscription
         if (this._keyDownDisposable) {
@@ -607,6 +616,24 @@ export class NavigationManager
     // ==========================================
     // Private Methods
     // ==========================================
+
+    /**
+     * Focus desync repair hook.
+     * We only re-apply focus when browser focus drops to <body> while the app still tracks a focus id.
+     */
+    private _handleFocusIn(_event: FocusEvent): void {
+        if (!this._isInitialized) return;
+        if (typeof document === 'undefined') return;
+        if (document.activeElement !== document.body) return;
+
+        const currentId = this._focusManager.getCurrentFocusId();
+        if (!currentId) return;
+
+        if (this._state.config.debugMode) {
+            console.warn(`[NavigationManager] Focus Desync (focusin). Restoring to ${currentId}`);
+        }
+        this._focusManager.focus(currentId);
+    }
 
     /**
      * Handle key events from remote handler.

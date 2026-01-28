@@ -146,6 +146,30 @@ describe('NavigationManager', () => {
             expect(el.classList.contains('focused')).toBe(true);
         });
 
+        it('repairs focus desync on focusin when browser focus is on body', () => {
+            const el = createMockElement('btn1');
+            elements.push(el);
+
+            nav.registerFocusable({ id: 'btn1', element: el, neighbors: {} });
+
+            // Access internals for deterministic testing of the sentinel behavior.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const focusManager = (nav as any)._focusManager as { focus: (id: string) => boolean };
+            const focusSpy = jest.spyOn(focusManager, 'focus');
+
+            nav.setFocus('btn1');
+            focusSpy.mockClear();
+
+            const activeElementSpy = jest.spyOn(document, 'activeElement', 'get')
+                .mockReturnValue(document.body);
+            try {
+                document.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+                expect(focusSpy).toHaveBeenCalledWith('btn1');
+            } finally {
+                activeElementSpy.mockRestore();
+            }
+        });
+
         it('should not set focus on unregistered element', () => {
             nav.setFocus('unknown');
 

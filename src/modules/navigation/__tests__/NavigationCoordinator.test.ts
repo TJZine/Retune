@@ -72,6 +72,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         handleNavigation: jest.fn().mockReturnValue(false),
         handleSelect: jest.fn().mockReturnValue(false),
         handleBack: jest.fn().mockReturnValue(false),
+        focusNow: jest.fn(),
         hide: jest.fn(),
     } as unknown as IEPGComponent;
     const videoPlayer: IVideoPlayer = {
@@ -280,6 +281,21 @@ describe('NavigationCoordinator', () => {
         handlers.keyPress?.(makeKeyEvent('play'));
 
         expect(deps.pokePlayerOsd).toHaveBeenCalledWith('play');
+    });
+
+    it('play jumps to now when EPG is visible', () => {
+        const { handlers, epg, deps, videoPlayer, navigation } = setup();
+        (epg.isVisible as jest.Mock).mockReturnValue(true);
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+
+        const event = makeKeyEvent('play');
+        handlers.keyPress?.(event);
+
+        expect(epg.focusNow).toHaveBeenCalledTimes(1);
+        expect(deps.pokePlayerOsd).not.toHaveBeenCalledWith('play');
+        expect(videoPlayer.play).not.toHaveBeenCalled();
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
     it('pause triggers pokePlayerOsd', () => {

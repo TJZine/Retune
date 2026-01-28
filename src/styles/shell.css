@@ -245,3 +245,23 @@
   font-size: 16px;
   color: rgba(255, 255, 255, 0.6);
 }
+
+/* =========================================
+   Toasts (non-blocking)
+   ========================================= */
+
+#app-toast[data-toast-type='info'] {
+  border-left-color: var(--color-primary);
+}
+
+#app-toast[data-toast-type='success'] {
+  border-left-color: var(--color-success);
+}
+
+#app-toast[data-toast-type='warning'] {
+  border-left-color: var(--color-warning);
+}
+
+#app-toast[data-toast-type='error'] {
+  border-left-color: var(--color-error);
+}
