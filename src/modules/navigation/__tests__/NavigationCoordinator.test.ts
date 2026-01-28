@@ -94,6 +94,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         pokePlayerOsd: jest.fn(),
         togglePlayerOsd: jest.fn(),
         getSeekIncrementMs: jest.fn().mockReturnValue(10_000),
+        isPlayerOsdVisible: jest.fn().mockReturnValue(false),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
@@ -196,6 +197,20 @@ describe('NavigationCoordinator', () => {
         handlers.keyPress?.(event);
 
         expect(navigation.openModal).toHaveBeenCalledWith('exit-confirm');
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('hides player OSD on back before exit-confirm', () => {
+        const { handlers, deps, navigation } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(true),
+        });
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.hidePlayerOsd).toHaveBeenCalledTimes(1);
+        expect(navigation.openModal).not.toHaveBeenCalled();
         expect(event.handled).toBe(true);
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });

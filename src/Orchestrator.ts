@@ -686,6 +686,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             togglePlayerOsd: (): void => {
                 this._playerOsdCoordinator?.toggle();
             },
+            isPlayerOsdVisible: (): boolean => this._playerOsd?.isVisible() ?? false,
             getSeekIncrementMs: (): number =>
                 (this._config?.playerConfig.seekIncrementSec ?? 10) * 1000,
             isNowPlayingModalOpen: (): boolean => {

@@ -23,6 +23,7 @@ export interface NavigationCoordinatorDeps {
     pokePlayerOsd: (reason: 'play' | 'pause' | 'seek') => void;
     togglePlayerOsd: () => void;
     getSeekIncrementMs: () => number;
+    isPlayerOsdVisible: () => boolean;
 
     isNowPlayingModalOpen: () => boolean;
     toggleNowPlayingInfoOverlay: () => void;
@@ -306,6 +307,12 @@ export class NavigationCoordinator {
         if (event.button === 'back') {
             const currentScreen = navigation?.getCurrentScreen();
             if (currentScreen === 'player' && navigation && !navigation.isModalOpen()) {
+                if (this.deps.isPlayerOsdVisible()) {
+                    this.deps.hidePlayerOsd();
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    return;
+                }
                 const state = navigation.getState();
                 const canGoBack = state.screenStack.length > 0;
                 if (!canGoBack) {
