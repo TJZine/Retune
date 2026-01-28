@@ -291,8 +291,8 @@ export interface RawMediaItem {
     Studio?: RawTag[];
     grandparentTitle?: string;
     parentTitle?: string;
-    grandparentThumb?: string;
-    parentThumb?: string;
+    grandparentThumb?: string | null;
+    parentThumb?: string | null;
     parentIndex?: number;
     index?: number;
     viewOffset?: number;

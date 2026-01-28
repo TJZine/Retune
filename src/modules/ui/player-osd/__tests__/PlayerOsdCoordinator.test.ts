@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import { PlayerOsdCoordinator } from '../PlayerOsdCoordinator';
 import type { IPlayerOsdOverlay } from '../interfaces';
 import type { INavigationManager } from '../../../navigation';
@@ -69,8 +72,15 @@ const setup = (): {
     coordinator: PlayerOsdCoordinator;
     overlay: IPlayerOsdOverlay & { _visible: boolean };
     videoPlayer: IVideoPlayer;
+    navigation: INavigationManager;
 } => {
     const overlay = makeOverlay();
+    const subtitles = document.createElement('button');
+    subtitles.id = 'player-osd-action-subtitles';
+    document.body.appendChild(subtitles);
+    const audio = document.createElement('button');
+    audio.id = 'player-osd-action-audio';
+    document.body.appendChild(audio);
     const navigation = {
         registerFocusable: jest.fn(),
         unregisterFocusable: jest.fn(),
@@ -98,11 +108,12 @@ const setup = (): {
         getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
     });
 
-    return { coordinator, overlay, videoPlayer };
+    return { coordinator, overlay, videoPlayer, navigation };
 };
 
 describe('PlayerOsdCoordinator', () => {
     beforeEach(() => {
+        document.body.innerHTML = '';
         jest.useFakeTimers();
         jest.setSystemTime(0);
     });
@@ -225,5 +236,15 @@ describe('PlayerOsdCoordinator', () => {
             upNextText?: string;
         };
         expect(viewModel.upNextText).toBeUndefined();
+    });
+
+    it('does not steal focus when a modal is open', () => {
+        const { coordinator, navigation } = setup();
+        (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
+
+        coordinator.onPlayerStateChange(makeState('paused'));
+
+        expect(navigation.registerFocusable).toHaveBeenCalledTimes(2);
+        expect(navigation.setFocus).not.toHaveBeenCalled();
     });
 });

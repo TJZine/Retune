@@ -114,4 +114,20 @@ describe('PlayerOsdOverlay', () => {
             'none'
         );
     });
+
+    it('clears action IDs when view model omits them', () => {
+        overlay.setViewModel(baseViewModel);
+        overlay.show();
+
+        const withoutActionIds = { ...baseViewModel } as PlayerOsdViewModel;
+        delete (withoutActionIds as Partial<PlayerOsdViewModel>).actionIds;
+        overlay.setViewModel(withoutActionIds);
+
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="subtitles"]`) as HTMLElement).id
+        ).toBe('');
+        expect(
+            (container.querySelector(`.${PLAYER_OSD_CLASSES.ACTION}[data-action="audio"]`) as HTMLElement).id
+        ).toBe('');
+    });
 });

@@ -1,3 +1,5 @@
+import { formatAudioCodec } from './mediaFormat';
+
 export type PlaybackInfoSnapshotLike = {
     stream: {
         isDirectPlay: boolean;
@@ -72,32 +74,10 @@ function formatVideoCodec(codec?: string): string | null {
     }
 }
 
-function formatAudioCodec(codec?: string): string | null {
-    if (!codec) return null;
-    const normalized = codec.trim().toLowerCase();
-    switch (normalized) {
-        case 'truehd':
-            return 'TRUEHD';
-        case 'eac3':
-            return 'DD+';
-        case 'ac3':
-            return 'DD';
-        case 'dca':
-        case 'dts':
-            return 'DTS';
-        case 'dts-hd':
-        case 'dtshd':
-            return 'DTS-HD';
-        default:
-            return normalized.toUpperCase();
-    }
-}
-
-function formatResolution(width?: number, height?: number): string | null {
+function formatResolution(_width?: number, height?: number): string | null {
     const resolvedHeight = Number.isFinite(height) ? Math.max(0, height ?? 0) : 0;
-    const resolvedWidth = Number.isFinite(width) ? Math.max(0, width ?? 0) : 0;
-    const target = resolvedHeight > 0 ? resolvedHeight : resolvedWidth;
-    if (!target) return null;
+    if (!resolvedHeight) return null;
+    const target = resolvedHeight;
     if (target >= 2160) return '4K';
     if (target >= 1440) return '1440p';
     if (target >= 1080) return '1080p';

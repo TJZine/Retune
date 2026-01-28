@@ -213,6 +213,28 @@ describe('EPGCoordinator', () => {
         expect(epg.setGridAnchorTime).toHaveBeenCalled();
     });
 
+    it('refreshEpgSchedulesForRange resolves after debounce completes', async () => {
+        jest.useFakeTimers();
+        const { deps, epg } = makeDeps();
+        const coordinator = new EPGCoordinator(deps);
+
+        const promise = coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 0, channelEnd: 1, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 50, reason: 'visible-range' }
+        );
+        const secondPromise = coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 0, channelEnd: 1, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 50, reason: 'visible-range' }
+        );
+        expect(epg.loadScheduleForChannel).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(50);
+        await Promise.all([promise, secondPromise]);
+
+        expect(epg.loadScheduleForChannel).toHaveBeenCalled();
+        jest.useRealTimers();
+    });
+
     it('refreshEpgScheduleForLiveChannel uses scheduler window for current channel', () => {
         const windowPrograms = [baseProgram('c0', 5)];
         const scheduler: IChannelScheduler = {

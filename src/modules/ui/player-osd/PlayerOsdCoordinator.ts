@@ -307,7 +307,9 @@ export class PlayerOsdCoordinator {
             onSelect: () => this._openPlaybackOptions('audio'),
         });
 
-        navigation.setFocus(PLAYER_OSD_ACTION_IDS.subtitles);
+        if (!navigation.isModalOpen()) {
+            navigation.setFocus(PLAYER_OSD_ACTION_IDS.subtitles);
+        }
         this._actionsRegistered = true;
     }
 

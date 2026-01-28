@@ -181,8 +181,13 @@ export class ChannelTuningCoordinator {
             this.deps.setActiveScheduleDayKey(this.deps.getLocalDayKey(now));
 
             // Sync to current time (this will emit programStart)
-            didRequestProgramStart = true;
-            scheduler.syncToCurrentTime();
+            try {
+                scheduler.syncToCurrentTime();
+                didRequestProgramStart = true;
+            } catch (error: unknown) {
+                console.error('Failed to sync schedule time:', summarizeErrorForLog(error));
+                throw error;
+            }
 
             // Update current channel
             channelManager.setCurrentChannel(channelId);

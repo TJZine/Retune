@@ -8,6 +8,7 @@ import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from '.
 import { safeLocalStorageGet } from '../../../utils/storage';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../utils/playbackSummary';
+import { formatAudioCodec } from '../../../utils/mediaFormat';
 
 export interface NowPlayingInfoCoordinatorDeps {
     nowPlayingModalId: string;
@@ -499,30 +500,13 @@ export class NowPlayingInfoCoordinator {
         const badges: string[] = [];
         if (mediaInfo.resolution) badges.push(mediaInfo.resolution);
         if (mediaInfo.hdr) badges.push(mediaInfo.hdr);
-        if (mediaInfo.audioCodec) badges.push(this.formatAudioCodec(mediaInfo.audioCodec));
+        if (mediaInfo.audioCodec) {
+            const audioCodec = formatAudioCodec(mediaInfo.audioCodec);
+            if (audioCodec) badges.push(audioCodec);
+        }
         const audioDetail = this.formatAudioDetail(mediaInfo);
         if (audioDetail) badges.push(audioDetail);
         return badges;
-    }
-
-    private formatAudioCodec(codec: string): string {
-        const normalized = codec.trim().toLowerCase();
-        switch (normalized) {
-            case 'truehd':
-                return 'TRUEHD';
-            case 'eac3':
-                return 'DD+';
-            case 'ac3':
-                return 'DD';
-            case 'dca':
-            case 'dts':
-                return 'DTS';
-            case 'dts-hd':
-            case 'dtshd':
-                return 'DTS-HD';
-            default:
-                return normalized.toUpperCase();
-        }
     }
 
     private formatAudioDetail(

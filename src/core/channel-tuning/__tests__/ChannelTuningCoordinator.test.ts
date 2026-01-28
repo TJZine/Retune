@@ -326,6 +326,18 @@ describe('ChannelTuningCoordinator', () => {
         expect(deps.saveLifecycleState).toHaveBeenCalledTimes(1);
     });
 
+    it('clears pending now-playing channel when sync fails', async () => {
+        const { coordinator, deps, scheduler } = createCoordinator();
+        scheduler.syncToCurrentTime.mockImplementation(() => {
+            throw new Error('sync failed');
+        });
+        deps.getPendingNowPlayingChannelId.mockReturnValue('ch1');
+
+        await expect(coordinator.switchToChannel('ch1')).rejects.toThrow('sync failed');
+
+        expect(deps.setPendingNowPlayingChannelId).toHaveBeenCalledWith(null);
+    });
+
     it('reports CHANNEL_NOT_FOUND when switchToChannelByNumber misses', async () => {
         const { coordinator, deps, channelManager } = createCoordinator();
         channelManager.getChannelByNumber.mockReturnValue(null);

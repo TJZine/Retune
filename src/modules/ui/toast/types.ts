@@ -17,7 +17,7 @@ export function normalizeToastInput(input: ToastInput): { message: string; type:
         return { message: input, type: 'info' };
     }
     const message = input.message;
-    const type = input.type ?? 'info';
+    const rawType = input.type;
+    const type = rawType && TOAST_TYPES.includes(rawType) ? rawType : 'info';
     return { message, type };
 }
-

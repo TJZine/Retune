@@ -227,13 +227,13 @@ export class NavigationCoordinator {
         if (isNowPlayingModalOpen && event.button === 'back') {
             return;
         }
-            if (isNowPlayingModalOpen && event.button === 'ok') {
-                const navigation = this.deps.getNavigation();
-                if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
-                    const prep = this.deps.preparePlaybackOptionsModal('subtitles');
-                    navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
-                    navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
-                    if (prep.preferredFocusId) {
+        if (isNowPlayingModalOpen && event.button === 'ok') {
+            const navigation = this.deps.getNavigation();
+            if (navigation && !navigation.isModalOpen(this.deps.playbackOptionsModalId)) {
+                const prep = this.deps.preparePlaybackOptionsModal('subtitles');
+                navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
+                navigation.openModal(this.deps.playbackOptionsModalId, prep.focusableIds);
+                if (prep.preferredFocusId) {
                     navigation.setFocus(prep.preferredFocusId);
                 }
             }

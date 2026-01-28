@@ -723,22 +723,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     private ensureCellVisible(channelIndex: number, program: ScheduledProgram): boolean {
         const { scrollPosition } = this.state;
-        const { visibleChannels, visibleHours } = this.config;
-        let didScroll = false;
-
-        // Check vertical visibility
-        if (channelIndex < scrollPosition.channelOffset) {
-            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
-            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(channelIndex, maxOffset));
-            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            didScroll = true;
-        } else if (channelIndex >= scrollPosition.channelOffset + visibleChannels) {
-            const targetOffset = channelIndex - visibleChannels + 1;
-            const maxOffset = Math.max(0, this.state.channels.length - visibleChannels);
-            this.state.scrollPosition.channelOffset = Math.max(0, Math.min(targetOffset, maxOffset));
-            this.channelList.updateScrollPosition(this.state.scrollPosition.channelOffset);
-            didScroll = true;
-        }
+        const { visibleHours } = this.config;
+        let didScroll = this.ensureChannelVisible(channelIndex);
 
         // Check horizontal visibility
         const programStartMinutes = (program.scheduledStartTime - this.state.gridAnchorTime) / 60000;

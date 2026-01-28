@@ -121,11 +121,11 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             this.elements.playbackTag.textContent = playbackText;
             this.elements.playbackTag.style.display = playbackText ? 'inline-flex' : 'none';
         }
-        if (this.elements.actionSubtitles && vm.actionIds?.subtitles) {
-            this.elements.actionSubtitles.id = vm.actionIds.subtitles;
+        if (this.elements.actionSubtitles) {
+            this.elements.actionSubtitles.id = vm.actionIds?.subtitles ?? '';
         }
-        if (this.elements.actionAudio && vm.actionIds?.audio) {
-            this.elements.actionAudio.id = vm.actionIds.audio;
+        if (this.elements.actionAudio) {
+            this.elements.actionAudio.id = vm.actionIds?.audio ?? '';
         }
         if (this.elements.barPlayed) {
             const playedPercent = Math.max(0, Math.min(1, vm.playedRatio)) * 100;

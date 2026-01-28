@@ -40,6 +40,9 @@ export class EPGCoordinator {
         timeEndMs: number;
     } | null = null;
     private _pendingVisibleRangeReason: string | null = null;
+    private _pendingVisibleRangePromise: Promise<void> | null = null;
+    private _pendingVisibleRangeResolve: (() => void) | null = null;
+    private _pendingVisibleRangeReject: ((error: unknown) => void) | null = null;
 
     constructor(private readonly deps: EPGCoordinatorDeps) {}
 
@@ -154,17 +157,37 @@ export class EPGCoordinator {
         this._pendingVisibleRange = range;
         this._pendingVisibleRangeReason = reason;
         if (this._visibleRangeTimer) {
-            return;
+            return this._pendingVisibleRangePromise ?? Promise.resolve();
+        }
+        if (!this._pendingVisibleRangePromise) {
+            this._pendingVisibleRangePromise = new Promise<void>((resolve, reject) => {
+                this._pendingVisibleRangeResolve = resolve;
+                this._pendingVisibleRangeReject = reject;
+            });
         }
         this._visibleRangeTimer = setTimeout(() => {
             this._visibleRangeTimer = null;
             const pending = this._pendingVisibleRange;
-            const reason = this._pendingVisibleRangeReason;
+            const pendingReason = this._pendingVisibleRangeReason;
             this._pendingVisibleRange = null;
             this._pendingVisibleRangeReason = null;
-            if (!pending) return;
-            void this._refreshEpgSchedulesForRange(pending, reason ?? 'visible-range');
+            const resolvePending = this._pendingVisibleRangeResolve;
+            const rejectPending = this._pendingVisibleRangeReject;
+            this._pendingVisibleRangeResolve = null;
+            this._pendingVisibleRangeReject = null;
+            if (!pending) {
+                resolvePending?.();
+                this._pendingVisibleRangePromise = null;
+                return;
+            }
+            this._refreshEpgSchedulesForRange(pending, pendingReason ?? 'visible-range')
+                .then(() => resolvePending?.())
+                .catch((error: unknown) => rejectPending?.(error))
+                .finally(() => {
+                    this._pendingVisibleRangePromise = null;
+                });
         }, debounceMs);
+        return this._pendingVisibleRangePromise ?? Promise.resolve();
     }
 
     wireEpgEvents(): Array<() => void> {
