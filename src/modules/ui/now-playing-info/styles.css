@@ -17,6 +17,7 @@
 
 .now-playing-info-container.visible .now-playing-info-panel {
   animation: now-playing-info-enter 160ms ease-out;
+  will-change: transform, opacity;
 }
 
 .now-playing-info-panel {
@@ -35,7 +36,6 @@
   max-width: 1180px;
   width: calc(100% - 10%);
   overflow: hidden;
-  will-change: transform, opacity;
 }
 
 .now-playing-info-poster {

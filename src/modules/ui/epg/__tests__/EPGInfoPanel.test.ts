@@ -121,6 +121,27 @@ describe('EPGInfoPanel', () => {
             expect(poster.style.display).toBe('none');
         });
 
+        it('clears poster when resolver returns null after prior image', () => {
+            const resolver = jest.fn((path: string | null) => {
+                if (!path) return null;
+                return 'https://server/library/thumb?token=xxx';
+            });
+            panel.setThumbResolver(resolver);
+
+            const programWithThumb = createMockProgram('/library/metadata/123/thumb');
+            panel.show(programWithThumb);
+
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            expect(poster.src).toBe('https://server/library/thumb?token=xxx');
+            expect(poster.style.display).toBe('block');
+
+            const programWithoutThumb = createMockProgram(null);
+            panel.show(programWithoutThumb);
+
+            expect(poster.getAttribute('src')).toBe('');
+            expect(poster.style.display).toBe('none');
+        });
+
         it('should hide poster when no resolver is set', () => {
             // No resolver set - should hide poster rather than assign raw path
             const program = createMockProgram('/library/metadata/123/thumb');

@@ -12,10 +12,11 @@ import type {
 } from './types';
 import type { IVideoPlayer } from '../../player';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
-import type { AudioTrack, SubtitleTrack } from '../../player/types';
+import type { SubtitleTrack } from '../../player/types';
 import { BURN_IN_SUBTITLE_FORMATS } from '../../player/constants';
 import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 import type { ToastType } from '../toast/types';
+import { formatAudioLabel } from '../../../utils/formatAudioLabel';
 import {
     isStoredTrue,
     readStoredBoolean,
@@ -177,7 +178,7 @@ export class PlaybackOptionsCoordinator {
 
         const audioOptions = audioTracks.map((track) => ({
             id: `playback-audio-${track.id}`,
-            label: this.formatAudioLabel(track),
+            label: formatAudioLabel(track),
             selected: activeAudioId === track.id,
             onSelect: (): void => {
                 this.handleAudioSelect(track.id);
@@ -197,13 +198,6 @@ export class PlaybackOptionsCoordinator {
                 options: audioOptions,
             },
         };
-    }
-
-    private formatAudioLabel(track: AudioTrack): string {
-        const language = track.language || track.title || 'Unknown';
-        const codec = track.codec ? track.codec.toUpperCase() : 'Unknown';
-        const channels = track.channels > 0 ? ` ${track.channels}ch` : '';
-        return `${language} (${codec}${channels})`;
     }
 
     private collectFocusableIds(viewModel: PlaybackOptionsViewModel): string[] {

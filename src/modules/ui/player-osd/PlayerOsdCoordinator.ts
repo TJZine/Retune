@@ -5,13 +5,14 @@
 
 import type { INavigationManager } from '../../navigation';
 import type { IVideoPlayer } from '../../player';
-import type { AudioTrack, PlaybackState, PlayerStatus, TimeRange } from '../../player/types';
+import type { PlaybackState, PlayerStatus, TimeRange } from '../../player/types';
 import type { ChannelConfig } from '../../scheduler/channel-manager';
 import type { ScheduledProgram } from '../../scheduler/scheduler';
 import type { IPlayerOsdOverlay } from './interfaces';
 import type { PlayerOsdReason, PlayerOsdViewModel } from './types';
 import type { PlaybackOptionsSectionId } from '../playback-options/types';
 import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../utils/playbackSummary';
+import { formatAudioLabel } from '../../../utils/formatAudioLabel';
 
 const RECENT_USER_ACTION_MS = 2000;
 const PLAYER_OSD_ACTION_IDS = {
@@ -444,13 +445,6 @@ function sanitizeAutoHideMs(value: number): number {
         return 3000;
     }
     return Math.floor(value);
-}
-
-function formatAudioLabel(track: AudioTrack): string {
-    const language = track.language || track.title || 'Unknown';
-    const codec = track.codec ? track.codec.toUpperCase() : 'Unknown';
-    const channels = track.channels > 0 ? ` ${track.channels}ch` : '';
-    return `${language} (${codec}${channels})`;
 }
 
 function clamp01(value: number): number {

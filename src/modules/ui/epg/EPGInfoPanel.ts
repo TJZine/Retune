@@ -337,9 +337,6 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             return;
         }
 
-        if (poster.src && poster.style.display === 'block') {
-            return;
-        }
         // Hide poster when unresolved (prevents file:/// errors on webOS)
         poster.src = '';
         poster.style.display = 'none';

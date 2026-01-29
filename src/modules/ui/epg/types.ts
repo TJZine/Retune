@@ -48,7 +48,7 @@ export interface EPGConfig {
         timeStartMs: number;
         timeEndMs: number;
     }) => void;
-    /** Optional callback to resolve relative Plex thumb paths to absolute URLs */
+    /** Optional callback to resolve relative Plex thumb paths to absolute URLs, with optional size hints. */
     resolveThumbUrl?: (pathOrUrl: string | null, width?: number, height?: number) => string | null;
     /** Optional callback to detect if video is currently playing */
     isVideoPlaying?: () => boolean;
