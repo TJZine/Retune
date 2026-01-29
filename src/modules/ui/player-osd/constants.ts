@@ -12,6 +12,7 @@ export const PLAYER_OSD_CLASSES = {
     CHANNEL: 'player-osd-channel',
     TITLE: 'player-osd-title',
     SUBTITLE: 'player-osd-subtitle',
+    INFO_LINE: 'player-osd-info',
     UP_NEXT: 'player-osd-up-next',
     BAR: 'player-osd-bar',
     BAR_BUFFER: 'player-osd-bar-buffer',
@@ -23,4 +24,5 @@ export const PLAYER_OSD_CLASSES = {
     ACTIONS: 'player-osd-actions',
     ACTION: 'player-osd-action',
     PLAYBACK_TAG: 'player-osd-playback',
+    HINT: 'player-osd-hint',
 } as const;

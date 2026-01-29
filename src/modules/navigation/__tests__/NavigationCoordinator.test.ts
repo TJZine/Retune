@@ -178,6 +178,31 @@ describe('NavigationCoordinator', () => {
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
     });
 
+    it('does not toggle player OSD on ok when already visible', () => {
+        const { handlers, deps } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(true),
+        });
+        const event = makeKeyEvent('ok');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.togglePlayerOsd).not.toHaveBeenCalled();
+        expect(event.handled).not.toBe(true);
+    });
+
+    it('opens player OSD on down when hidden on player screen', () => {
+        const { handlers, deps } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(false),
+        });
+        const event = makeKeyEvent('down');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.togglePlayerOsd).toHaveBeenCalledTimes(1);
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
     it('swallows back when now playing modal open', () => {
         const { handlers, epg } = setup({
             isNowPlayingModalOpen: jest.fn().mockReturnValue(true),

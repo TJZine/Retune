@@ -59,7 +59,8 @@ describe('EPGInfoPanel', () => {
             const program = createMockProgram('/library/metadata/123/thumb');
             panel.show(program);
 
-            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb');
+            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb', 140, 210);
+            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb', 280, 420);
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             expect(poster.src).toBe('https://server/library/thumb?token=xxx');
             expect(poster.style.display).toBe('block');
@@ -84,7 +85,7 @@ describe('EPGInfoPanel', () => {
             const program = createMockProgram(null);
             panel.show(program);
 
-            expect(resolver).toHaveBeenCalledWith(null);
+            expect(resolver).toHaveBeenCalledWith(null, 140, 210);
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             expect(poster.style.display).toBe('none');
         });
@@ -101,7 +102,7 @@ describe('EPGInfoPanel', () => {
             });
             panel.show(program);
 
-            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb');
+            expect(resolver).toHaveBeenCalledWith('/library/metadata/123/thumb', 140, 210);
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             expect(poster.src).toBe('https://server/library/thumb?token=xxx');
             expect(poster.alt).toBe('Episode Title');
@@ -117,6 +118,27 @@ describe('EPGInfoPanel', () => {
 
             expect(resolver).toHaveBeenCalled();
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            expect(poster.style.display).toBe('none');
+        });
+
+        it('clears poster when resolver returns null after prior image', () => {
+            const resolver = jest.fn((path: string | null) => {
+                if (!path) return null;
+                return 'https://server/library/thumb?token=xxx';
+            });
+            panel.setThumbResolver(resolver);
+
+            const programWithThumb = createMockProgram('/library/metadata/123/thumb');
+            panel.show(programWithThumb);
+
+            const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
+            expect(poster.src).toBe('https://server/library/thumb?token=xxx');
+            expect(poster.style.display).toBe('block');
+
+            const programWithoutThumb = createMockProgram(null);
+            panel.show(programWithoutThumb);
+
+            expect(poster.getAttribute('src')).toBe('');
             expect(poster.style.display).toBe('none');
         });
 
@@ -136,7 +158,7 @@ describe('EPGInfoPanel', () => {
             const program = createMockProgram('https://plex.tv/photo/abc123');
             panel.show(program);
 
-            expect(resolver).toHaveBeenCalledWith('https://plex.tv/photo/abc123');
+            expect(resolver).toHaveBeenCalledWith('https://plex.tv/photo/abc123', 140, 210);
             const poster = container.querySelector('.epg-info-poster') as HTMLImageElement;
             expect(poster.src).toBe('https://plex.tv/photo/abc123');
             expect(poster.style.display).toBe('block');

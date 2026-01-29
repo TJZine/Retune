@@ -12,10 +12,12 @@ type PlayerOsdElements = {
     channel: HTMLElement | null;
     title: HTMLElement | null;
     subtitle: HTMLElement | null;
+    infoLine: HTMLElement | null;
     upNext: HTMLElement | null;
     playbackTag: HTMLElement | null;
     actionSubtitles: HTMLElement | null;
     actionAudio: HTMLElement | null;
+    hint: HTMLElement | null;
     barBuffer: HTMLElement | null;
     barPlayed: HTMLElement | null;
     timecode: HTMLElement | null;
@@ -31,10 +33,12 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
         channel: null,
         title: null,
         subtitle: null,
+        infoLine: null,
         upNext: null,
         playbackTag: null,
         actionSubtitles: null,
         actionAudio: null,
+        hint: null,
         barBuffer: null,
         barPlayed: null,
         timecode: null,
@@ -67,10 +71,12 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             channel: null,
             title: null,
             subtitle: null,
+            infoLine: null,
             upNext: null,
             playbackTag: null,
             actionSubtitles: null,
             actionAudio: null,
+            hint: null,
             barBuffer: null,
             barPlayed: null,
             timecode: null,
@@ -112,6 +118,15 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             this.elements.subtitle.textContent = vm.subtitle ?? '';
             this.elements.subtitle.style.display = vm.subtitle ? 'block' : 'none';
         }
+        if (this.elements.infoLine) {
+            const parts = [
+                vm.audioLabel ? `Audio: ${vm.audioLabel}` : null,
+                vm.subtitleLabel ? `Subs: ${vm.subtitleLabel}` : null,
+            ].filter(Boolean) as string[];
+            const text = parts.join(' | ');
+            this.elements.infoLine.textContent = text;
+            this.elements.infoLine.style.display = text ? 'block' : 'none';
+        }
         if (this.elements.upNext) {
             this.elements.upNext.textContent = vm.upNextText ?? '';
             this.elements.upNext.style.display = vm.upNextText ? 'block' : 'none';
@@ -126,6 +141,10 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
         }
         if (this.elements.actionAudio) {
             this.elements.actionAudio.id = vm.actionIds?.audio ?? '';
+        }
+        if (this.elements.hint) {
+            this.elements.hint.textContent = vm.controlHint ?? '';
+            this.elements.hint.style.display = vm.controlHint ? 'block' : 'none';
         }
         if (this.elements.barPlayed) {
             const playedPercent = Math.max(0, Math.min(1, vm.playedRatio)) * 100;
@@ -155,6 +174,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             channel: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.CHANNEL}`),
             title: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TITLE}`),
             subtitle: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.SUBTITLE}`),
+            infoLine: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.INFO_LINE}`),
             upNext: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.UP_NEXT}`),
             playbackTag: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.PLAYBACK_TAG}`),
             actionSubtitles: this.containerElement.querySelector(
@@ -163,6 +183,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
             actionAudio: this.containerElement.querySelector(
                 `.${PLAYER_OSD_CLASSES.ACTION}[data-action="audio"]`
             ),
+            hint: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.HINT}`),
             barBuffer: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_BUFFER}`),
             barPlayed: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.BAR_PLAYED}`),
             timecode: this.containerElement.querySelector(`.${PLAYER_OSD_CLASSES.TIMECODE}`),
@@ -181,6 +202,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
 
         <div class="${PLAYER_OSD_CLASSES.TITLE}"></div>
         <div class="${PLAYER_OSD_CLASSES.SUBTITLE}"></div>
+        <div class="${PLAYER_OSD_CLASSES.INFO_LINE}"></div>
         <div class="${PLAYER_OSD_CLASSES.UP_NEXT}"></div>
 
         <div class="${PLAYER_OSD_CLASSES.ACTIONS}">
@@ -188,6 +210,7 @@ export class PlayerOsdOverlay implements IPlayerOsdOverlay {
           <button type="button" class="${PLAYER_OSD_CLASSES.ACTION}" data-action="audio">Audio</button>
           <div class="${PLAYER_OSD_CLASSES.PLAYBACK_TAG}"></div>
         </div>
+        <div class="${PLAYER_OSD_CLASSES.HINT}"></div>
 
         <div class="${PLAYER_OSD_CLASSES.BAR}">
           <div class="${PLAYER_OSD_CLASSES.BAR_BUFFER}"></div>

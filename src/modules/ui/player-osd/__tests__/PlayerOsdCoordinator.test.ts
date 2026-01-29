@@ -5,7 +5,7 @@ import { PlayerOsdCoordinator } from '../PlayerOsdCoordinator';
 import type { IPlayerOsdOverlay } from '../interfaces';
 import type { INavigationManager } from '../../../navigation';
 import type { IVideoPlayer } from '../../../player';
-import type { PlaybackState } from '../../../player/types';
+import type { AudioTrack, PlaybackState, SubtitleTrack } from '../../../player/types';
 import type { ChannelConfig } from '../../../scheduler/channel-manager';
 import type { ScheduledProgram } from '../../../scheduler/scheduler';
 
@@ -90,6 +90,8 @@ const setup = (): {
     } as unknown as INavigationManager;
     const videoPlayer = {
         getState: jest.fn(() => makeState('playing')),
+        getAvailableAudio: jest.fn(() => []),
+        getAvailableSubtitles: jest.fn(() => []),
     } as unknown as IVideoPlayer;
 
     const coordinator = new PlayerOsdCoordinator({
@@ -120,6 +122,69 @@ describe('PlayerOsdCoordinator', () => {
 
     afterEach(() => {
         jest.useRealTimers();
+    });
+
+    it('uses mediaInfo resolution for direct play and labels active tracks', () => {
+        const overlay = makeOverlay();
+        const videoPlayer = {
+            getState: jest.fn(() => ({
+                ...makeState('playing'),
+                activeAudioId: 'audio-1',
+                activeSubtitleId: 'sub-1',
+            })),
+            getAvailableAudio: jest.fn(() => ([
+                { id: 'audio-1', language: 'English', codec: 'aac', channels: 2 } as AudioTrack,
+            ])),
+            getAvailableSubtitles: jest.fn(() => ([
+                { id: 'sub-1', label: 'English (SRT)' } as SubtitleTrack,
+            ])),
+        } as unknown as IVideoPlayer;
+
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => ({
+                ...makeProgram(),
+                item: { ...makeProgram().item, mediaInfo: { resolution: '4K' } },
+            }),
+            getNextProgram: (): ScheduledProgram | null => null,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => videoPlayer,
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: { isDirectPlay: boolean; isTranscoding: boolean; container: string; videoCodec: string; audioCodec: string; width: number; height: number } } => ({
+                stream: {
+                    isDirectPlay: true,
+                    isTranscoding: false,
+                    container: 'mp4',
+                    videoCodec: 'h264',
+                    audioCodec: 'aac',
+                    width: 1920,
+                    height: 1080,
+                },
+            }),
+        });
+
+        coordinator.poke('play');
+
+        const viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            playbackText?: string;
+            audioLabel?: string | null;
+            subtitleLabel?: string | null;
+        };
+        expect(viewModel.playbackText).toContain('4K');
+        expect(viewModel.audioLabel).toContain('English');
+        expect(viewModel.subtitleLabel).toBe('English (SRT)');
     });
 
     it('pause shows and stays visible', () => {
@@ -163,6 +228,8 @@ describe('PlayerOsdCoordinator', () => {
         } as ScheduledProgram;
         const videoPlayer = {
             getState: jest.fn(() => makeState('playing')),
+            getAvailableAudio: jest.fn(() => []),
+            getAvailableSubtitles: jest.fn(() => []),
         } as unknown as IVideoPlayer;
         const coordinator = new PlayerOsdCoordinator({
             getOverlay: (): IPlayerOsdOverlay => overlay,
@@ -207,6 +274,8 @@ describe('PlayerOsdCoordinator', () => {
         } as ScheduledProgram;
         const videoPlayer = {
             getState: jest.fn(() => ({ ...makeState('playing'), durationMs: 0 })),
+            getAvailableAudio: jest.fn(() => []),
+            getAvailableSubtitles: jest.fn(() => []),
         } as unknown as IVideoPlayer;
         const coordinator = new PlayerOsdCoordinator({
             getOverlay: (): IPlayerOsdOverlay => overlay,

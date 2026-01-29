@@ -17,6 +17,7 @@
 
 .now-playing-info-container.visible .now-playing-info-panel {
   animation: now-playing-info-enter 160ms ease-out;
+  will-change: transform, opacity;
 }
 
 .now-playing-info-panel {
@@ -24,7 +25,7 @@
   display: grid;
   grid-template-columns: clamp(260px, 22vw, 340px) minmax(0, 1fr);
   gap: 0;
-  height: clamp(360px, 50vh, 520px);
+  height: clamp(400px, 55vh, 600px);
   background: var(--panel-inner-glow),
     linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.25)),
     var(--panel-surface);
@@ -53,6 +54,7 @@
   min-width: 0;
   padding: clamp(20px, 2.5vw, 32px);
   border-left: 1px solid var(--color-border-subtle);
+  overflow: auto;
 }
 
 .now-playing-info-title {
@@ -271,11 +273,11 @@
 @keyframes now-playing-info-enter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateX(-24px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 

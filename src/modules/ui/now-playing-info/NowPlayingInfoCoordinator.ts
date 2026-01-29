@@ -238,7 +238,9 @@ export class NowPlayingInfoCoordinator {
         }
 
         const summary = details?.summary ?? '';
-        const posterPath = details?.thumb ?? item.thumb ?? null;
+        const posterPath = item.type === 'episode'
+            ? (details?.grandparentThumb ?? item.showThumb ?? item.thumb ?? null)
+            : (details?.thumb ?? item.thumb ?? null);
         let posterUrl: string | null = null;
         if (posterPath) {
             const plexLibrary = this.deps.getPlexLibrary();

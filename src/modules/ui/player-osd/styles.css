@@ -70,6 +70,15 @@
   line-height: 1.2;
 }
 
+.player-osd-info {
+  margin-top: 4px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .player-osd-up-next {
   margin-top: 6px;
   font-size: 18px;
@@ -116,6 +125,14 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.player-osd-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
 
 .player-osd-bar {

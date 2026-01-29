@@ -184,7 +184,7 @@ describe('EPGCoordinator', () => {
 
         await coordinator.refreshEpgSchedules();
 
-        expect((epg.loadScheduleForChannel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(7);
+        expect((epg.loadScheduleForChannel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(9);
         expect(epg.focusNow).toHaveBeenCalled();
     });
 

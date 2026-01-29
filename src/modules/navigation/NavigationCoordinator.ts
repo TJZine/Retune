@@ -294,9 +294,24 @@ export class NavigationCoordinator {
             }
         }
 
+        if (event.button === 'down') {
+            const currentScreen = navigation?.getCurrentScreen();
+            if (
+                currentScreen === 'player'
+                && !modalOpen
+                && !shouldRouteToEpg
+                && !this.deps.isPlayerOsdVisible()
+            ) {
+                this.deps.togglePlayerOsd();
+                event.handled = true;
+                event.originalEvent.preventDefault();
+                return;
+            }
+        }
+
         if (event.button === 'ok') {
             const currentScreen = navigation?.getCurrentScreen();
-            if (currentScreen === 'player' && !modalOpen) {
+            if (currentScreen === 'player' && !modalOpen && !this.deps.isPlayerOsdVisible()) {
                 this.deps.togglePlayerOsd();
                 event.handled = true;
                 event.originalEvent.preventDefault();
