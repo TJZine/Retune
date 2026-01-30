@@ -16,6 +16,7 @@ import type { ScheduledProgram } from './types';
 export class EPGInfoPanel implements IEPGInfoPanel {
     private containerElement: HTMLElement | null = null;
     private posterElement: HTMLImageElement | null = null;
+    private showTitleElement: HTMLElement | null = null;
     private titleElement: HTMLElement | null = null;
     private metaElement: HTMLElement | null = null;
     private genresElement: HTMLElement | null = null;
@@ -55,6 +56,9 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         this.posterElement = this.containerElement.querySelector(
             `.${EPG_CLASSES.INFO_POSTER}`
         ) as HTMLImageElement | null;
+        this.showTitleElement = this.containerElement.querySelector(
+            `.${EPG_CLASSES.INFO_SHOW}`
+        ) as HTMLElement | null;
         this.titleElement = this.containerElement.querySelector(
             `.${EPG_CLASSES.INFO_TITLE}`
         ) as HTMLElement | null;
@@ -92,6 +96,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         <img class="${EPG_CLASSES.INFO_POSTER}" src="" alt="" />
       </div>
       <div class="${EPG_CLASSES.INFO_CONTENT}">
+        <div class="${EPG_CLASSES.INFO_SHOW}"></div>
         <div class="${EPG_CLASSES.INFO_TITLE}"></div>
         <div class="${EPG_CLASSES.INFO_META}"></div>
         <div class="${EPG_CLASSES.INFO_GENRES}"></div>
@@ -110,6 +115,7 @@ export class EPGInfoPanel implements IEPGInfoPanel {
             this.containerElement = null;
         }
         this.posterElement = null;
+        this.showTitleElement = null;
         this.titleElement = null;
         this.metaElement = null;
         this.genresElement = null;
@@ -191,9 +197,25 @@ export class EPGInfoPanel implements IEPGInfoPanel {
         this.updatePoster(program, 'fast');
 
         // Update title
+        const showTitle = this.showTitleElement;
         const title = this.titleElement;
-        if (title) {
-            title.textContent = item.fullTitle || item.title;
+        if (item.type === 'episode') {
+            const showText = item.showTitle ?? '';
+            if (showTitle) {
+                showTitle.textContent = showText;
+                showTitle.style.display = showText ? 'block' : 'none';
+            }
+            if (title) {
+                title.textContent = item.title;
+            }
+        } else {
+            if (showTitle) {
+                showTitle.textContent = '';
+                showTitle.style.display = 'none';
+            }
+            if (title) {
+                title.textContent = item.fullTitle || item.title;
+            }
         }
 
         // Update meta info

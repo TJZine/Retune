@@ -15,6 +15,7 @@ import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../ut
 import { formatAudioLabel } from '../../../utils/formatAudioLabel';
 
 const RECENT_USER_ACTION_MS = 2000;
+const OSD_THROTTLE_MS = 250;
 const PLAYER_OSD_ACTION_IDS = {
     subtitles: 'player-osd-action-subtitles',
     audio: 'player-osd-action-audio',
@@ -48,12 +49,15 @@ export class PlayerOsdCoordinator {
     private _lastTimeUpdate: { currentTimeMs: number; durationMs: number } | null = null;
     private _bufferedRanges: TimeRange[] = [];
     private _actionsRegistered = false;
+    private _throttledRenderTimer: number | null = null;
+    private _lastThrottledRenderAt = 0;
 
     constructor(private readonly deps: PlayerOsdCoordinatorDeps) {}
 
     poke(reason: PlayerOsdReason): void {
         this._lastUserActionAt = Date.now();
         this._lastReason = reason;
+        this._clearThrottledRenderTimer();
         this._renderAndShow(reason);
 
         const status = this._getPlaybackStatus();
@@ -83,6 +87,7 @@ export class PlayerOsdCoordinator {
 
     hide(): void {
         this._clearAutoHideTimer();
+        this._clearThrottledRenderTimer();
         this._unregisterActions();
         this.deps.getOverlay()?.hide();
     }
@@ -124,30 +129,55 @@ export class PlayerOsdCoordinator {
 
     onTimeUpdate(payload: { currentTimeMs: number; durationMs: number }): void {
         this._lastTimeUpdate = payload;
-        this._renderIfVisible();
+        this._requestThrottledRender();
     }
 
     onBufferUpdate(payload: { bufferedRanges: TimeRange[] }): void {
         this._bufferedRanges = Array.isArray(payload.bufferedRanges)
             ? payload.bufferedRanges.slice()
             : [];
-        this._renderIfVisible();
-    }
-
-    private _renderIfVisible(): void {
-        const overlay = this.deps.getOverlay();
-        if (!overlay || !overlay.isVisible()) {
-            return;
-        }
-        overlay.setViewModel(this._buildViewModel(this._lastReason));
+        this._requestThrottledRender();
     }
 
     private _renderAndShow(reason: PlayerOsdReason): void {
         const overlay = this.deps.getOverlay();
         if (!overlay) return;
+        this._clearThrottledRenderTimer();
         overlay.setViewModel(this._buildViewModel(reason));
+        this._lastThrottledRenderAt = Date.now();
         overlay.show();
         this._registerActions();
+    }
+
+    private _clearThrottledRenderTimer(): void {
+        if (this._throttledRenderTimer !== null) {
+            globalThis.clearTimeout(this._throttledRenderTimer);
+            this._throttledRenderTimer = null;
+        }
+    }
+
+    private _requestThrottledRender(): void {
+        const overlay = this.deps.getOverlay();
+        if (!overlay || !overlay.isVisible()) {
+            return;
+        }
+        if (this._throttledRenderTimer !== null) {
+            return;
+        }
+        const now = Date.now();
+        const elapsed = now - this._lastThrottledRenderAt;
+        if (elapsed >= OSD_THROTTLE_MS) {
+            overlay.setViewModel(this._buildViewModel(this._lastReason));
+            this._lastThrottledRenderAt = now;
+            return;
+        }
+
+        this._throttledRenderTimer = globalThis.setTimeout(() => {
+            this._throttledRenderTimer = null;
+            const nextNow = Date.now();
+            overlay.setViewModel(this._buildViewModel(this._lastReason));
+            this._lastThrottledRenderAt = nextNow;
+        }, OSD_THROTTLE_MS - elapsed) as unknown as number;
     }
 
     private _buildViewModel(reason: PlayerOsdReason): PlayerOsdViewModel {
@@ -179,7 +209,13 @@ export class PlayerOsdCoordinator {
             ? Math.max(0, program.scheduledEndTime - nowMs)
             : Math.max(0, durationMs - clampedTimeMs);
 
-        const endsAtText = isLive ? null : formatEndsAt(nowMs, remainingMs);
+        const remainingLabel = formatRemainingLabel(remainingMs);
+        const endsAtLabel = formatEndsAt(nowMs, remainingMs);
+        const endsAtText = isLive
+            ? null
+            : remainingLabel && endsAtLabel
+                ? `${remainingLabel} • ${endsAtLabel}`
+                : endsAtLabel;
 
         const bufferAheadMs = durationMs > 0
             ? Math.max(0, bufferedRatio * durationMs - clampedTimeMs)
@@ -430,6 +466,17 @@ function formatEndsAt(nowMs: number, remainingMs: number): string | null {
     const endsAtMs = nowMs + remainingMs;
     const formatted = TIME_FORMATTER.format(new Date(endsAtMs));
     return `Ends ${formatted}`;
+}
+
+function formatRemainingLabel(remainingMs: number): string | null {
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+        return null;
+    }
+    if (remainingMs < 60_000) {
+        return '<1m left';
+    }
+    const minutes = Math.floor(remainingMs / 60_000);
+    return `${minutes}m left`;
 }
 
 function formatBufferText(bufferAheadMs: number): string | null {
