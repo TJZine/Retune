@@ -2,6 +2,54 @@
 
 The application is divided into several distinct modules to separate concerns.
 
+```mermaid
+flowchart TD
+    subgraph Plex["Plex Integration"]
+        PA[PlexAuth]
+        PD[PlexServerDiscovery]
+        PL[PlexLibrary]
+        PS[PlexStreamResolver]
+    end
+    
+    subgraph Channels["Channel Management"]
+        CM[ChannelManager]
+        CS[ChannelStore]
+    end
+    
+    subgraph Scheduler["Scheduler"]
+        SC[ScheduleCalculator]
+        SE[ShuffleEngine]
+    end
+    
+    subgraph Player["Video Player"]
+        VP[VideoPlayer]
+        HLS[HLS Handler]
+        KA[KeepAlive]
+    end
+    
+    subgraph UI["User Interface"]
+        EPG[EPGComponent]
+        PO[PlayerOverlay]
+        TM[ToastManager]
+    end
+    
+    O[Orchestrator] --> Plex
+    O --> Channels
+    O --> Scheduler
+    O --> Player
+    O --> UI
+    
+    Channels --> CS
+    Player --> VP
+```
+
+<details>
+<summary>Diagram Description (Accessibility)</summary>
+
+The diagram shows the App Orchestrator at the center, connecting to five module groups: Plex Integration (PlexAuth, PlexServerDiscovery, PlexLibrary, PlexStreamResolver), Channel Management (ChannelManager, ChannelStore), Scheduler (ScheduleCalculator, ShuffleEngine), Video Player (VideoPlayer, HLS Handler, KeepAlive), and User Interface (EPGComponent, PlayerOverlay, ToastManager).
+
+</details>
+
 ## 1. Plex Integration (`src/modules/plex/`)
 
 Handles all communication with the Plex ecosystem.

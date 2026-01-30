@@ -1,8 +1,9 @@
 # Plex Integration API
 
-## Interface Contract
+> [!CAUTION]
+> Never log or expose Plex tokens or URLs containing `X-Plex-Token`. See [Security Logging Rules](../SECURITY_LOGGING_RULES.md).
 
-The `IPlexAPI` interface is the main entry point for interacting with Plex.
+## Interface Contract
 
 ```typescript
 interface IPlexAPI extends 

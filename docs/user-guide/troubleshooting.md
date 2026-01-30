@@ -6,8 +6,11 @@ Common issues and how to fix them.
 
 ### "Developer Mode" expires
 
+> [!WARNING]
+> LG Developer Mode sessions are limited to **50 hours**.
+
 **Issue**: The app stops working after a few days.
-**Cause**: LG Developer Mode sessions are limited to 50 hours.
+
 **Fix**: Open the **Developer Mode** app on your TV and click **"Extend Session"**. You do not need to reinstall Retune.
 
 ### "Connection Refused" when installing
@@ -23,8 +26,11 @@ Common issues and how to fix them.
 
 ### Video buffers constantly
 
-- **Network**: Check your Wi-Fi signal. 4K content requires high bandwidth.
-- **Server**: Your Plex server might be struggling to transcode. Retune tries to Direct Play, but sometimes transcoding is unavoidable (e.g. unsupported subtitles).
+> [!TIP]
+> 4K content requires high bandwidth. Try wired Ethernet for best results.
+
+- **Network**: Check your Wi-Fi signal strength.
+- **Server**: Your Plex server might be struggling to transcode. Retune tries to Direct Play, but sometimes transcoding is unavoidable (e.g., unsupported subtitles).
 
 ### "Playback Failed" error
 
@@ -49,8 +55,7 @@ Common issues and how to fix them.
 
 ## Still stuck?
 
-Please [open an issue](https://github.com/TJZine/Retune/issues) on GitHub with:
+> [!NOTE]
+> When opening an issue, include your TV model, webOS version, and steps to reproduce.
 
-1. Your TV Model
-2. webOS Version
-3. Description of the problem
+Please [open an issue](https://github.com/TJZine/Retune/issues) on GitHub.
