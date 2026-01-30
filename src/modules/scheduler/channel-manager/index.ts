@@ -25,6 +25,7 @@ export type {
     ResolvedChannelContent,
     ResolvedContentItem,
     PlaybackMode,
+    BuildStrategy,
     SortOrder,
     ImportResult,
     ChannelManagerEventMap,

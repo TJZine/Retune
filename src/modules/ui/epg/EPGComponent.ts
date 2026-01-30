@@ -11,6 +11,7 @@ import { EPGInfoPanel } from './EPGInfoPanel';
 import { EPGTimeHeader } from './EPGTimeHeader';
 import { EPGChannelList } from './EPGChannelList';
 import { EPGErrorBoundary } from './EPGErrorBoundary';
+import { EPGLibraryTabs } from './EPGLibraryTabs';
 import { rafThrottle, appendEpgDebugLog } from './utils';
 import type { IEPGComponent } from './interfaces';
 import type {
@@ -66,6 +67,8 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
     private _placeholderAutoFocusKeys: Set<string> = new Set();
     private _infoPanelFullUpdateTimer: ReturnType<typeof setTimeout> | null = null;
     private _pendingInfoPanelKey: string | null = null;
+    private _libraryTabs: EPGLibraryTabs | null = null;
+    private _isLibraryTabsFocused = false;
 
     // Timers
     private timeUpdateInterval: ReturnType<typeof setInterval> | null = null;
@@ -155,6 +158,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         this.infoPanel.destroy();
         this.timeHeader.destroy();
         this.channelList.destroy();
+        this._libraryTabs?.destroy();
+        this._libraryTabs = null;
+        this._isLibraryTabsFocused = false;
 
         if (this.containerElement) {
             this.containerElement.innerHTML = '';
@@ -386,6 +392,9 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         this._clearInfoPanelFullUpdateTimer();
         this.infoPanel.hide();
+        this._isLibraryTabsFocused = false;
+        this._libraryTabs?.destroy();
+        this._libraryTabs = null;
         this.emit('close', undefined);
     }
 
@@ -442,6 +451,37 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             };
             console.warn('[EPG] loadChannels', payload);
             appendEpgDebugLog('EPG.loadChannels', payload);
+        }
+    }
+
+    setCategoryColorsEnabled(enabled: boolean): void {
+        this.channelList.setCategoryColorsEnabled(enabled);
+        if (this.state.isVisible) {
+            // Re-render visible rows only (virtualized pool), not all channels.
+            this.channelList.updateChannels(this.state.channels);
+        }
+    }
+
+    setLibraryTabs(libraries: Array<{ id: string; name: string }>, selectedId: string | null): void {
+        if (!this.gridElement) return;
+        if (!this._libraryTabs && libraries.length <= 1) {
+            return;
+        }
+        if (!this._libraryTabs) {
+            this._libraryTabs = new EPGLibraryTabs({
+                onSelect: (libraryId: string | null): void => this.emit('libraryFilterChanged', { libraryId }),
+            });
+            this._libraryTabs.initialize(this.gridElement);
+        }
+        if (libraries.length <= 1) {
+            this._libraryTabs.destroy();
+            this._libraryTabs = null;
+            this._isLibraryTabsFocused = false;
+            return;
+        }
+        this._libraryTabs.update(libraries, selectedId);
+        if (!this._libraryTabs.isVisible()) {
+            this._isLibraryTabsFocused = false;
         }
     }
 
@@ -873,6 +913,28 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * @returns true if navigation was handled, false if at boundary
      */
     handleNavigation(direction: 'up' | 'down' | 'left' | 'right'): boolean {
+        if (this._isLibraryTabsFocused) {
+            if (!this._libraryTabs || !this._libraryTabs.isVisible()) {
+                this._isLibraryTabsFocused = false;
+                return false;
+            }
+            switch (direction) {
+                case 'left':
+                    this._libraryTabs.moveFocus(-1);
+                    return true;
+                case 'right':
+                    this._libraryTabs.moveFocus(1);
+                    return true;
+                case 'down':
+                    this._isLibraryTabsFocused = false;
+                    this.focusProgramAtTime(0, this.state.focusTimeMs);
+                    return true;
+                case 'up':
+                default:
+                    return false;
+            }
+        }
+
         const { focusedCell, channels } = this.state;
 
         // If no focus, focus first visible cell
@@ -911,6 +973,12 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
             const prevChannel = focusedCell.channelIndex - 1;
             const targetTime = focusedCell.focusTimeMs ?? this.state.focusTimeMs;
             this.focusProgramAtTime(prevChannel, targetTime);
+            return true;
+        }
+
+        if (focusedCell.channelIndex === 0 && this._libraryTabs?.isVisible()) {
+            this._isLibraryTabsFocused = true;
+            this._libraryTabs.setFocusedToSelected();
             return true;
         }
 
@@ -1097,6 +1165,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * @returns true if handled
      */
     handleSelect(): boolean {
+        if (this._isLibraryTabsFocused) {
+            this._libraryTabs?.selectFocused();
+            return true;
+        }
+
         const { focusedCell } = this.state;
         if (!focusedCell) return false;
 

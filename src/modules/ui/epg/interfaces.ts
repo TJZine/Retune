@@ -59,6 +59,19 @@ export interface IEPGComponent {
     loadChannels(channels: ChannelConfig[]): void;
 
     /**
+     * Enable or disable category colors for channel list.
+     * @param enabled - Category color toggle
+     */
+    setCategoryColorsEnabled(enabled: boolean): void;
+
+    /**
+     * Update library filter tabs.
+     * @param libraries - Available libraries
+     * @param selectedId - Selected library ID
+     */
+    setLibraryTabs(libraries: Array<{ id: string; name: string }>, selectedId: string | null): void;
+
+    /**
      * Load schedule for a specific channel.
      * @param channelId - Channel ID
      * @param schedule - Schedule window with programs

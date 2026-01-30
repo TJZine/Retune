@@ -810,6 +810,89 @@ describe('EPGComponent', () => {
         });
     });
 
+    describe('library tabs', () => {
+        const libraries = [
+            { id: 'lib1', name: 'Movies' },
+            { id: 'lib2', name: 'TV' },
+        ];
+
+        const setupWithTabs = (): ChannelConfig[] => {
+            const channels = [createMockChannel(0), createMockChannel(1)];
+            epg.loadChannels(channels);
+            channels.forEach((ch) => {
+                epg.loadScheduleForChannel(ch.id, createMockSchedule(ch.id, 2));
+            });
+            epg.setLibraryTabs(libraries, 'lib1');
+            epg.focusChannel(0);
+            return channels;
+        };
+
+        it('UP from top enters tabs mode (no wrap)', () => {
+            setupWithTabs();
+            const handled = epg.handleNavigation('up');
+            const focused = epg.getState().focusedCell;
+            expect(handled).toBe(true);
+            expect(focused?.channelIndex).toBe(0);
+        });
+
+        it('LEFT/RIGHT changes focused tab', () => {
+            setupWithTabs();
+            epg.handleNavigation('up');
+
+            let focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
+            expect(focusedTab?.textContent).toBe('Movies');
+
+            epg.handleNavigation('right');
+            focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
+            expect(focusedTab?.textContent).toBe('TV');
+
+            epg.handleNavigation('left');
+            focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
+            expect(focusedTab?.textContent).toBe('Movies');
+        });
+
+        it('OK emits libraryFilterChanged and does not emit channelSelected', () => {
+            setupWithTabs();
+            const onFilter = jest.fn();
+            const onChannel = jest.fn();
+            const onProgram = jest.fn();
+            epg.on('libraryFilterChanged', onFilter);
+            epg.on('channelSelected', onChannel);
+            epg.on('programSelected', onProgram);
+
+            epg.handleNavigation('up');
+            epg.handleSelect();
+
+            expect(onFilter).toHaveBeenCalledWith({ libraryId: 'lib1' });
+            expect(onChannel).not.toHaveBeenCalled();
+            expect(onProgram).not.toHaveBeenCalled();
+        });
+
+        it('DOWN exits tabs mode and focuses channel 0 again', () => {
+            setupWithTabs();
+            epg.handleNavigation('up');
+            epg.handleNavigation('down');
+
+            const focused = epg.getState().focusedCell;
+            expect(focused?.channelIndex).toBe(0);
+        });
+
+        it('UP wraps to last channel when tabs are not visible', () => {
+            const channels = [createMockChannel(0), createMockChannel(1)];
+            epg.loadChannels(channels);
+            channels.forEach((ch) => {
+                epg.loadScheduleForChannel(ch.id, createMockSchedule(ch.id, 2));
+            });
+            epg.setLibraryTabs([{ id: 'lib1', name: 'Movies' }], 'lib1');
+            epg.focusChannel(0);
+
+            epg.handleNavigation('up');
+
+            const focused = epg.getState().focusedCell;
+            expect(focused?.channelIndex).toBe(1);
+        });
+    });
+
     describe('virtualization', () => {
         it('should render only visible cells plus buffer', () => {
             // Load 50 channels with 48 half-hour programs each = 2400 potential cells

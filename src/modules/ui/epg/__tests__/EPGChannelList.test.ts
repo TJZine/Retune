@@ -8,6 +8,7 @@
 
 import { EPGChannelList } from '../EPGChannelList';
 import type { ChannelConfig, EPGConfig } from '../types';
+import type { BuildStrategy } from '../../../scheduler/channel-manager/types';
 
 describe('EPGChannelList', () => {
     const createMockChannel = (index: number): ChannelConfig => ({
@@ -82,5 +83,41 @@ describe('EPGChannelList', () => {
         expect(row).not.toBeNull();
         const name = row.querySelector('.epg-channel-name');
         expect(name?.textContent).toBe('Channel 13');
+    });
+
+    it('clears buildStrategy dataset when category colors are disabled', () => {
+        const list = new EPGChannelList();
+        const config = createConfig({ visibleChannels: 2 });
+
+        list.initialize(parent, config);
+        list.setCategoryColorsEnabled(false);
+
+        const channels = [
+            { ...createMockChannel(0), buildStrategy: 'genres' as BuildStrategy },
+        ];
+        list.updateChannels(channels);
+
+        const row = parent.querySelector('.epg-channel-row') as HTMLElement;
+        expect(row.dataset.buildStrategy).toBeUndefined();
+    });
+
+    it('clears buildStrategy dataset when custom color is valid', () => {
+        const list = new EPGChannelList();
+        const config = createConfig({ visibleChannels: 1 });
+
+        list.initialize(parent, config);
+        list.setCategoryColorsEnabled(true);
+
+        const channels = [
+            {
+                ...createMockChannel(0),
+                buildStrategy: 'actors' as BuildStrategy,
+                color: '#ff0000',
+            },
+        ];
+        list.updateChannels(channels);
+
+        const row = parent.querySelector('.epg-channel-row') as HTMLElement;
+        expect(row.dataset.buildStrategy).toBeUndefined();
     });
 });

@@ -9,6 +9,7 @@ import type {
 } from '../../../scheduler/channel-manager';
 import type { IChannelScheduler, ScheduledProgram, ScheduleConfig } from '../../../scheduler/scheduler';
 import type { EPGConfig } from '../types';
+import { RETUNE_STORAGE_KEYS } from '../../../../config/storageKeys';
 
 const makeChannel = (id: string, number: number): ChannelConfig => ({
     id,
@@ -64,6 +65,8 @@ const makeDeps = (
         isVisible: jest.fn().mockReturnValue(false),
         focusNow: jest.fn(),
         loadChannels: jest.fn(),
+        setCategoryColorsEnabled: jest.fn(),
+        setLibraryTabs: jest.fn(),
         loadScheduleForChannel: jest.fn(),
         clearSchedules: jest.fn(),
         getState: jest.fn().mockReturnValue({
@@ -81,6 +84,7 @@ const makeDeps = (
         setGridAnchorTime: jest.fn(),
         getFocusedProgram: jest.fn().mockReturnValue(null),
         focusChannel: jest.fn(),
+        scrollToChannel: jest.fn(),
         on: jest.fn(),
         off: jest.fn(),
     } as unknown as IEPGComponent;
@@ -133,6 +137,32 @@ const makeDeps = (
 };
 
 describe('EPGCoordinator', () => {
+    const installLocalStorage = (): void => {
+        const store = new Map<string, string>();
+        (globalThis as unknown as { localStorage?: Storage }).localStorage = {
+            getItem: (key: string) => store.get(key) ?? null,
+            setItem: (key: string, value: string) => {
+                store.set(key, value);
+            },
+            removeItem: (key: string) => {
+                store.delete(key);
+            },
+        } as Storage;
+    };
+
+    const clearLocalStorage = (): void => {
+        delete (globalThis as unknown as { localStorage?: Storage }).localStorage;
+    };
+
+    beforeEach(() => {
+        installLocalStorage();
+    });
+
+    afterEach(() => {
+        clearLocalStorage();
+        jest.clearAllMocks();
+    });
+
     it('openEPG primes and refreshes when ready before show', async () => {
         const { deps, epg } = makeDeps();
         const coordinator = new EPGCoordinator(deps);
@@ -144,6 +174,94 @@ describe('EPGCoordinator', () => {
         expect(epg.show).toHaveBeenCalledTimes(1);
         // focusNow called when not preserving focus
         expect(epg.focusNow).toHaveBeenCalled();
+    });
+
+    it('primeEpgChannels applies filtering when tabs enabled and selected', () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, 'lib1');
+
+        const allChannels: ChannelConfig[] = [
+            {
+                ...makeChannel('c1', 1),
+                sourceLibraryId: 'lib1',
+                sourceLibraryName: 'Movies',
+            },
+            {
+                ...makeChannel('c2', 2),
+                sourceLibraryId: 'lib2',
+                sourceLibraryName: 'TV',
+            },
+            {
+                ...makeChannel('c3', 3),
+                contentSource: {
+                    type: 'library',
+                    libraryId: 'lib1',
+                    libraryType: 'movie',
+                    includeWatched: true,
+                },
+            },
+        ];
+
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...makeDeps().channelManager,
+                    getAllChannels: () => allChannels,
+                } as IChannelManager),
+        });
+
+        const coordinator = new EPGCoordinator(deps);
+        coordinator.primeEpgChannels();
+
+        expect(epg.loadChannels).toHaveBeenCalledWith([allChannels[0], allChannels[2]]);
+    });
+
+    it('primeEpgChannels clears filter when tabs are disabled', () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, '0');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, 'lib1');
+
+        const allChannels: ChannelConfig[] = [
+            { ...makeChannel('c1', 1), sourceLibraryId: 'lib1', sourceLibraryName: 'Movies' },
+            { ...makeChannel('c2', 2), sourceLibraryId: 'lib2', sourceLibraryName: 'TV' },
+        ];
+
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...makeDeps().channelManager,
+                    getAllChannels: () => allChannels,
+                } as IChannelManager),
+        });
+        const coordinator = new EPGCoordinator(deps);
+
+        coordinator.primeEpgChannels();
+
+        expect(localStorage.getItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER)).toBeNull();
+        expect(epg.loadChannels).toHaveBeenCalledWith(allChannels);
+    });
+
+    it('primeEpgChannels clears filter when only one library remains', () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, 'lib1');
+
+        const allChannels: ChannelConfig[] = [
+            { ...makeChannel('c1', 1), sourceLibraryId: 'lib1', sourceLibraryName: 'Movies' },
+            { ...makeChannel('c2', 2), sourceLibraryId: 'lib1', sourceLibraryName: 'Movies' },
+        ];
+
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...makeDeps().channelManager,
+                    getAllChannels: () => allChannels,
+                } as IChannelManager),
+        });
+        const coordinator = new EPGCoordinator(deps);
+
+        coordinator.primeEpgChannels();
+
+        expect(localStorage.getItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER)).toBeNull();
+        expect(epg.loadChannels).toHaveBeenCalledWith(allChannels);
     });
 
     it('openEPG shows immediately when not ready then initializes and shows again', async () => {
@@ -213,6 +331,63 @@ describe('EPGCoordinator', () => {
         expect(epg.setGridAnchorTime).toHaveBeenCalled();
     });
 
+    it('refreshEpgSchedules uses filtered channels', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, 'lib1');
+
+        const channels: ChannelConfig[] = [
+            { ...makeChannel('c1', 1), sourceLibraryId: 'lib1', sourceLibraryName: 'Movies' },
+            { ...makeChannel('c2', 2), sourceLibraryId: 'lib2', sourceLibraryName: 'TV' },
+        ];
+        const base = makeDeps().deps.getChannelManager()!;
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...base,
+                    getAllChannels: () => channels,
+                    getCurrentChannel: () => channels[0],
+                    resolveChannelContent: base.resolveChannelContent,
+                } as IChannelManager),
+        });
+        const coordinator = new EPGCoordinator(deps);
+
+        await coordinator.refreshEpgSchedules();
+
+        const loadedIds = (epg.loadScheduleForChannel as jest.Mock).mock.calls.map((call) => call[0]);
+        expect(loadedIds).toContain('c1');
+        expect(loadedIds).not.toContain('c2');
+    });
+
+    it('refreshEpgSchedulesForRange uses filtered channels', async () => {
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, '1');
+        localStorage.setItem(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, 'lib1');
+
+        const channels: ChannelConfig[] = [
+            { ...makeChannel('c1', 1), sourceLibraryId: 'lib1', sourceLibraryName: 'Movies' },
+            { ...makeChannel('c2', 2), sourceLibraryId: 'lib2', sourceLibraryName: 'TV' },
+        ];
+        const base = makeDeps().deps.getChannelManager()!;
+        const { deps, epg } = makeDeps({
+            getChannelManager: () =>
+                ({
+                    ...base,
+                    getAllChannels: () => channels,
+                    getCurrentChannel: () => channels[0],
+                    resolveChannelContent: base.resolveChannelContent,
+                } as IChannelManager),
+        });
+        const coordinator = new EPGCoordinator(deps);
+
+        await coordinator.refreshEpgSchedulesForRange(
+            { channelStart: 0, channelEnd: 1, timeStartMs: 0, timeEndMs: 0 },
+            { debounceMs: 0, reason: 'visible-range' }
+        );
+
+        const loadedIds = (epg.loadScheduleForChannel as jest.Mock).mock.calls.map((call) => call[0]);
+        expect(loadedIds).toContain('c1');
+        expect(loadedIds).not.toContain('c2');
+    });
+
     it('refreshEpgSchedulesForRange resolves after debounce completes', async () => {
         jest.useFakeTimers();
         const { deps, epg } = makeDeps();
@@ -275,6 +450,10 @@ describe('EPGCoordinator', () => {
                 currentTime: 0,
             }),
             clearSchedules: jest.fn(),
+            setCategoryColorsEnabled: jest.fn(),
+            setLibraryTabs: jest.fn(),
+            scrollToChannel: jest.fn(),
+            focusChannel: jest.fn(),
         } as unknown as IEPGComponent;
         const switchToChannel = jest.fn().mockResolvedValue(undefined);
         const setSource = jest.fn();
@@ -285,8 +464,9 @@ describe('EPGCoordinator', () => {
         }).deps;
         const coordinator = new EPGCoordinator(deps);
 
-        const [unsub] = coordinator.wireEpgEvents();
-        expect(typeof unsub).toBe('function');
+        const [unsubChannel, unsubFilter] = coordinator.wireEpgEvents();
+        expect(typeof unsubChannel).toBe('function');
+        expect(typeof unsubFilter).toBe('function');
 
         const handler = (epg.on as jest.Mock).mock.calls[0][1];
         handler({
@@ -298,7 +478,43 @@ describe('EPGCoordinator', () => {
         expect(hide).toHaveBeenCalled();
         expect(switchToChannel).toHaveBeenCalledWith('c1');
 
-        unsub!();
+        unsubChannel!();
         expect(epg.off).toHaveBeenCalledWith('channelSelected', handler);
+
+        const filterHandler = (epg.on as jest.Mock).mock.calls.find((call) => call[0] === 'libraryFilterChanged')?.[1];
+        unsubFilter!();
+        if (filterHandler) {
+            expect(epg.off).toHaveBeenCalledWith('libraryFilterChanged', filterHandler);
+        }
+    });
+
+    it('library filter change clears schedules, primes, and refreshes', () => {
+        const epg: IEPGComponent = {
+            on: jest.fn(),
+            off: jest.fn(),
+            clearSchedules: jest.fn(),
+            scrollToChannel: jest.fn(),
+            focusChannel: jest.fn(),
+            setCategoryColorsEnabled: jest.fn(),
+            setLibraryTabs: jest.fn(),
+            loadChannels: jest.fn(),
+        } as unknown as IEPGComponent;
+        const { deps } = makeDeps({
+            getEpg: () => epg,
+        });
+        const coordinator = new EPGCoordinator(deps);
+        const primeSpy = jest.spyOn(coordinator, 'primeEpgChannels');
+        const refreshSpy = jest.spyOn(coordinator, 'refreshEpgSchedules').mockResolvedValue();
+
+        coordinator.wireEpgEvents();
+
+        const filterHandler = (epg.on as jest.Mock).mock.calls.find((call) => call[0] === 'libraryFilterChanged')?.[1];
+        filterHandler?.({ libraryId: 'lib1' });
+
+        expect(epg.clearSchedules).toHaveBeenCalled();
+        expect(primeSpy).toHaveBeenCalled();
+        expect(epg.scrollToChannel).toHaveBeenCalledWith(0);
+        expect(epg.focusChannel).toHaveBeenCalledWith(0);
+        expect(refreshSpy).toHaveBeenCalledWith({ reason: 'library-filter' });
     });
 });

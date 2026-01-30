@@ -88,6 +88,14 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
         defaultValue: DEFAULT_SETTINGS.subtitles.allowBurnIn,
     },
+    'settings-guide-category-colors': {
+        storageKey: SETTINGS_STORAGE_KEYS.GUIDE_CATEGORY_COLORS,
+        defaultValue: true,
+    },
+    'settings-guide-library-tabs': {
+        storageKey: SETTINGS_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED,
+        defaultValue: true,
+    },
 };
 
 const SELECT_METADATA: Record<string, SelectMetadata> = {
@@ -109,6 +117,7 @@ export class SettingsScreen {
     private _container: HTMLElement;
     private _getNavigation: () => INavigationManager | null;
     private _onSubtitlesEnabledChange: ((enabled: boolean) => void) | null = null;
+    private _onGuideSettingChange: ((key: 'categoryColors' | 'libraryTabs', enabled: boolean) => void) | null = null;
     private _focusableIds: string[] = [];
     private _toggleElements: Map<string, ReturnType<typeof createSettingsToggle>> = new Map();
     private _selectElements: Map<string, ReturnType<typeof createSettingsSelect>> = new Map();
@@ -119,11 +128,13 @@ export class SettingsScreen {
     constructor(
         container: HTMLElement,
         getNavigation: () => INavigationManager | null,
-        onSubtitlesEnabledChange?: (enabled: boolean) => void
+        onSubtitlesEnabledChange?: (enabled: boolean) => void,
+        onGuideSettingChange?: (key: 'categoryColors' | 'libraryTabs', enabled: boolean) => void
     ) {
         this._container = container;
         this._getNavigation = getNavigation;
         this._onSubtitlesEnabledChange = onSubtitlesEnabledChange ?? null;
+        this._onGuideSettingChange = onGuideSettingChange ?? null;
         this._buildUI();
     }
 
@@ -371,6 +382,31 @@ export class SettingsScreen {
                                 SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
                                 value
                             );
+                        },
+                    },
+                ],
+            },
+            {
+                title: 'Guide',
+                items: [
+                    {
+                        id: 'settings-guide-category-colors',
+                        label: 'Category Colors',
+                        description: 'Show colored left border for auto-setup channel types',
+                        value: this._loadBoolSetting(SETTINGS_STORAGE_KEYS.GUIDE_CATEGORY_COLORS, true),
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.GUIDE_CATEGORY_COLORS, value);
+                            this._onGuideSettingChange?.('categoryColors', value);
+                        },
+                    },
+                    {
+                        id: 'settings-guide-library-tabs',
+                        label: 'Library Tabs',
+                        description: 'Filter the guide by source library',
+                        value: this._loadBoolSetting(SETTINGS_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, true),
+                        onChange: (value: boolean): void => {
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, value);
+                            this._onGuideSettingChange?.('libraryTabs', value);
                         },
                     },
                 ],
