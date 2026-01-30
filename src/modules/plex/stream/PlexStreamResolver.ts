@@ -35,6 +35,7 @@ import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 import { isStoredTrue, readStoredBoolean, safeLocalStorageGet } from '../../../utils/storage';
 import { redactSensitiveTokens } from '../../../utils/redact';
 import { detectHdrLabel } from './hdr';
+import { computeHdr10FallbackMode, parseDolbyVisionProfileString, shouldApplyHdr10Fallback } from './dvHdr10Fallback';
 
 // Re-export types for consumers
 export { PlexStreamErrorCode } from './types';
@@ -535,9 +536,30 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
 
             const canDirect = directDecision.canDirect;
-            const preferHdr10 = this._shouldPreferHdr10OverDv();
+            const hdr10FallbackMode = this._getHdr10FallbackMode();
             const isDolbyVision = this._detectHdrLabelFromStream(videoStream) === 'Dolby Vision';
-            const forceTranscodeForDv = preferHdr10 && isDolbyVision;
+            const sourceContainer = (media.container ?? '').toLowerCase();
+            const dvProfileInfo = parseDolbyVisionProfileString(
+                videoStream?.doviProfile ?? null,
+                videoStream?.profile ?? null
+            );
+            const dvProfileRaw = (dvProfileInfo.raw ?? '').trim();
+            const forceHlsForDvNoHdr10BaseLayer = isDolbyVision && sourceContainer === 'mkv' && (
+                dvProfileInfo.profileId === 5 ||
+                (dvProfileInfo.profileId === 8 &&
+                    (dvProfileRaw.startsWith('8.2') || dvProfileRaw.startsWith('8.4')))
+            );
+            const fallback = shouldApplyHdr10Fallback({
+                mode: hdr10FallbackMode,
+                container: media.container,
+                isDolbyVision,
+                doviProfile: videoStream?.doviProfile ?? null,
+                codecProfileString: videoStream?.profile ?? null,
+                aspectRatio: typeof media.aspectRatio === 'number' ? media.aspectRatio : null,
+                width: media.width,
+                height: media.height,
+            });
+            const forceHdr10Fallback = fallback.apply;
             const debugEnabled = ((): boolean => {
                 try {
                     return isStoredTrue(safeLocalStorageGet(RETUNE_STORAGE_KEYS.DEBUG_LOGGING));
@@ -554,8 +576,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 if (!directDecision.canDirect) {
                     reasons.push(...directDecision.reasons);
                 }
-                if (forceTranscodeForDv) {
-                    reasons.push('prefer_hdr10_over_dv');
+                if (forceHdr10Fallback) {
+                    reasons.push(`hdr10_fallback_${fallback.reason}`);
+                }
+                if (forceHlsForDvNoHdr10BaseLayer) {
+                    reasons.push('dv_profile_no_hdr10_base_layer');
                 }
                 if (reasons.length > 0) {
                     console.warn('[PlexStreamResolver] Direct play decision:', {
@@ -569,6 +594,18 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     });
                 }
             }
+            if (debugEnabled && forceHdr10Fallback) {
+                console.warn('[PlexStreamResolver] HDR10 fallback applied:', {
+                    itemKey: request.itemKey,
+                    mode: hdr10FallbackMode,
+                    reason: fallback.reason,
+                    debugWhy: fallback.debugWhy,
+                    container: media.container,
+                    aspectRatio: media.aspectRatio,
+                    doviProfile: videoStream?.doviProfile ?? null,
+                    streamProfile: videoStream?.profile ?? null,
+                });
+            }
 
             let playbackUrl: string;
             let protocol: 'hls' | 'http';
@@ -578,7 +615,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             let audioCodec: string;
             let transcodeRequestInfo: StreamDecision['transcodeRequest'] | null = null;
 
-            const allowDirectPlay = canDirect && request.directPlay !== false && !forceTranscodeForDv;
+            const allowDirectPlay = canDirect &&
+                request.directPlay !== false &&
+                !forceHdr10Fallback &&
+                !forceHlsForDvNoHdr10BaseLayer;
             if (allowDirectPlay) {
                 // Direct play
                 playbackUrl = this._buildDirectPlayUrl(part.key, sessionId, directPlayAudioStreamId);
@@ -602,6 +642,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     options.subtitleStreamId = subtitleStream.id;
                     options.subtitleMode = 'burn';
                 }
+                if (forceHdr10Fallback) {
+                    options.hideDolbyVision = true;
+                }
                 playbackUrl = this.getTranscodeUrl(request.itemKey, options);
                 protocol = 'hls';
                 isTranscoding = true;
@@ -616,7 +659,11 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     subtitleMode?: 'none' | 'burn';
                     mediaIndex?: number;
                     partIndex?: number;
+                    hideDolbyVision?: boolean;
                 } = { sessionId, maxBitrate, mediaIndex, partIndex };
+                if (forceHdr10Fallback) {
+                    req.hideDolbyVision = true;
+                }
                 if (typeof options.audioStreamId === 'string') {
                     req.audioStreamId = options.audioStreamId;
                 }
@@ -677,7 +724,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                             ? []
                             : [
                                 ...(request.directPlay === false ? ['direct_play_disabled_by_request'] : []),
-                                ...(forceTranscodeForDv ? ['prefer_hdr10_over_dv'] : []),
+                                ...(forceHdr10Fallback ? [`hdr10_fallback_${fallback.reason}`] : []),
+                                ...(forceHlsForDvNoHdr10BaseLayer ? ['dv_profile_no_hdr10_base_layer'] : []),
                                 ...directDecision.reasons,
                             ],
                 },
@@ -1010,6 +1058,12 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             // Fallback: webOS 23+ (Chromium 94+) should support HEVC decode.
             (isWebOs && chromeMajor !== null && chromeMajor >= 94);
 
+        const supportsDolbyVision =
+            canPlay('video/mp4; codecs="dvh1.05.06"') ||
+            canPlay('video/mp4; codecs="dvh1.08.06"') ||
+            // Jellyfin research: LG webOS 2020+ should support profile 8 but may not report it.
+            (isWebOs && chromeMajor !== null && chromeMajor >= 94);
+
         const supportsVp9 =
             canPlay('video/webm; codecs="vp9"') ||
             canPlay('video/mp4; codecs="vp09.00.10.08"');
@@ -1023,6 +1077,10 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             // Plex commonly uses HEVC "level" style values like 120 (1080p) / 150 (4K).
             const hevcLevel = is4K ? '150' : '120';
             videoDecoders.push(`hevc{profile:main&level:${hevcLevel}}`);
+            if (supportsDolbyVision && options.hideDolbyVision !== true) {
+                videoDecoders.push('hevc{profile:dvhe.05}');
+                videoDecoders.push('hevc{profile:dvhe.08}');
+            }
         }
         if (supportsVp9) {
             videoDecoders.push('vp9');
@@ -1216,7 +1274,7 @@ export class PlexStreamResolver implements IPlexStreamResolver {
 
     async fetchUniversalTranscodeDecision(
         itemKey: string,
-        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string }
+        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string; hideDolbyVision?: boolean }
     ): Promise<NonNullable<StreamDecision['serverDecision']>> {
         const hlsOptions: HlsOptions = { sessionId: options.sessionId };
         if (typeof options.maxBitrate === 'number') {
@@ -1224,6 +1282,9 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         }
         if (typeof options.audioStreamId === 'string') {
             hlsOptions.audioStreamId = options.audioStreamId;
+        }
+        if (typeof options.hideDolbyVision === 'boolean') {
+            hlsOptions.hideDolbyVision = options.hideDolbyVision;
         }
 
         const startUrl = this.getTranscodeUrl(itemKey, hlsOptions);
@@ -1512,15 +1573,6 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             }
         }
 
-        if (this._shouldPreferHdr10OverDv()) {
-            const nonDvCandidates = candidates.filter((media) => !this._isDolbyVisionMedia(media));
-            if (nonDvCandidates.length > 0) {
-                candidates = nonDvCandidates;
-            } else if (this._isDebugLoggingEnabled()) {
-                console.warn('[PlexStreamResolver] HDR10 preference enabled but no non-DV media found.');
-            }
-        }
-
         // Prefer highest resolution
         const sorted = [...candidates].sort((a, b) =>
             (b.width * b.height) - (a.width * a.height)
@@ -1641,18 +1693,14 @@ export class PlexStreamResolver implements IPlexStreamResolver {
         return fallback || defaultTrack; // Use fallback if found, otherwise stick with default
     }
 
-    private _shouldPreferHdr10OverDv(): boolean {
+    private _getHdr10FallbackMode(): 'off' | 'smart' | 'force' {
         try {
-            return readStoredBoolean(RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV, false);
+            const force = readStoredBoolean(RETUNE_STORAGE_KEYS.FORCE_HDR10_FALLBACK, false);
+            const smart = readStoredBoolean(RETUNE_STORAGE_KEYS.SMART_HDR10_FALLBACK, false);
+            return computeHdr10FallbackMode({ smartHdr10Fallback: smart, forceHdr10Fallback: force });
         } catch {
-            return false;
+            return 'off';
         }
-    }
-
-    private _isDolbyVisionMedia(media: PlexMediaFile): boolean {
-        const stream = media.parts?.[0]?.streams?.find((s) => s.streamType === 1);
-        const hdrLabel = this._detectHdrLabelFromStream(stream ?? undefined);
-        return hdrLabel === 'Dolby Vision';
     }
 
     private _detectHdrLabelFromStream(stream?: PlexStream | null): string | undefined {

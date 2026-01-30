@@ -42,6 +42,12 @@ Common issues and how to fix them.
 - Try pausing and resuming playback.
 - If persistent, check if "Direct Play" is active in Plex Dashboard. Transcoding sometimes introduces sync issues.
 
+### Dolby Vision MKV shows dark letterbox bars
+
+- Enable **Smart HDR10 Fallback** (Settings → HDR / Dolby Vision) to switch DV MKV to HDR10 for cinematic aspect ratios.
+- The setting only affects MKV; MP4/TS Dolby Vision behavior is unchanged.
+- If the issue persists, enable **Force HDR10 Fallback** to apply HDR10 whenever the base layer is available.
+
 ## EPG & Channel Issues
 
 ### Guide data is empty

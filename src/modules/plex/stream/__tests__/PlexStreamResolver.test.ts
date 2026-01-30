@@ -36,6 +36,7 @@ function createMockMediaItem(
         audioCodec: string;
         width: number;
         height: number;
+        aspectRatio: number;
         bitrate: number;
         durationMs: number;
     }> = {},
@@ -50,6 +51,7 @@ function createMockMediaItem(
         audioCodec: 'aac',
         width: 1920,
         height: 1080,
+        aspectRatio: 1.78,
         bitrate: 8000,
         durationMs: 7200000,
     };
@@ -80,7 +82,7 @@ function createMockMediaItem(
         bitrate: merged.bitrate,
         width: merged.width,
         height: merged.height,
-        aspectRatio: 1.78,
+        aspectRatio: merged.aspectRatio,
         videoCodec: merged.videoCodec,
         audioCodec: merged.audioCodec,
         audioChannels: 2,
@@ -324,73 +326,28 @@ describe('PlexStreamResolver', () => {
             expect(decision.playbackUrl).toContain('X-Plex-Token=mock-token');
         });
 
-        it('prefers non-DV media when HDR10 preference is enabled', async () => {
+        it('forces HLS with HDR10 fallback for DV MKV (P8.1) when Smart is enabled and letterbox detected', async () => {
             Object.defineProperty(globalThis, 'localStorage', {
                 value: {
                     getItem: jest.fn((key: string) =>
-                        key === RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV ? '1' : null
+                        key === RETUNE_STORAGE_KEYS.SMART_HDR10_FALLBACK ? '1' : null
                     ),
                 },
                 configurable: true,
             });
-
-            const dvItem = createMockMediaItem();
-            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
-            dvStream.displayTitle = 'Dolby Vision';
-            dvStream.doviPresent = true;
-            dvItem.media[0]!.width = 3840;
-            dvItem.media[0]!.height = 2160;
-
-            const restStream = {
-                ...(dvItem.media[0]!.parts[0]!.streams[0] as PlexStream),
-            };
-            delete restStream.displayTitle;
-            delete restStream.extendedDisplayTitle;
-            const hdr10Media: PlexMediaFile = {
-                ...dvItem.media[0]!,
-                id: 'media-hdr10',
-                width: 1920,
-                height: 1080,
-                parts: [
-                    {
-                        ...dvItem.media[0]!.parts[0]!,
-                        streams: [
-                            {
-                                ...restStream,
-                                doviPresent: false,
-                                hdr: 'HDR10',
-                            },
-                            dvItem.media[0]!.parts[0]!.streams[1] as PlexStream,
-                        ],
-                    },
-                ],
-            };
-
-            const mockItem = { ...dvItem, media: [dvItem.media[0]!, hdr10Media] };
-            const config = createMockConfig({
-                getItem: jest.fn().mockResolvedValue(mockItem),
-            });
-            const resolver = new PlexStreamResolver(config);
-
-            const decision = await resolver.resolveStream({ itemKey: '12345' });
-
-            expect(decision.source?.hdr).toBe('HDR10');
-        });
-
-        it('forces transcode for DV when preference is enabled and only DV media exists', async () => {
-            Object.defineProperty(globalThis, 'localStorage', {
+            Object.defineProperty(globalThis, 'navigator', {
                 value: {
-                    getItem: jest.fn((key: string) =>
-                        key === RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV ? '1' : null
-                    ),
+                    userAgent:
+                        'Mozilla/5.0 (webOS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.0.0 Safari/537.36',
                 },
                 configurable: true,
             });
 
-            const dvItem = createMockMediaItem();
+            const dvItem = createMockMediaItem({ container: 'mkv', aspectRatio: 2.39 });
             const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
             dvStream.displayTitle = 'Dolby Vision';
             dvStream.doviPresent = true;
+            dvStream.doviProfile = '8.1';
 
             const config = createMockConfig({
                 getItem: jest.fn().mockResolvedValue(dvItem),
@@ -399,8 +356,132 @@ describe('PlexStreamResolver', () => {
 
             const decision = await resolver.resolveStream({ itemKey: '12345' });
 
-            expect(decision.directPlay?.allowed).toBe(false);
-            expect(decision.directPlay?.reasons).toContain('prefer_hdr10_over_dv');
+            expect(decision.isTranscoding).toBe(true);
+            expect(decision.protocol).toBe('hls');
+            expect(decision.directPlay?.reasons).toContain('hdr10_fallback_smart');
+            expect(decision.transcodeRequest?.hideDolbyVision).toBe(true);
+            expect(decision.playbackUrl).toContain('directStream=1');
+            expect(decision.playbackUrl).toContain('X-Plex-Client-Capabilities=');
+            expect(decision.playbackUrl).not.toContain('dvhe');
+        });
+
+        it('allows direct play for DV MKV when Smart is enabled but not letterbox', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((key: string) =>
+                        key === RETUNE_STORAGE_KEYS.SMART_HDR10_FALLBACK ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const dvItem = createMockMediaItem({ container: 'mkv', aspectRatio: 1.78 });
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvStream.doviProfile = '7';
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isDirectPlay).toBe(true);
+            expect(decision.isTranscoding).toBe(false);
+        });
+
+        it('forces HLS with HDR10 fallback for DV MKV when Force is enabled', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((key: string) =>
+                        key === RETUNE_STORAGE_KEYS.FORCE_HDR10_FALLBACK ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const dvItem = createMockMediaItem({ container: 'mkv', aspectRatio: 1.78 });
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvStream.doviProfile = '8.1';
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isTranscoding).toBe(true);
+            expect(decision.directPlay?.reasons).toContain('hdr10_fallback_force');
+        });
+
+        it('does not force HDR10 fallback for DV MP4 (P8.1) even when Force is enabled', async () => {
+            Object.defineProperty(globalThis, 'localStorage', {
+                value: {
+                    getItem: jest.fn((key: string) =>
+                        key === RETUNE_STORAGE_KEYS.FORCE_HDR10_FALLBACK ? '1' : null
+                    ),
+                },
+                configurable: true,
+            });
+
+            const dvItem = createMockMediaItem({ container: 'mp4', aspectRatio: 2.39 });
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvStream.doviProfile = '8.1';
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isDirectPlay).toBe(true);
+            expect(decision.isTranscoding).toBe(false);
+        });
+
+        it('does not force HLS for DV MP4 profile 5 when fallback is off', async () => {
+            const dvItem = createMockMediaItem({ container: 'mp4', aspectRatio: 1.78 });
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvStream.doviProfile = '5';
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isDirectPlay).toBe(true);
+            expect(decision.isTranscoding).toBe(false);
+        });
+
+        it('forces HLS for DV MKV profile 5 even when fallback is off', async () => {
+            const dvItem = createMockMediaItem({ container: 'mkv', aspectRatio: 1.78 });
+            const dvStream = dvItem.media[0]!.parts[0]!.streams[0] as PlexStream;
+            dvStream.displayTitle = 'Dolby Vision';
+            dvStream.doviPresent = true;
+            dvStream.doviProfile = '5';
+
+            const config = createMockConfig({
+                getItem: jest.fn().mockResolvedValue(dvItem),
+            });
+            const resolver = new PlexStreamResolver(config);
+
+            const decision = await resolver.resolveStream({ itemKey: '12345' });
+
+            expect(decision.isTranscoding).toBe(true);
+            expect(decision.protocol).toBe('hls');
+            expect(decision.directPlay?.reasons).toContain('dv_profile_no_hdr10_base_layer');
+            expect(decision.playbackUrl).toContain('directStream=1');
         });
 
         it('should return transcode URL for incompatible content', async () => {
