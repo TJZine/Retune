@@ -6,19 +6,19 @@ Retune is a client-side web application built for LG webOS. It connects directly
 
 ```mermaid
 graph TD
-    User[User / TV Remote] --> UI[Retune App (webOS)]
-    UI --> Orchestrator[App Orchestrator]
+    User["User / TV Remote"] --> UI["Retune App - webOS"]
+    UI --> Orchestrator["App Orchestrator"]
     
     subgraph Core Modules
-        Orchestrator --> Plex[Plex Integration]
-        Orchestrator --> Channels[Channel Manager]
-        Orchestrator --> Scheduler[Scheduler]
-        Orchestrator --> Player[Video Player]
+        Orchestrator --> Plex["Plex Integration"]
+        Orchestrator --> Channels["Channel Manager"]
+        Orchestrator --> Scheduler["Scheduler"]
+        Orchestrator --> Player["Video Player"]
     end
     
-    Plex --> PMS[Plex Media Server]
-    Channels --> LocalStorage[TV Local Storage]
-    Player --> MediaPipeline[webOS Media Pipeline]
+    Plex --> PMS["Plex Media Server"]
+    Channels --> LocalStorage["TV Local Storage"]
+    Player --> MediaPipeline["webOS Media Pipeline"]
 ```
 
 <details>
