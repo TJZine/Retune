@@ -88,6 +88,14 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_ALLOW_BURN_IN,
         defaultValue: DEFAULT_SETTINGS.subtitles.allowBurnIn,
     },
+    'settings-guide-category-colors': {
+        storageKey: SETTINGS_STORAGE_KEYS.GUIDE_CATEGORY_COLORS,
+        defaultValue: true,
+    },
+    'settings-guide-library-tabs': {
+        storageKey: SETTINGS_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED,
+        defaultValue: true,
+    },
 };
 
 const SELECT_METADATA: Record<string, SelectMetadata> = {
