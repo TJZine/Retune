@@ -151,6 +151,36 @@ describe('dvHdr10Fallback', () => {
             expect(parsed.levelId).toBe(6);
             expect(parsed.hasHdr10BaseLayer).toBe(true);
         });
+
+        // Edge case: when both doviProfile and codecProfileString are provided,
+        // codecProfileString takes precedence. Verify hasHdr10BaseLayer is correct.
+        it('prefers codecProfileString over doviProfile when both present', () => {
+            const parsed = parseDolbyVisionProfileString('8.2', 'dvhe.08.06');
+            expect(parsed.profileId).toBe(8);
+            expect(parsed.levelId).toBe(6);
+            expect(parsed.raw).toBe('dvhe.08.06'); // codec string wins
+            expect(parsed.hasHdr10BaseLayer).toBe(false); // correctly false for codec format
+        });
+
+        it('falls back to doviProfile when codecProfileString is empty', () => {
+            const parsed = parseDolbyVisionProfileString('8.2', '');
+            expect(parsed.profileId).toBe(8);
+            expect(parsed.levelId).toBe(2);
+            expect(parsed.raw).toBe('8.2');
+            expect(parsed.hasHdr10BaseLayer).toBe(false);
+        });
+
+        it('correctly identifies 8.1 from doviProfile when no codec string', () => {
+            const parsed = parseDolbyVisionProfileString('8.1', null);
+            expect(parsed.profileId).toBe(8);
+            expect(parsed.hasHdr10BaseLayer).toBe(true);
+        });
+
+        it('correctly identifies 8.4 (HLG) has no HDR10 base layer', () => {
+            const parsed = parseDolbyVisionProfileString('8.4');
+            expect(parsed.profileId).toBe(8);
+            expect(parsed.hasHdr10BaseLayer).toBe(false);
+        });
     });
 
     describe('computeHdr10FallbackMode', () => {

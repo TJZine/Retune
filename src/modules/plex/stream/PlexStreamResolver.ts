@@ -200,16 +200,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
             url: URL;
             headers: Record<string, string>;
         }> = [
-            {
-                // Closest to how Retune currently talks to PMS (token in header)
-                authMode: 'header',
-                url: baseUrl,
-                headers: {
-                    Accept: 'text/vtt, text/plain, */*',
-                    ...this._config.getAuthHeaders(),
+                {
+                    // Closest to how Retune currently talks to PMS (token in header)
+                    authMode: 'header',
+                    url: baseUrl,
+                    headers: {
+                        Accept: 'text/vtt, text/plain, */*',
+                        ...this._config.getAuthHeaders(),
+                    },
                 },
-            },
-        ];
+            ];
 
         for (const variant of variants) {
             const redactedUrl = redactSensitiveTokens(variant.url.toString());
@@ -239,16 +239,16 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     signal: controller.signal,
                 });
 
-            const contentType = response.headers.get('content-type');
-            const contentLength = response.headers.get('content-length');
-            const acceptRanges = response.headers.get('accept-ranges');
-            const contentRange = response.headers.get('content-range');
-            const contentDisposition = response.headers.get('content-disposition');
-            const accessControlAllowOrigin = response.headers.get('access-control-allow-origin');
-            const accessControlExposeHeaders = response.headers.get('access-control-expose-headers');
-            const responseType = response.type;
-            const redirected = response.redirected;
-            const finalUrl = redactSensitiveTokens(response.url);
+                const contentType = response.headers.get('content-type');
+                const contentLength = response.headers.get('content-length');
+                const acceptRanges = response.headers.get('accept-ranges');
+                const contentRange = response.headers.get('content-range');
+                const contentDisposition = response.headers.get('content-disposition');
+                const accessControlAllowOrigin = response.headers.get('access-control-allow-origin');
+                const accessControlExposeHeaders = response.headers.get('access-control-expose-headers');
+                const responseType = response.type;
+                const redirected = response.redirected;
+                const finalUrl = redactSensitiveTokens(response.url);
 
                 let detected: 'webvtt' | 'srt' | 'unknown' = 'unknown';
                 let sampleLength = 0;
@@ -298,26 +298,26 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     // Ignore read errors; still log status/headers.
                 }
 
-            this._logSubtitleDebug('subtitle_stream_probe', {
-                itemKey: options.itemKey,
-                subtitleStreamId: options.subtitleStreamId,
-                subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
-                codec: options.codec ?? null,
-                language: options.language ?? null,
-                urlSource,
-                authMode: variant.authMode,
-                url: redactedUrl,
-                trackSrcQueryAuthExample: redactedTrackSrcQueryAuth,
-                originHost: variant.url.host,
-                originIsPlexDirect: variant.url.hostname.endsWith('.plex.direct'),
-                responseType,
-                redirected,
-                finalUrl,
-                ok: response.ok,
-                status: response.status,
-                contentType,
-                contentLength,
-                contentDisposition,
+                this._logSubtitleDebug('subtitle_stream_probe', {
+                    itemKey: options.itemKey,
+                    subtitleStreamId: options.subtitleStreamId,
+                    subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
+                    codec: options.codec ?? null,
+                    language: options.language ?? null,
+                    urlSource,
+                    authMode: variant.authMode,
+                    url: redactedUrl,
+                    trackSrcQueryAuthExample: redactedTrackSrcQueryAuth,
+                    originHost: variant.url.host,
+                    originIsPlexDirect: variant.url.hostname.endsWith('.plex.direct'),
+                    responseType,
+                    redirected,
+                    finalUrl,
+                    ok: response.ok,
+                    status: response.status,
+                    contentType,
+                    contentLength,
+                    contentDisposition,
                     accessControlAllowOrigin,
                     accessControlExposeHeaders,
                     acceptRanges,
@@ -329,17 +329,17 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 });
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-            this._logSubtitleDebug('subtitle_stream_probe_error', {
-                itemKey: options.itemKey,
-                subtitleStreamId: options.subtitleStreamId,
-                subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
-                codec: options.codec ?? null,
-                language: options.language ?? null,
-                urlSource,
-                authMode: variant.authMode,
-                url: redactedUrl,
-                error: message,
-            });
+                this._logSubtitleDebug('subtitle_stream_probe_error', {
+                    itemKey: options.itemKey,
+                    subtitleStreamId: options.subtitleStreamId,
+                    subtitleStreamKey: typeof options.subtitleStreamKey === 'string' ? redactSensitiveTokens(options.subtitleStreamKey) : null,
+                    codec: options.codec ?? null,
+                    language: options.language ?? null,
+                    urlSource,
+                    authMode: variant.authMode,
+                    url: redactedUrl,
+                    error: message,
+                });
             } finally {
                 clearTimeout(timeoutId);
             }
@@ -544,6 +544,8 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                 videoStream?.profile ?? null
             );
             const dvProfileRaw = (dvProfileInfo.raw ?? '').trim();
+            // Force HLS for DV MKV with profiles lacking HDR10 base layer (5, 8.2, 8.4).
+            // This is unconditional—distinct from user-controlled HDR10 fallback mode.
             const forceHlsForDvNoHdr10BaseLayer = isDolbyVision && sourceContainer === 'mkv' && (
                 dvProfileInfo.profileId === 5 ||
                 (dvProfileInfo.profileId === 8 &&
