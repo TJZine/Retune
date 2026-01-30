@@ -14,7 +14,9 @@ export const RETUNE_STORAGE_KEYS = {
     DTS_PASSTHROUGH: 'retune_enable_dts_passthrough',
     DIRECT_PLAY_AUDIO_FALLBACK: 'retune_direct_play_audio_fallback',
     KEEP_PLAYING_IN_SETTINGS: 'retune_keep_playing_in_settings',
-    PREFER_HDR10_OVER_DV: 'retune_prefer_hdr10_over_dv',
+    // Display / HDR / Dolby Vision
+    SMART_HDR10_FALLBACK: 'retune_smart_hdr10_fallback',
+    FORCE_HDR10_FALLBACK: 'retune_force_hdr10_fallback',
 
     // Setup / Onboarding
     AUDIO_SETUP_COMPLETE: 'retune_audio_setup_complete',

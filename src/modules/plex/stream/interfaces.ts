@@ -134,7 +134,7 @@ export interface IPlexStreamResolver {
      */
     fetchUniversalTranscodeDecision(
         itemKey: string,
-        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string }
+        options: { sessionId: string; maxBitrate?: number; audioStreamId?: string; hideDolbyVision?: boolean }
     ): Promise<NonNullable<StreamDecision['serverDecision']>>;
 
     // ========================================

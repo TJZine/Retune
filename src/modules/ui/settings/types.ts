@@ -20,8 +20,10 @@ export interface AudioSettings {
 export interface PlaybackSettings {
     /** Keep playback running when opening settings */
     keepPlayingInSettings: boolean;
-    /** Prefer HDR10 over Dolby Vision when possible */
-    preferHdr10OverDv: boolean;
+    /** Forces HDR10 playback for DV MKV only when cinematic aspect ratios are detected */
+    smartHdr10Fallback: boolean;
+    /** Forces HDR10 playback for all DV MKV (excluding profiles without HDR10 base layer) */
+    forceHdr10Fallback: boolean;
 }
 
 /**

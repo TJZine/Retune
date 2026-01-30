@@ -14,15 +14,18 @@ Retune is designed for the standard LG Magic Remote, but works with basic IR rem
 | **Play / Pause** | Space | Toggle Playback | Player |
 | **CH +** | Page Up | Next Channel | Player / EPG |
 | **CH -** | Page Down | Previous Channel | Player / EPG |
-| **Red Button** | F1 | (Reserved for future use) | - |
-| **Green Button** | F2 | Open Electronic Program Guide (fallback) | Global |
+| **Red Button** | F1 | *(Reserved)* | - |
+| **Green Button** | F2 | Open EPG (fallback) | Global |
 | **Yellow Button** | F3 | Open Settings | Global |
-| **Blue Button** | F4 | (Reserved for future use) | - |
+| **Blue Button** | F4 | *(Reserved)* | - |
 | **0-9** | 0-9 | Direct Channel Entry | Player |
 
 ## Magic Remote Pointer
 
-Retune fully supports the LG Magic Remote pointer. You can click on any interactive element (buttons, EPG grid items) just like using a mouse on a computer.
+> [!TIP]
+> The Magic Remote pointer works like a mouse—click on any button or EPG grid item directly.
+
+Retune fully supports the LG Magic Remote pointer for click-based navigation.
 
 ## Menu Overlay
 

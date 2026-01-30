@@ -17,8 +17,10 @@ export const SETTINGS_STORAGE_KEYS = {
     DIRECT_PLAY_AUDIO_FALLBACK: RETUNE_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK,
     /** Keep playback running in settings */
     KEEP_PLAYING_IN_SETTINGS: RETUNE_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
-    /** Prefer HDR10 over Dolby Vision */
-    PREFER_HDR10_OVER_DV: RETUNE_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
+    /** Smart HDR10 fallback for DV MKV */
+    SMART_HDR10_FALLBACK: RETUNE_STORAGE_KEYS.SMART_HDR10_FALLBACK,
+    /** Force HDR10 fallback for DV MKV */
+    FORCE_HDR10_FALLBACK: RETUNE_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
     /** Color theme */
     THEME: RETUNE_STORAGE_KEYS.THEME,
     /** Debug logging enabled */
@@ -55,7 +57,8 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
     },
     playback: {
         keepPlayingInSettings: false,
-        preferHdr10OverDv: false,
+        smartHdr10Fallback: false,
+        forceHdr10Fallback: false,
     },
     display: {
         theme: 'obsidian',

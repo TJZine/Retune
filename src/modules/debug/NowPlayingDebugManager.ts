@@ -167,12 +167,15 @@ export class NowPlayingDebugManager {
         const token = ++this._nowPlayingStreamDecisionFetchToken;
         this._nowPlayingStreamDecisionFetchSessionId = sessionId;
         const req = decision.transcodeRequest;
-        const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string } = {
+        const opts: { sessionId: string; maxBitrate: number; audioStreamId?: string; hideDolbyVision?: boolean } = {
             sessionId: req.sessionId,
             maxBitrate: req.maxBitrate,
         };
         if (typeof req.audioStreamId === 'string') {
             opts.audioStreamId = req.audioStreamId;
+        }
+        if (typeof req.hideDolbyVision === 'boolean') {
+            opts.hideDolbyVision = req.hideDolbyVision;
         }
 
         const fetchPromise = resolver.fetchUniversalTranscodeDecision(

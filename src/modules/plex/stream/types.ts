@@ -247,6 +247,7 @@ export interface StreamDecision {
         subtitleMode?: 'none' | 'burn';
         mediaIndex?: number;
         partIndex?: number;
+        hideDolbyVision?: boolean;
     };
 
     /**
@@ -289,4 +290,6 @@ export interface HlsOptions {
      * `session` and `X-Plex-Session-Identifier` query params.
      */
     sessionId?: string;
+    /** When true, omit Dolby Vision decoder profiles from X-Plex-Client-Capabilities (capability hiding). */
+    hideDolbyVision?: boolean;
 }

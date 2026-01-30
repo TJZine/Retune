@@ -52,9 +52,13 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
         defaultValue: DEFAULT_SETTINGS.playback.keepPlayingInSettings,
     },
-    'settings-prefer-hdr10': {
-        storageKey: SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
-        defaultValue: DEFAULT_SETTINGS.playback.preferHdr10OverDv,
+    'settings-smart-hdr10-fallback': {
+        storageKey: SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
+        defaultValue: DEFAULT_SETTINGS.playback.smartHdr10Fallback,
+    },
+    'settings-force-hdr10-fallback': {
+        storageKey: SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
+        defaultValue: DEFAULT_SETTINGS.playback.forceHdr10Fallback,
     },
     'settings-debug-logging': {
         storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
@@ -193,9 +197,13 @@ export class SettingsScreen {
             SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
             DEFAULT_SETTINGS.playback.keepPlayingInSettings
         );
-        const preferHdr10OverDv = this._loadBoolSetting(
-            SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV,
-            DEFAULT_SETTINGS.playback.preferHdr10OverDv
+        const smartHdr10Fallback = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
+            DEFAULT_SETTINGS.playback.smartHdr10Fallback
+        );
+        const forceHdr10Fallback = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
+            DEFAULT_SETTINGS.playback.forceHdr10Fallback
         );
         const subtitlesEnabled = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
@@ -255,13 +263,28 @@ export class SettingsScreen {
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, value),
                     },
+                ],
+            },
+            {
+                title: 'HDR / Dolby Vision',
+                items: [
                     {
-                        id: 'settings-prefer-hdr10',
-                        label: 'Prefer HDR10 over Dolby Vision',
-                        description: 'Use HDR10 when available to avoid Dolby Vision artifacts',
-                        value: preferHdr10OverDv,
+                        id: 'settings-smart-hdr10-fallback',
+                        label: 'Smart HDR10 Fallback (Recommended)',
+                        description:
+                            'For Dolby Vision MKV: use HDR10 for cinematic aspect ratios (e.g., 2.39:1) to avoid dark letterbox bars. Does not affect MP4/TS.',
+                        value: smartHdr10Fallback,
                         onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.PREFER_HDR10_OVER_DV, value),
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, value),
+                    },
+                    {
+                        id: 'settings-force-hdr10-fallback',
+                        label: 'Force HDR10 Fallback',
+                        description:
+                            'For Dolby Vision MKV: always use HDR10 when possible. Use if Smart fallback is not enough. Does not affect MP4/TS.',
+                        value: forceHdr10Fallback,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, value),
                     },
                 ],
             },
@@ -559,6 +582,7 @@ export class SettingsScreen {
         }
         safeLocalStorageSet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE, option.code);
     }
+
 
     private _refreshValues(): void {
         for (const [id, meta] of this._toggleMetadata.entries()) {
