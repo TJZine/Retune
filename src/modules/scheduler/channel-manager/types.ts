@@ -17,6 +17,20 @@ export type PlaybackMode =
     | 'random';     // True random (new order each time)
 
 /**
+ * Build strategy that created this channel during auto-setup
+ */
+export type BuildStrategy =
+    | 'collections'
+    | 'playlists'
+    | 'genres'
+    | 'directors'
+    | 'decades'
+    | 'recentlyAdded'
+    | 'studios'
+    | 'actors'
+    | 'libraryFallback';
+
+/**
  * Content filter operators
  */
 export type FilterOperator =
@@ -195,6 +209,12 @@ export interface ChannelConfig {
     icon?: string;
     /** Accent color for UI (hex string) */
     color?: string;
+    /** Build strategy that created this channel (for category coloring) */
+    buildStrategy?: BuildStrategy;
+    /** Source library ID for filtering (set during auto-setup when applicable) */
+    sourceLibraryId?: string;
+    /** Source library display name (cached for filter tabs) */
+    sourceLibraryName?: string;
 
     // Content source definition
     /** Where content comes from */

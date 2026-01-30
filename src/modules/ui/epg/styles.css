@@ -132,6 +132,22 @@
   background: rgba(0, 168, 225, 0.2);
 }
 
+/* Category colors by build strategy */
+.epg-channel-row[data-build-strategy] {
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+
+.epg-channel-row[data-build-strategy="collections"] { border-left-color: var(--epg-category-collections); }
+.epg-channel-row[data-build-strategy="playlists"] { border-left-color: var(--epg-category-playlists); }
+.epg-channel-row[data-build-strategy="genres"] { border-left-color: var(--epg-category-genres); }
+.epg-channel-row[data-build-strategy="directors"] { border-left-color: var(--epg-category-directors); }
+.epg-channel-row[data-build-strategy="decades"] { border-left-color: var(--epg-category-decades); }
+.epg-channel-row[data-build-strategy="recentlyAdded"] { border-left-color: var(--epg-category-recently-added); }
+.epg-channel-row[data-build-strategy="studios"] { border-left-color: var(--epg-category-studios); }
+.epg-channel-row[data-build-strategy="actors"] { border-left-color: var(--epg-category-actors); }
+.epg-channel-row[data-build-strategy="libraryFallback"] { border-left-color: var(--epg-category-library); }
+
 .epg-channel-number {
   font-size: 18px;
   font-weight: 600;
@@ -168,6 +184,41 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;
+}
+
+.epg-library-tabs {
+  grid-row: 1;
+  grid-column: 1;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.epg-library-tab {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.epg-library-tab.selected {
+  border-color: rgba(0, 168, 225, 0.9);
+  background: rgba(0, 168, 225, 0.18);
+}
+
+.epg-library-tab.focused {
+  outline: 3px solid rgba(92, 201, 230, 0.9);
+  outline-offset: 2px;
 }
 
 .epg-time-header-slots {

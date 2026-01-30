@@ -4,6 +4,8 @@ import type { IEPGComponent } from './interfaces';
 import type { EPGConfig } from './types';
 import type { IChannelManager, ChannelConfig, ResolvedChannelContent } from '../../scheduler/channel-manager';
 import type { IChannelScheduler, ScheduledProgram, ScheduleConfig } from '../../scheduler/scheduler';
+import { readStoredBoolean, safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from '../../../utils/storage';
+import { RETUNE_STORAGE_KEYS } from '../../../config/storageKeys';
 
 export type EpgUiStatus = 'pending' | 'initializing' | 'ready' | 'error' | 'disabled' | undefined;
 
@@ -46,6 +48,68 @@ export class EPGCoordinator {
     private _pendingVisibleRangeReject: ((error: unknown) => void) | null = null;
 
     constructor(private readonly deps: EPGCoordinatorDeps) {}
+
+    private _isLibraryTabsEnabled(): boolean {
+        return readStoredBoolean(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, true);
+    }
+
+    private _readSelectedLibraryId(): string | null {
+        const raw = safeLocalStorageGet(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER);
+        if (!raw) return null;
+        const trimmed = raw.trim();
+        return trimmed ? trimmed : null;
+    }
+
+    private _buildLibraries(channels: ChannelConfig[]): Array<{ id: string; name: string }> {
+        const map = new Map<string, string>();
+        for (const c of channels) {
+            if (c.sourceLibraryId && c.sourceLibraryName) {
+                map.set(c.sourceLibraryId, c.sourceLibraryName);
+            }
+        }
+        return Array.from(map.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    private _getVisibleChannels(all: ChannelConfig[], selectedId: string | null, shouldFilter: boolean): ChannelConfig[] {
+        if (!shouldFilter || !selectedId) return all;
+        return all.filter((c) => {
+            if (c.sourceLibraryId === selectedId) return true;
+            // Include manual library channels if they match
+            if (c.contentSource.type === 'library' && c.contentSource.libraryId === selectedId) return true;
+            return false;
+        });
+    }
+
+    private _getLibraryFilterState(all: ChannelConfig[]): {
+        selectedId: string | null;
+        tabsEnabled: boolean;
+        shouldFilter: boolean;
+        libraries: Array<{ id: string; name: string }>;
+    } {
+        const tabsEnabled = this._isLibraryTabsEnabled();
+        let selectedId = this._readSelectedLibraryId();
+        const libraries = this._buildLibraries(all);
+        const hasMultipleLibraries = libraries.length > 1;
+        const hasSelectedMatch = selectedId
+            ? libraries.some((lib) => lib.id === selectedId) ||
+              all.some((c) =>
+                  c.sourceLibraryId === selectedId ||
+                  (c.contentSource.type === 'library' && c.contentSource.libraryId === selectedId)
+              )
+            : false;
+
+        if (!tabsEnabled || !hasMultipleLibraries || (selectedId && !hasSelectedMatch)) {
+            if (selectedId) {
+                safeLocalStorageRemove(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER);
+            }
+            selectedId = null;
+        }
+
+        const shouldFilter = tabsEnabled && hasMultipleLibraries && Boolean(selectedId);
+        return { selectedId, tabsEnabled, shouldFilter, libraries };
+    }
 
     openEPG(): void {
         const epg = this.deps.getEpg();
@@ -97,7 +161,22 @@ export class EPGCoordinator {
         const channelManager = this.deps.getChannelManager();
         if (!epg || !channelManager) return;
         if (this.deps.getEpgUiStatus() !== 'ready') return;
-        epg.loadChannels(channelManager.getAllChannels());
+        const all = channelManager.getAllChannels();
+        const { selectedId, tabsEnabled, shouldFilter, libraries } = this._getLibraryFilterState(all);
+
+        // Category colors
+        const categoryColorsEnabled = readStoredBoolean(RETUNE_STORAGE_KEYS.GUIDE_CATEGORY_COLORS, true);
+        epg.setCategoryColorsEnabled(categoryColorsEnabled);
+
+        // Tabs (only show if enabled; EPGComponent will hide if <=1 library)
+        if (tabsEnabled) {
+            epg.setLibraryTabs(libraries, selectedId);
+        } else {
+            epg.setLibraryTabs([], null);
+        }
+
+        const visible = this._getVisibleChannels(all, selectedId, shouldFilter);
+        epg.loadChannels(visible);
     }
 
     async refreshEpgSchedules(options?: { reason?: string }): Promise<void> {
@@ -126,6 +205,11 @@ export class EPGCoordinator {
 
         const current = channelManager.getCurrentChannel();
         if (!current) return;
+
+        const all = channelManager.getAllChannels();
+        const { selectedId, shouldFilter } = this._getLibraryFilterState(all);
+        const visible = this._getVisibleChannels(all, selectedId, shouldFilter);
+        if (!visible.some((c) => c.id === current.id)) return;
 
         const state = scheduler.getState();
         if (!state.isActive || state.channelId !== current.id) {
@@ -212,11 +296,43 @@ export class EPGCoordinator {
         };
         epg.on('channelSelected', handler);
 
+        const onFilter = (payload: { libraryId: string | null }): void => {
+            if (payload.libraryId) {
+                safeLocalStorageSet(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER, payload.libraryId);
+            } else {
+                safeLocalStorageRemove(RETUNE_STORAGE_KEYS.EPG_LIBRARY_FILTER);
+            }
+
+            const epgInstance = this.deps.getEpg();
+            if (epgInstance) {
+                epgInstance.clearSchedules();
+            }
+
+            this.primeEpgChannels();
+
+            // Reset to top to avoid scroll offsets pointing past end after filtering
+            const epg2 = this.deps.getEpg();
+            if (epg2) {
+                epg2.scrollToChannel(0);
+                epg2.focusChannel(0);
+            }
+
+            void this.refreshEpgSchedules({ reason: 'library-filter' });
+        };
+
+        epg.on('libraryFilterChanged', onFilter);
+
         return [
             (): void => {
                 const epgInstance = this.deps.getEpg();
                 if (epgInstance) {
                     epgInstance.off('channelSelected', handler);
+                }
+            },
+            (): void => {
+                const epgInstance = this.deps.getEpg();
+                if (epgInstance) {
+                    epgInstance.off('libraryFilterChanged', onFilter);
                 }
             },
         ];
@@ -258,7 +374,9 @@ export class EPGCoordinator {
 
         const { startTime, endTime } = scheduleRange;
         epg.setGridAnchorTime(startTime);
-        const channels = channelManager.getAllChannels();
+        const all = channelManager.getAllChannels();
+        const { selectedId, shouldFilter } = this._getLibraryFilterState(all);
+        const channels = this._getVisibleChannels(all, selectedId, shouldFilter);
         if (channels.length === 0) return;
 
         const buffer = 6;
@@ -386,7 +504,9 @@ export class EPGCoordinator {
         if (!epg || !channelManager) return;
         const current = channelManager.getCurrentChannel();
         if (!current) return;
-        const channels = channelManager.getAllChannels();
+        const all = channelManager.getAllChannels();
+        const { selectedId, shouldFilter } = this._getLibraryFilterState(all);
+        const channels = this._getVisibleChannels(all, selectedId, shouldFilter);
         const index = channels.findIndex((channel) => channel.id === current.id);
         if (index >= 0) {
             epg.focusChannel(index);

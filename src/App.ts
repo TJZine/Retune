@@ -431,6 +431,9 @@ export class App {
                 (enabled): void => {
                     if (enabled) return;
                     void this._orchestrator?.setSubtitleTrack(null).catch(() => undefined);
+                },
+                (key, enabled): void => {
+                    this._orchestrator?.onGuideSettingChange(key, enabled);
                 }
             );
         }

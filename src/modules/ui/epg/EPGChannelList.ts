@@ -24,6 +24,7 @@ export class EPGChannelList {
     private channelOffset: number = 0;
     private isVirtualized: boolean = false;
     private wrapFlashTimer: ReturnType<typeof setTimeout> | null = null;
+    private _categoryColorsEnabled = true;
 
     /**
      * Initialize the channel list.
@@ -66,6 +67,10 @@ export class EPGChannelList {
         this.config = null;
         this.channelOffset = 0;
         this.isVirtualized = false;
+    }
+
+    setCategoryColorsEnabled(enabled: boolean): void {
+        this._categoryColorsEnabled = enabled;
     }
 
     flashWrapCue(): void {
@@ -206,6 +211,20 @@ export class EPGChannelList {
     private updateChannelRow(row: HTMLElement, channel: ChannelConfig, channelIndex: number): void {
         row.dataset.channelIndex = channelIndex.toString();
 
+        // Category colors: only apply when enabled AND when no custom color is used.
+        // Note: rows are recycled; always clear stale dataset when not applying.
+        if (!this._categoryColorsEnabled) {
+            if (row.dataset.buildStrategy) {
+                delete row.dataset.buildStrategy;
+            }
+        } else if (channel.buildStrategy) {
+            row.dataset.buildStrategy = channel.buildStrategy;
+        } else {
+            if (row.dataset.buildStrategy) {
+                delete row.dataset.buildStrategy;
+            }
+        }
+
         if (this.config) {
             row.style.height = `${this.config.rowHeight}px`;
         }
@@ -258,6 +277,9 @@ export class EPGChannelList {
                 row.style.borderLeftColor = channel.color;
                 row.style.borderLeftWidth = '4px';
                 row.style.borderLeftStyle = 'solid';
+                if (row.dataset.buildStrategy) {
+                    delete row.dataset.buildStrategy;
+                }
             }
         }
 

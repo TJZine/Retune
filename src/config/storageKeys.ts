@@ -36,6 +36,10 @@ export const RETUNE_STORAGE_KEYS = {
     SUBTITLE_ALLOW_BURN_IN: 'retune_subtitle_allow_burn_in',
     /** Prefer forced subtitles over full subtitles */
     SUBTITLE_PREFER_FORCED: 'retune_subtitle_prefer_forced',
+    // Guide / EPG
+    GUIDE_CATEGORY_COLORS: 'retune_guide_category_colors',
+    EPG_LIBRARY_TABS_ENABLED: 'retune_epg_library_tabs_enabled',
+    EPG_LIBRARY_FILTER: 'retune_epg_library_filter',
 
     // Developer / Debug
     DEBUG_LOGGING: 'retune_debug_transcode',

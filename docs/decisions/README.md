@@ -8,7 +8,7 @@ An **Architecture Decision Record** captures a single AD, such as a choice of te
 
 ## Index
 
-*No ADRs recorded yet.*
+- 2026-01-30 — EPG Category Features Implementation (`docs/decisions/2026-01-30-epg-category-features.md`)
 
 ## Template
 

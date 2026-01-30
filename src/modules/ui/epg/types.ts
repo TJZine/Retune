@@ -165,6 +165,7 @@ export interface EPGEventMap {
     focusChange: EPGFocusPosition;
     channelSelected: { channel: ChannelConfig; program: ScheduledProgram };
     programSelected: ScheduledProgram;
+    libraryFilterChanged: { libraryId: string | null };
     timeScroll: { direction: 'left' | 'right'; newOffset: number };
     channelScroll: { direction: 'up' | 'down'; newOffset: number };
     /** Index signature for EventEmitter compatibility */

@@ -82,6 +82,7 @@
 
 - [ ] Memory diagnostics per module (`ModuleStatus.memoryUsageMB`) for testing and debugging
 - [ ] EPG guide focus rule: preserve guide focus unless last change was channel up/down; decide number-entry behavior
+- [ ] EPG: Custom per-category colors (buildStrategy) via Settings (persist per-category color map; apply by updating CSS variables, still allow per-channel `channel.color` to override)
 - [ ] AbortController-based channel switching (abort previous resolve when user rapidly switches channels)
 - [ ] Clear Cache feature (actual cache clearing via Settings screen - common QOL feature in Plex apps)
 - [ ] Keyboard quick reference overlay (Info button)

@@ -262,6 +262,7 @@ export interface IAppOrchestrator {
     openEPG(): void;
     closeEPG(): void;
     toggleEPG(): void;
+    onGuideSettingChange(key: 'categoryColors' | 'libraryTabs', enabled: boolean): void;
     requestAuthPin(): Promise<PlexPinRequest>;
     pollForPin(pinId: number): Promise<PlexPinRequest>;
     cancelPin(pinId: number): Promise<void>;
@@ -1249,6 +1250,22 @@ export class AppOrchestrator implements IAppOrchestrator {
      */
     toggleEPG(): void {
         this._epgCoordinator?.toggleEPG();
+    }
+
+    onGuideSettingChange(key: 'categoryColors' | 'libraryTabs', _enabled: boolean): void {
+        const epg = this._epg;
+        const epgCoordinator = this._epgCoordinator;
+        if (!epg || !epgCoordinator) return;
+        if (!epg.isVisible()) return;
+
+        if (key === 'libraryTabs') {
+            epg.clearSchedules();
+        }
+
+        epgCoordinator.primeEpgChannels();
+        if (key === 'libraryTabs') {
+            void epgCoordinator.refreshEpgSchedules({ reason: 'guide-settings' });
+        }
     }
 
     /**

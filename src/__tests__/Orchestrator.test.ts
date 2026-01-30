@@ -394,6 +394,8 @@ const mockEpg = {
     handleSelect: jest.fn().mockReturnValue(false),
     handleBack: jest.fn().mockReturnValue(true),
     loadChannels: jest.fn(),
+    setCategoryColorsEnabled: jest.fn(),
+    setLibraryTabs: jest.fn(),
     setGridAnchorTime: jest.fn(),
     loadScheduleForChannel: jest.fn(),
     clearSchedules: jest.fn(),
@@ -412,6 +414,7 @@ const mockEpg = {
     getFocusedProgram: jest.fn().mockReturnValue(null),
     focusChannel: jest.fn(),
     focusNow: jest.fn(),
+    scrollToChannel: jest.fn(),
     on: jest.fn(() => jest.fn()),
     off: jest.fn(),
 };
