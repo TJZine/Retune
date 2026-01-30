@@ -186,6 +186,37 @@ describe('EPGInfoPanel', () => {
             const title = container.querySelector('.epg-info-title');
             expect(title?.textContent).toBe('Test Movie');
         });
+
+        it('should hide series title for non-episode programs', () => {
+            const program = createMockProgram(null, {
+                type: 'movie',
+                fullTitle: 'Full Title',
+                title: 'Title',
+            });
+            panel.show(program);
+
+            const showTitle = container.querySelector('.epg-info-show') as HTMLElement;
+            const title = container.querySelector('.epg-info-title') as HTMLElement;
+            expect(showTitle.textContent).toBe('');
+            expect(showTitle.style.display).toBe('none');
+            expect(title.textContent).toBe('Full Title');
+        });
+
+        it('should show series title and episode title for episodes', () => {
+            const program = createMockProgram(null, {
+                type: 'episode',
+                showTitle: 'Show Name',
+                title: 'Episode Name',
+                fullTitle: 'Show Name - S01E01 - Episode Name',
+            });
+            panel.show(program);
+
+            const showTitle = container.querySelector('.epg-info-show') as HTMLElement;
+            const title = container.querySelector('.epg-info-title') as HTMLElement;
+            expect(showTitle.textContent).toBe('Show Name');
+            expect(showTitle.style.display).toBe('block');
+            expect(title.textContent).toBe('Episode Name');
+        });
     });
 
     describe('metadata rendering', () => {

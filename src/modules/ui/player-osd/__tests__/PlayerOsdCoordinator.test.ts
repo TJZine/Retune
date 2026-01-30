@@ -219,6 +219,184 @@ describe('PlayerOsdCoordinator', () => {
         expect(overlay.setViewModel).not.toHaveBeenCalled();
     });
 
+    it('throttles time updates while visible', () => {
+        const { coordinator, overlay } = setup();
+
+        coordinator.poke('play');
+        (overlay.setViewModel as jest.Mock).mockClear();
+
+        for (let i = 0; i < 10; i++) {
+            coordinator.onTimeUpdate({ currentTimeMs: i * 1000, durationMs: 100_000 });
+        }
+
+        expect((overlay.setViewModel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
+
+        jest.advanceTimersByTime(249);
+        expect((overlay.setViewModel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
+
+        jest.advanceTimersByTime(1);
+        expect((overlay.setViewModel as jest.Mock).mock.calls.length).toBeLessThanOrEqual(2);
+    });
+
+    it('includes remaining minutes and ends at when not live', () => {
+        const overlay = makeOverlay();
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => ({
+                ...makeProgram(),
+                scheduledEndTime: Date.now() + 5 * 60_000,
+            }),
+            getNextProgram: (): ScheduledProgram | null => null,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => ({
+                getState: jest.fn(() => makeState('playing')),
+                getAvailableAudio: jest.fn(() => []),
+                getAvailableSubtitles: jest.fn(() => []),
+            } as unknown as IVideoPlayer),
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
+        });
+
+        coordinator.onTimeUpdate({ currentTimeMs: 0, durationMs: 100_000 });
+        coordinator.poke('play');
+
+        const viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            endsAtText?: string | null;
+        };
+        expect(viewModel.endsAtText).toContain('m left');
+        expect(viewModel.endsAtText).toContain('Ends');
+    });
+
+    it('hides ends line when live', () => {
+        const overlay = makeOverlay();
+        const videoPlayer = {
+            getState: jest.fn(() => ({ ...makeState('playing'), durationMs: 0 })),
+            getAvailableAudio: jest.fn(() => []),
+            getAvailableSubtitles: jest.fn(() => []),
+        } as unknown as IVideoPlayer;
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => makeProgram(),
+            getNextProgram: (): ScheduledProgram | null => null,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => videoPlayer,
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
+        });
+
+        coordinator.poke('play');
+
+        const viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            endsAtText?: string | null;
+        };
+        expect(viewModel.endsAtText).toBeNull();
+    });
+
+    it('formats remaining label boundary at one minute', () => {
+        const overlay = makeOverlay();
+        const program = {
+            ...makeProgram(),
+            scheduledStartTime: 0,
+            scheduledEndTime: 60_000,
+        };
+        const coordinator = new PlayerOsdCoordinator({
+            getOverlay: (): IPlayerOsdOverlay => overlay,
+            getCurrentProgram: (): ScheduledProgram => program,
+            getNextProgram: (): ScheduledProgram | null => null,
+            getCurrentChannel: (): ChannelConfig => makeChannel(),
+            getVideoPlayer: (): IVideoPlayer => ({
+                getState: jest.fn(() => makeState('playing')),
+                getAvailableAudio: jest.fn(() => []),
+                getAvailableSubtitles: jest.fn(() => []),
+            } as unknown as IVideoPlayer),
+            getAutoHideMs: (): number => AUTO_HIDE_MS,
+            getNavigation: (): INavigationManager => ({
+                registerFocusable: jest.fn(),
+                unregisterFocusable: jest.fn(),
+                setFocus: jest.fn(),
+                isModalOpen: jest.fn().mockReturnValue(false),
+                openModal: jest.fn(),
+            } as unknown as INavigationManager),
+            playbackOptionsModalId: 'playback-options',
+            preparePlaybackOptionsModal: jest.fn().mockReturnValue({
+                focusableIds: ['playback-subtitle-off'],
+                preferredFocusId: 'playback-subtitle-off',
+            }),
+            getPlaybackInfoSnapshot: (): { stream: null } => ({ stream: null }),
+        });
+
+        coordinator.onTimeUpdate({ currentTimeMs: 0, durationMs: 100_000 });
+        coordinator.poke('play');
+        let viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            endsAtText?: string | null;
+        };
+        expect(viewModel.endsAtText).toContain('1m left');
+
+        jest.setSystemTime(1000);
+        (overlay.setViewModel as jest.Mock).mockClear();
+        coordinator.poke('play');
+        viewModel = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0] as {
+            endsAtText?: string | null;
+        };
+        expect(viewModel.endsAtText).toContain('<1m left');
+    });
+
+    it('clears throttled timer and renders immediately on poke after timeupdate', () => {
+        const { coordinator, overlay } = setup();
+
+        coordinator.poke('play');
+        (overlay.setViewModel as jest.Mock).mockClear();
+
+        coordinator.onTimeUpdate({ currentTimeMs: 1000, durationMs: 100_000 });
+        expect(overlay.setViewModel).not.toHaveBeenCalled();
+
+        coordinator.poke('pause');
+        expect(overlay.setViewModel).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(250);
+        expect(overlay.setViewModel).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears throttled timer on pause state change', () => {
+        const { coordinator, overlay } = setup();
+
+        coordinator.poke('play');
+        (overlay.setViewModel as jest.Mock).mockClear();
+
+        coordinator.onTimeUpdate({ currentTimeMs: 2000, durationMs: 100_000 });
+        expect(overlay.setViewModel).not.toHaveBeenCalled();
+
+        coordinator.onPlayerStateChange(makeState('paused'));
+        expect(overlay.setViewModel).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(250);
+        expect(overlay.setViewModel).toHaveBeenCalledTimes(1);
+    });
+
     it('includes up next when available and not live', () => {
         const overlay = makeOverlay();
         const nextProgram = {

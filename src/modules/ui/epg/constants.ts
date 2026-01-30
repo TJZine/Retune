@@ -65,6 +65,7 @@ export const EPG_CLASSES = {
     INFO_POSTER_WRAP: 'epg-info-poster-wrap',
     INFO_POSTER: 'epg-info-poster',
     INFO_CONTENT: 'epg-info-content',
+    INFO_SHOW: 'epg-info-show',
     INFO_TITLE: 'epg-info-title',
     INFO_META: 'epg-info-meta',
     INFO_GENRES: 'epg-info-genres',
