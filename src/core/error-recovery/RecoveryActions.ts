@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Maps error codes to user-facing recovery actions.
+ * @module core/error-recovery/RecoveryActions
+ * @version 1.0.0
+ */
+
 import { AppErrorCode } from '../../modules/lifecycle';
 import type { ErrorRecoveryAction, RecoveryActionDeps } from './types';
 

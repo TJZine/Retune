@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Manages mini-guide overlay state, row building, and channel switching.
+ * @module modules/ui/mini-guide/MiniGuideCoordinator
+ * @version 1.0.0
+ */
+
 import type { IChannelManager, ChannelConfig, ResolvedChannelContent } from '../../scheduler/channel-manager';
 import type { IChannelScheduler, ScheduledProgram, ScheduleConfig } from '../../scheduler/scheduler';
 import { ScheduleCalculator, ShuffleGenerator } from '../../scheduler/scheduler';
@@ -30,7 +36,7 @@ export class MiniGuideCoordinator {
     private _showToken = 0;
     private readonly _shuffler = new ShuffleGenerator();
 
-    constructor(private readonly deps: MiniGuideCoordinatorDeps) {}
+    constructor(private readonly deps: MiniGuideCoordinatorDeps) { }
 
     show(): void {
         const overlay = this.deps.getOverlay();

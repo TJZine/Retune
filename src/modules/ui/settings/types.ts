@@ -129,10 +129,14 @@ export interface SettingsSelectConfig {
 
 export type SettingsItemConfig = SettingsToggleConfig | SettingsSelectConfig;
 
+export type SettingsSectionId = 'audio_subtitles' | 'playback_hdr' | 'appearance' | 'developer';
+
 /**
  * Settings section configuration.
  */
 export interface SettingsSectionConfig {
+    /** Unique identifier */
+    id: SettingsSectionId;
     /** Section title */
     title: string;
     /** Toggle items in this section */

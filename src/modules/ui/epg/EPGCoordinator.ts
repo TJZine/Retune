@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Coordinates EPG state, schedule loading, and overlay lifecycle.
+ * @module modules/ui/epg/EPGCoordinator
+ * @version 1.0.0
+ */
+
 import { ShuffleGenerator, ScheduleCalculator } from '../../scheduler/scheduler';
 import { appendEpgDebugLog } from './utils';
 import type { IEPGComponent } from './interfaces';
@@ -47,7 +53,7 @@ export class EPGCoordinator {
     private _pendingVisibleRangeResolve: (() => void) | null = null;
     private _pendingVisibleRangeReject: ((error: unknown) => void) | null = null;
 
-    constructor(private readonly deps: EPGCoordinatorDeps) {}
+    constructor(private readonly deps: EPGCoordinatorDeps) { }
 
     private _isLibraryTabsEnabled(): boolean {
         return readStoredBoolean(RETUNE_STORAGE_KEYS.EPG_LIBRARY_TABS_ENABLED, true);
@@ -94,10 +100,10 @@ export class EPGCoordinator {
         const hasMultipleLibraries = libraries.length > 1;
         const hasSelectedMatch = selectedId
             ? libraries.some((lib) => lib.id === selectedId) ||
-              all.some((c) =>
-                  c.sourceLibraryId === selectedId ||
-                  (c.contentSource.type === 'library' && c.contentSource.libraryId === selectedId)
-              )
+            all.some((c) =>
+                c.sourceLibraryId === selectedId ||
+                (c.contentSource.type === 'library' && c.contentSource.libraryId === selectedId)
+            )
             : false;
 
         if (!tabsEnabled || !hasMultipleLibraries || (selectedId && !hasSelectedMatch)) {

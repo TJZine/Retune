@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Coordinates channel setup workflow and builds channel lineup.
+ * @module core/channel-setup/ChannelSetupCoordinator
+ * @version 1.0.0
+ */
+
 import { ChannelManager } from '../../modules/scheduler/channel-manager';
 import type { IChannelManager, ChannelConfig } from '../../modules/scheduler/channel-manager';
 import type { IPlexLibrary, PlexLibraryType, PlexMediaItem, LibraryQueryOptions, PlexTagDirectoryItem, PlexPlaylist, PlexCollection } from '../../modules/plex/library';
@@ -48,7 +54,7 @@ export interface ChannelSetupCoordinatorDeps {
 export class ChannelSetupCoordinator {
     private _channelSetupRerunRequested = false;
 
-    constructor(private readonly deps: ChannelSetupCoordinatorDeps) {}
+    constructor(private readonly deps: ChannelSetupCoordinatorDeps) { }
 
     // --- Public API mirrored from AppOrchestrator ---
     async getLibrariesForSetup(signal?: AbortSignal | null): Promise<PlexLibraryType[]> {

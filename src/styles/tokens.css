@@ -47,6 +47,7 @@
        Focus States (Critical for TV)
        ========================================= */
     --focus-color: #5cc9e6;
+    --focus-color-rgb: 92, 201, 230;
     --focus-ring-width: 3px;
     --focus-ring-offset: 2px;
 

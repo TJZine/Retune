@@ -11,6 +11,8 @@ export function createSettingsSelect(config: SettingsSelectConfig): {
     setDisabled: (disabled: boolean) => void;
     isDisabled: () => boolean;
     getId: () => string;
+    cyclePrev: () => void;
+    cycleNext: () => void;
 } {
     const button = document.createElement('button');
     button.id = config.id;
@@ -66,6 +68,18 @@ export function createSettingsSelect(config: SettingsSelectConfig): {
         setDisabled,
         isDisabled: (): boolean => config.disabled ?? false,
         getId: (): string => config.id,
+        cyclePrev: (): void => {
+            if (config.disabled) return;
+            const nextValue = getPrevValue(config.options, config.value);
+            update(nextValue);
+            config.onChange(nextValue);
+        },
+        cycleNext: (): void => {
+            if (config.disabled) return;
+            const nextValue = getNextValueClamped(config.options, config.value);
+            update(nextValue);
+            config.onChange(nextValue);
+        },
     };
 }
 
@@ -78,5 +92,19 @@ function getNextValue(options: SettingsSelectConfig['options'], value: number): 
     if (options.length === 0) return value;
     const currentIndex = options.findIndex((option) => option.value === value);
     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % options.length : 0;
+    return options[nextIndex]?.value ?? value;
+}
+
+function getPrevValue(options: SettingsSelectConfig['options'], value: number): number {
+    if (options.length === 0) return value;
+    const currentIndex = options.findIndex((option) => option.value === value);
+    const prevIndex = currentIndex >= 0 ? Math.max(0, currentIndex - 1) : 0;
+    return options[prevIndex]?.value ?? value;
+}
+
+function getNextValueClamped(options: SettingsSelectConfig['options'], value: number): number {
+    if (options.length === 0) return value;
+    const currentIndex = options.findIndex((option) => option.value === value);
+    const nextIndex = currentIndex >= 0 ? Math.min(options.length - 1, currentIndex + 1) : 0;
     return options[nextIndex]?.value ?? value;
 }

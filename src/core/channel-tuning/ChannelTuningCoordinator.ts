@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Coordinates channel switching and schedule synchronization.
+ * @module core/channel-tuning/ChannelTuningCoordinator
+ * @version 1.0.0
+ */
+
 import type { AppError } from '../../modules/lifecycle';
 import { AppErrorCode } from '../../modules/lifecycle';
 
@@ -49,7 +55,7 @@ function summarizeErrorForLog(error: unknown): { name?: string; code?: unknown; 
 export class ChannelTuningCoordinator {
     private _isChannelSwitching = false;
 
-    constructor(private readonly deps: ChannelTuningCoordinatorDeps) {}
+    constructor(private readonly deps: ChannelTuningCoordinatorDeps) { }
 
     async switchToChannel(channelId: string, options?: { signal?: AbortSignal }): Promise<void> {
         const channelManager = this.deps.getChannelManager();

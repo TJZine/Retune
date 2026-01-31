@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Dolby Vision profile parsing and HDR10 fallback decision logic.
+ * @module modules/plex/stream/dvHdr10Fallback
+ * @version 1.0.0
+ */
+
 export type DvProfileInfo = {
     raw: string | null;
     profileId: number | null;
@@ -35,7 +41,7 @@ export function parseDolbyVisionProfileString(
             raw: profileFromCodec,
             profileId: Number.isFinite(profileId) ? profileId : null,
             levelId: Number.isFinite(levelId) ? levelId : null,
-            hasHdr10BaseLayer: hasHdr10BaseLayer(profileId, raw),
+            hasHdr10BaseLayer: hasHdr10BaseLayer(profileId, levelId, profileFromCodec),
         };
     }
 
@@ -50,7 +56,7 @@ export function parseDolbyVisionProfileString(
                 raw: normalizedRaw,
                 profileId: Number.isFinite(profileId) ? profileId : null,
                 levelId: levelId !== null && Number.isFinite(levelId) ? levelId : null,
-                hasHdr10BaseLayer: hasHdr10BaseLayer(profileId, normalizedRaw),
+                hasHdr10BaseLayer: hasHdr10BaseLayer(profileId, levelId, normalizedRaw),
             };
         }
     }
@@ -58,7 +64,11 @@ export function parseDolbyVisionProfileString(
     return { raw: raw.length > 0 ? raw : null, profileId: null, levelId: null, hasHdr10BaseLayer: false };
 }
 
-export function hasHdr10BaseLayer(profileId: number | null, rawProfile: string | null): boolean {
+export function hasHdr10BaseLayer(
+    profileId: number | null,
+    levelId: number | null,
+    rawProfile: string | null
+): boolean {
     if (profileId === null) return false;
 
     // Profile 7 always has HDR10 base layer.
@@ -67,10 +77,13 @@ export function hasHdr10BaseLayer(profileId: number | null, rawProfile: string |
     // Profile 5 has no HDR10 base layer.
     if (profileId === 5) return false;
 
-    // Profile 8 varies: only 8.1 is HDR10-compatible.
+    // Profile 8 varies: only 8.1 (level 1) is HDR10-compatible.
     if (profileId === 8) {
+        // Prefer parsed levelId when available
+        if (levelId === 1) return true;
+        // Fallback: check raw string for 8.1 or codec pattern dvhe.08.01
         const raw = (rawProfile ?? '').trim();
-        return raw.startsWith('8.1');
+        return /^8\.1\b/.test(raw) || /dv(?:he|h1)\.0?8\.0?1/i.test(raw);
     }
 
     return false;
