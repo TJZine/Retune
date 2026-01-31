@@ -14,7 +14,7 @@ import {
 } from '../../../Orchestrator';
 import { PLEX_DISCOVERY_CONSTANTS } from '../../plex/discovery/constants';
 import type { PlexLibraryType } from '../../plex/library';
-import type { FocusableElement } from '../../navigation';
+import type { FocusableElement, KeyEvent } from '../../navigation';
 import { safeLocalStorageGet } from '../../../utils/storage';
 import { DEFAULT_CHANNEL_SETUP_MAX, MAX_CHANNELS } from '../../scheduler/channel-manager/constants';
 
@@ -34,6 +34,7 @@ interface SetupStrategyState {
 }
 
 type SetupStep = 1 | 2 | 3;
+type StrategyAccordionKey = 'contentSources' | 'advancedSources' | 'buildOptions' | 'limits';
 
 export class ChannelSetupScreen {
     private _container: HTMLElement;
@@ -57,6 +58,12 @@ export class ChannelSetupScreen {
         studios: false,
         actors: false,
     };
+    private _strategyAccordions = {
+        contentSources: true,
+        advancedSources: false,
+        buildOptions: true,
+        limits: false,
+    };
     private _buildMode: ChannelSetupConfig['buildMode'] = 'replace';
     private _actorStudioCombineMode: ChannelSetupConfig['actorStudioCombineMode'] = 'separate';
     private _maxChannels: number = DEFAULT_CHANNEL_SETUP_MAX;
@@ -76,6 +83,7 @@ export class ChannelSetupScreen {
     private _isReviewLoading: boolean = false;
     private _replaceConfirm: boolean = false;
     private _visibilityToken = 0;
+    private _navKeyHandler: ((event: KeyEvent) => void) | null = null;
     private _preview: ChannelSetupPreview | null = null;
     private _previewError: string | null = null;
     private _review: ChannelSetupReview | null = null;
@@ -158,6 +166,43 @@ export class ChannelSetupScreen {
         this._visibilityToken += 1;
         this._container.style.display = 'flex';
         this._container.classList.add('visible');
+        const nav = this._orchestrator.getNavigation();
+        if (nav && !this._navKeyHandler) {
+            this._navKeyHandler = (event: KeyEvent): void => {
+                if (event.handled || this._step !== 2) return;
+                const focusedId = nav.getFocusedElement()?.id;
+                if (focusedId !== 'setup-max-channels' && focusedId !== 'setup-min-items') {
+                    return;
+                }
+                const direction = event.button === 'left'
+                    ? 'left'
+                    : event.button === 'right'
+                        ? 'right'
+                        : null;
+                if (!direction) return;
+
+                const clampStep = (options: number[], current: number, dir: 'left' | 'right'): number => {
+                    const idx = Math.max(0, options.indexOf(current));
+                    const next = dir === 'left'
+                        ? Math.max(0, idx - 1)
+                        : Math.min(options.length - 1, idx + 1);
+                    return options[next] ?? current;
+                };
+
+                if (focusedId === 'setup-max-channels') {
+                    this._maxChannels = clampStep(this._channelLimitOptions, this._maxChannels, direction);
+                } else {
+                    this._minItems = clampStep(this._minItemsOptions, this._minItems, direction);
+                }
+                event.handled = true;
+                this._preferredFocusId = focusedId;
+                this._review = null;
+                this._reviewError = null;
+                this._schedulePreview();
+                this._renderStep();
+            };
+            nav.on('keyPress', this._navKeyHandler);
+        }
         this._resetState();
         this._loadLibraries().catch(console.error);
     }
@@ -170,6 +215,11 @@ export class ChannelSetupScreen {
         if (this._previewTimeoutId !== null) {
             window.clearTimeout(this._previewTimeoutId);
             this._previewTimeoutId = null;
+        }
+        if (this._navKeyHandler) {
+            const nav = this._orchestrator.getNavigation();
+            nav?.off('keyPress', this._navKeyHandler);
+            this._navKeyHandler = null;
         }
         this._unregisterFocusables();
         this._container.style.display = 'none';
@@ -197,6 +247,12 @@ export class ChannelSetupScreen {
         this._minItems = DEFAULT_MIN_ITEMS;
         this._buildMode = 'replace';
         this._actorStudioCombineMode = 'separate';
+        this._strategyAccordions = {
+            contentSources: true,
+            advancedSources: false,
+            buildOptions: true,
+            limits: false,
+        };
         this._preview = null;
         this._previewError = null;
         this._review = null;
@@ -367,6 +423,77 @@ export class ChannelSetupScreen {
 
         const list = document.createElement('div');
         list.className = 'setup-list';
+        list.classList.add('setup-accordion-list');
+
+        const focusableButtons: HTMLButtonElement[] = [];
+
+        const createAccordionSection = (options: {
+            key: string;
+            stateKey: StrategyAccordionKey;
+            title: string;
+            countText?: string;
+            summaryText?: string;
+            buttons: HTMLButtonElement[];
+        }): void => {
+            const expanded = this._strategyAccordions[options.stateKey];
+            const section = document.createElement('div');
+            section.className = 'setup-accordion-section';
+
+            const header = document.createElement('button');
+            header.id = `setup-accordion-${options.key}`;
+            header.className = 'setup-toggle setup-accordion-header';
+
+            const indicator = document.createElement('span');
+            indicator.className = 'setup-accordion-indicator';
+            indicator.textContent = expanded ? '▼' : '►';
+
+            const title = document.createElement('span');
+            title.className = 'setup-accordion-title';
+            title.textContent = options.title;
+
+            header.appendChild(indicator);
+            header.appendChild(title);
+
+            if (options.countText) {
+                const count = document.createElement('span');
+                count.className = 'setup-accordion-count';
+                count.textContent = options.countText;
+                header.appendChild(count);
+            } else if (options.summaryText) {
+                const summary = document.createElement('span');
+                summary.className = 'setup-accordion-summary';
+                summary.textContent = options.summaryText;
+                header.appendChild(summary);
+            }
+
+            header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            header.setAttribute('aria-controls', `setup-accordion-${options.key}-body`);
+
+            header.addEventListener('click', () => {
+                this._preferredFocusId = header.id;
+                this._strategyAccordions[options.stateKey] = !expanded;
+                this._renderStep();
+            });
+
+            section.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'setup-accordion-body';
+            body.id = `setup-accordion-${options.key}-body`;
+            body.hidden = !expanded;
+
+            for (const button of options.buttons) {
+                body.appendChild(button);
+            }
+
+            section.appendChild(body);
+            list.appendChild(section);
+
+            focusableButtons.push(header);
+            if (expanded) {
+                focusableButtons.push(...options.buttons);
+            }
+        };
 
         const buildModeButton = document.createElement('button');
         buildModeButton.id = 'setup-build-mode';
@@ -401,8 +528,6 @@ export class ChannelSetupScreen {
             this._renderStep();
         });
 
-        list.appendChild(buildModeButton);
-
         const combineButton = document.createElement('button');
         combineButton.id = 'setup-combine-mode';
         combineButton.className = 'setup-toggle';
@@ -432,13 +557,11 @@ export class ChannelSetupScreen {
             this._renderStep();
         });
 
-        list.appendChild(combineButton);
-
         const strategyLabels: Array<{ key: keyof SetupStrategyState; label: string; detail: string }> = [
             { key: 'collections', label: 'Collections', detail: 'One channel per collection.' },
             { key: 'libraryFallback', label: 'Library fallback', detail: 'One channel per library if no collections.' },
-            { key: 'recentlyAdded', label: 'Recently added', detail: 'Per library, newest first.' },
             { key: 'playlists', label: 'Playlists', detail: 'Channels from Plex playlists.' },
+            { key: 'recentlyAdded', label: 'Recently added', detail: 'Per library, newest first.' },
             { key: 'genres', label: 'Genres', detail: 'Filter channels by genre.' },
             { key: 'directors', label: 'Directors', detail: 'Filter channels by director.' },
             { key: 'decades', label: 'Decades', detail: 'Channels by decade (1980s, 1990s...).' },
@@ -446,7 +569,7 @@ export class ChannelSetupScreen {
             { key: 'actors', label: 'Actors', detail: 'Channels by actor (Movies/TV).' },
         ];
 
-        for (const strategy of strategyLabels) {
+        const createStrategyButton = (strategy: typeof strategyLabels[number]): HTMLButtonElement => {
             const isEnabled = this._strategies[strategy.key];
             const button = document.createElement('button');
             button.id = `setup-strategy-${this._toDomId(String(strategy.key))}`;
@@ -477,12 +600,22 @@ export class ChannelSetupScreen {
                 this._renderStep();
             });
 
-            list.appendChild(button);
-        }
+            return button;
+        };
+
+        const contentStrategies = ['collections', 'libraryFallback', 'playlists', 'recentlyAdded'] as const;
+        const advancedStrategies = ['genres', 'directors', 'decades', 'studios', 'actors'] as const;
+
+        const contentButtons = strategyLabels
+            .filter((strategy) => contentStrategies.includes(strategy.key as (typeof contentStrategies)[number]))
+            .map(createStrategyButton);
+        const advancedButtons = strategyLabels
+            .filter((strategy) => advancedStrategies.includes(strategy.key as (typeof advancedStrategies)[number]))
+            .map(createStrategyButton);
 
         const maxButton = document.createElement('button');
         maxButton.id = 'setup-max-channels';
-        maxButton.className = 'setup-toggle';
+        maxButton.className = 'setup-toggle setup-toggle--adjustable';
 
         const maxLabel = document.createElement('span');
         maxLabel.className = 'setup-toggle-label';
@@ -513,11 +646,9 @@ export class ChannelSetupScreen {
             this._renderStep();
         });
 
-        list.appendChild(maxButton);
-
         const minItemsButton = document.createElement('button');
         minItemsButton.id = 'setup-min-items';
-        minItemsButton.className = 'setup-toggle';
+        minItemsButton.className = 'setup-toggle setup-toggle--adjustable';
 
         const minItemsLabel = document.createElement('span');
         minItemsLabel.className = 'setup-toggle-label';
@@ -549,7 +680,44 @@ export class ChannelSetupScreen {
             this._renderStep();
         });
 
-        list.appendChild(minItemsButton);
+        const contentEnabledCount = contentStrategies.filter((key) => this._strategies[key]).length;
+        const advancedEnabledCount = advancedStrategies.filter((key) => this._strategies[key]).length;
+        const buildSummary = `Build mode: ${this._buildMode.charAt(0).toUpperCase()}${this._buildMode.slice(1)} • Combine: ${
+            this._actorStudioCombineMode === 'combined' ? 'Combined' : 'Separate'
+        }`;
+        const limitsSummary = `Max: ${this._maxChannels} • Min: ${this._minItems}`;
+
+        createAccordionSection({
+            key: 'content-sources',
+            stateKey: 'contentSources',
+            title: 'Content Sources',
+            countText: `(${contentEnabledCount} of 4 enabled)`,
+            buttons: contentButtons,
+        });
+
+        createAccordionSection({
+            key: 'advanced-sources',
+            stateKey: 'advancedSources',
+            title: 'Advanced Sources',
+            countText: `(${advancedEnabledCount} of 5 enabled)`,
+            buttons: advancedButtons,
+        });
+
+        createAccordionSection({
+            key: 'build-options',
+            stateKey: 'buildOptions',
+            title: 'Build Options',
+            summaryText: buildSummary,
+            buttons: [buildModeButton, combineButton],
+        });
+
+        createAccordionSection({
+            key: 'limits',
+            stateKey: 'limits',
+            title: 'Limits',
+            summaryText: limitsSummary,
+            buttons: [maxButton, minItemsButton],
+        });
 
         scroll.appendChild(list);
 
@@ -595,6 +763,7 @@ export class ChannelSetupScreen {
             if (this._isPreviewLoading) {
                 const updating = document.createElement('div');
                 updating.className = 'setup-preview-updating';
+                updating.classList.add('panel-spinner');
                 updating.textContent = 'Updating...';
                 previewPanel.appendChild(updating);
             }
@@ -616,6 +785,7 @@ export class ChannelSetupScreen {
             // First-load case: no previous preview exists
             const loading = document.createElement('div');
             loading.className = 'setup-preview-loading';
+            loading.classList.add('panel-spinner');
             loading.textContent = 'Estimating channels...';
             previewPanel.appendChild(loading);
         } else {
@@ -666,8 +836,7 @@ export class ChannelSetupScreen {
 
         this._contentEl.appendChild(actions);
 
-        const listButtons = Array.from(list.querySelectorAll<HTMLButtonElement>('button'));
-        this._registerFocusables([...listButtons, backButton, nextButton]);
+        this._registerFocusables([...focusableButtons, backButton, nextButton]);
 
         if (this._strategies.genres || this._strategies.directors) {
             this._detailEl.textContent = 'Performance warning: may be slow on large libraries.';
@@ -705,6 +874,7 @@ export class ChannelSetupScreen {
         if (this._isReviewLoading) {
             const loading = document.createElement('div');
             loading.className = 'setup-preview-loading';
+            loading.classList.add('panel-spinner');
             loading.textContent = 'Preparing your review...';
             reviewContainer.appendChild(loading);
         } else if (this._review) {

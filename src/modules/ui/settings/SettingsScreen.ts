@@ -4,11 +4,11 @@
  * @version 1.0.0
  */
 
-import type { INavigationManager, FocusableElement } from '../../navigation';
+import type { INavigationManager, FocusableElement, KeyEvent } from '../../navigation';
 import { createSettingsToggle } from './SettingsToggle';
 import { createSettingsSelect } from './SettingsSelect';
 import { SETTINGS_STORAGE_KEYS, DEFAULT_SETTINGS } from './constants';
-import type { SettingsSectionConfig, SettingsItemConfig, SettingsSelectConfig } from './types';
+import type { SettingsSectionConfig, SettingsItemConfig, SettingsSelectConfig, SettingsSectionId } from './types';
 import { NOW_PLAYING_INFO_AUTO_HIDE_OPTIONS, NOW_PLAYING_INFO_DEFAULTS } from '../now-playing-info';
 import { readStoredBoolean, safeLocalStorageGet, safeLocalStorageRemove, safeLocalStorageSet } from '../../../utils/storage';
 import { ThemeManager } from '../theme';
@@ -124,6 +124,15 @@ export class SettingsScreen {
     private _focusableOrder: string[] = [];
     private _toggleMetadata: Map<string, ToggleMetadata> = new Map();
     private _selectMetadata: Map<string, SelectMetadata> = new Map();
+    private _sectionHeaders: Map<string, HTMLButtonElement> = new Map();
+    private _sectionBodies: Map<string, HTMLElement> = new Map();
+    private _sectionExpanded: Record<SettingsSectionId, boolean> = {
+        audio_subtitles: true,
+        playback_hdr: false,
+        appearance: false,
+        developer: false,
+    };
+    private _navKeyHandler: ((event: KeyEvent) => void) | null = null;
 
     constructor(
         container: HTMLElement,
@@ -145,6 +154,8 @@ export class SettingsScreen {
         this._container.className = 'settings-screen screen';
         this._container.id = 'settings-screen';
         this._focusableOrder = [];
+        this._sectionHeaders.clear();
+        this._sectionBodies.clear();
 
         const panel = document.createElement('div');
         panel.className = 'settings-panel';
@@ -240,7 +251,8 @@ export class SettingsScreen {
 
         return [
             {
-                title: 'Audio',
+                id: 'audio_subtitles',
+                title: '🔊 Audio & Subtitles',
                 items: [
                     {
                         id: 'settings-dts-passthrough',
@@ -261,47 +273,6 @@ export class SettingsScreen {
                         onChange: (value: boolean) =>
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.DIRECT_PLAY_AUDIO_FALLBACK, value),
                     },
-                ],
-            },
-            {
-                title: 'Playback',
-                items: [
-                    {
-                        id: 'settings-keep-playing',
-                        label: 'Keep Playback Running in Settings',
-                        description: 'Avoid pausing video when opening Settings (uses more CPU/GPU)',
-                        value: keepPlayingInSettings,
-                        onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, value),
-                    },
-                ],
-            },
-            {
-                title: 'HDR / Dolby Vision',
-                items: [
-                    {
-                        id: 'settings-smart-hdr10-fallback',
-                        label: 'Smart HDR10 Fallback (Recommended)',
-                        description:
-                            'For Dolby Vision MKV: use HDR10 for cinematic aspect ratios (e.g., 2.39:1) to avoid dark letterbox bars. Does not affect MP4/TS.',
-                        value: smartHdr10Fallback,
-                        onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, value),
-                    },
-                    {
-                        id: 'settings-force-hdr10-fallback',
-                        label: 'Force HDR10 Fallback',
-                        description:
-                            'For Dolby Vision MKV: always use HDR10 when possible. Use if Smart fallback is not enough. Does not affect MP4/TS.',
-                        value: forceHdr10Fallback,
-                        onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, value),
-                    },
-                ],
-            },
-            {
-                title: 'Subtitles',
-                items: [
                     {
                         id: 'settings-subtitles-enabled',
                         label: 'Subtitles (beta)',
@@ -387,7 +358,40 @@ export class SettingsScreen {
                 ],
             },
             {
-                title: 'Guide',
+                id: 'playback_hdr',
+                title: '▶ Playback & HDR',
+                items: [
+                    {
+                        id: 'settings-keep-playing',
+                        label: 'Keep Playback Running in Settings',
+                        description: 'Avoid pausing video when opening Settings (uses more CPU/GPU)',
+                        value: keepPlayingInSettings,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, value),
+                    },
+                    {
+                        id: 'settings-smart-hdr10-fallback',
+                        label: 'Smart HDR10 Fallback (Recommended)',
+                        description:
+                            'For Dolby Vision MKV: use HDR10 for cinematic aspect ratios (e.g., 2.39:1) to avoid dark letterbox bars. Does not affect MP4/TS.',
+                        value: smartHdr10Fallback,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, value),
+                    },
+                    {
+                        id: 'settings-force-hdr10-fallback',
+                        label: 'Force HDR10 Fallback',
+                        description:
+                            'For Dolby Vision MKV: always use HDR10 when possible. Use if Smart fallback is not enough. Does not affect MP4/TS.',
+                        value: forceHdr10Fallback,
+                        onChange: (value: boolean) =>
+                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, value),
+                    },
+                ],
+            },
+            {
+                id: 'appearance',
+                title: '🎨 Appearance',
                 items: [
                     {
                         id: 'settings-guide-category-colors',
@@ -409,11 +413,6 @@ export class SettingsScreen {
                             this._onGuideSettingChange?.('libraryTabs', value);
                         },
                     },
-                ],
-            },
-            {
-                title: 'Display',
-                items: [
                     {
                         id: 'settings-theme',
                         label: 'Theme',
@@ -445,7 +444,8 @@ export class SettingsScreen {
                 ],
             },
             {
-                title: 'Developer',
+                id: 'developer',
+                title: '🛠 Developer',
                 items: [
                     {
                         id: 'settings-debug-logging',
@@ -478,13 +478,39 @@ export class SettingsScreen {
         const section = document.createElement('div');
         section.className = 'settings-section';
 
-        const title = document.createElement('h2');
+        const expanded = this._sectionExpanded[config.id];
+        const header = document.createElement('button');
+        header.id = `settings-section-${config.id}`;
+        header.className = 'settings-section-header';
+
+        const indicator = document.createElement('span');
+        indicator.className = 'settings-section-indicator';
+        indicator.textContent = expanded ? '▼' : '►';
+
+        const title = document.createElement('span');
         title.className = 'settings-section-title';
         title.textContent = config.title;
-        section.appendChild(title);
+
+        const count = document.createElement('span');
+        count.className = 'settings-section-count';
+        count.textContent = `(${config.items.length})`;
+
+        header.appendChild(indicator);
+        header.appendChild(title);
+        header.appendChild(count);
+
+        header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        header.setAttribute('aria-controls', `settings-section-${config.id}-body`);
+        section.appendChild(header);
 
         const items = document.createElement('div');
         items.className = 'settings-section-items';
+        items.id = `settings-section-${config.id}-body`;
+        items.hidden = !expanded;
+
+        this._sectionHeaders.set(header.id, header);
+        this._sectionBodies.set(items.id, items);
+        this._focusableOrder.push(header.id);
 
         for (const item of config.items) {
             const element = this._createItem(item);
@@ -492,6 +518,19 @@ export class SettingsScreen {
         }
 
         section.appendChild(items);
+
+        header.addEventListener('click', () => {
+            const nextExpanded = !this._sectionExpanded[config.id];
+            this._sectionExpanded[config.id] = nextExpanded;
+            items.hidden = !nextExpanded;
+            indicator.textContent = nextExpanded ? '▼' : '►';
+            header.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+            this._unregisterFocusables();
+            this._registerFocusables();
+            const nav = this._getNavigation();
+            nav?.setFocus(header.id);
+        });
+
         return section;
     }
 
@@ -501,6 +540,24 @@ export class SettingsScreen {
     public show(): void {
         this._container.classList.add('visible');
         this._refreshValues();
+        const nav = this._getNavigation();
+        if (nav && !this._navKeyHandler) {
+            this._navKeyHandler = (event: KeyEvent): void => {
+                if (event.handled) return;
+                const focusedId = nav.getFocusedElement()?.id;
+                if (!focusedId) return;
+                const select = this._selectElements.get(focusedId);
+                if (!select || select.isDisabled()) return;
+                if (event.button === 'left') {
+                    select.cyclePrev();
+                    event.handled = true;
+                } else if (event.button === 'right') {
+                    select.cycleNext();
+                    event.handled = true;
+                }
+            };
+            nav.on('keyPress', this._navKeyHandler);
+        }
         this._registerFocusables();
     }
 
@@ -509,6 +566,11 @@ export class SettingsScreen {
      */
     public hide(): void {
         this._container.classList.remove('visible');
+        if (this._navKeyHandler) {
+            const nav = this._getNavigation();
+            nav?.off('keyPress', this._navKeyHandler);
+            this._navKeyHandler = null;
+        }
         this._unregisterFocusables();
     }
 
@@ -519,7 +581,11 @@ export class SettingsScreen {
         const nav = this._getNavigation();
         if (!nav) return;
 
-        const focusableIds = this._focusableOrder.filter((id) => this._isFocusableEnabled(id));
+        const focusableIds = this._focusableOrder.filter((id) => {
+            if (!this._isFocusableEnabled(id)) return false;
+            const element = this._getFocusableElement(id);
+            return element ? element.offsetParent !== null : false;
+        });
         this._focusableIds = focusableIds;
 
         const currentFocusId = nav.getFocusedElement()?.id ?? null;
@@ -669,6 +735,9 @@ export class SettingsScreen {
     }
 
     private _isFocusableEnabled(id: string): boolean {
+        if (this._sectionHeaders.has(id)) {
+            return true;
+        }
         const toggle = this._toggleElements.get(id);
         if (toggle) {
             return !toggle.isDisabled();
@@ -728,6 +797,8 @@ export class SettingsScreen {
     }
 
     private _getFocusableElement(id: string): HTMLButtonElement | null {
+        const header = this._sectionHeaders.get(id);
+        if (header) return header;
         const toggle = this._toggleElements.get(id);
         if (toggle) return toggle.element;
         const select = this._selectElements.get(id);
@@ -744,6 +815,8 @@ export class SettingsScreen {
         this._selectElements.clear();
         this._toggleMetadata.clear();
         this._selectMetadata.clear();
+        this._sectionHeaders.clear();
+        this._sectionBodies.clear();
         this._focusableOrder = [];
         this._container.innerHTML = '';
     }

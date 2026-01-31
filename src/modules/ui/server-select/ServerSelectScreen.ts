@@ -94,7 +94,7 @@ export class ServerSelectScreen {
         const clearButton = document.createElement('button');
         clearButton.id = 'btn-server-forget';
         clearButton.className = 'screen-button secondary';
-        clearButton.textContent = 'Forget Selection';
+        clearButton.textContent = 'Clear Saved Server';
         clearButton.addEventListener('click', () => {
             this._handleClearSelection();
         });
@@ -127,6 +127,7 @@ export class ServerSelectScreen {
         this._isLoading = true;
         this._listEl.innerHTML = '';
         this._setStatus(options.autoSelect ? 'Connecting…' : 'Discovering servers…', '');
+        this._statusEl.classList.add('panel-spinner');
 
         // Disable controls
         this._refreshButton.disabled = true;
@@ -168,6 +169,7 @@ export class ServerSelectScreen {
             this._renderServers([]);
         } finally {
             this._isLoading = false;
+            this._statusEl.classList.remove('panel-spinner');
             this._refreshButton.disabled = false;
             this._setupButton.disabled = false;
             this._clearButton.disabled = false;
@@ -219,7 +221,7 @@ export class ServerSelectScreen {
 
     private _renderServers(servers: PlexServer[]): void {
         const rawHealth = safeLocalStorageGet(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
-        let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined> = {};
+        let healthMap: Record<string, { status?: string; type?: string; latencyMs?: number; testedAt?: number } | undefined> = {};
         let parsedHealth: unknown = {};
         if (rawHealth) {
             try {
@@ -231,7 +233,7 @@ export class ServerSelectScreen {
         }
 
         if (parsedHealth && typeof parsedHealth === 'object' && !Array.isArray(parsedHealth)) {
-            healthMap = parsedHealth as Record<string, { status?: string; type?: string; latencyMs?: number } | undefined>;
+            healthMap = parsedHealth as Record<string, { status?: string; type?: string; latencyMs?: number; testedAt?: number } | undefined>;
         } else if (rawHealth) {
             try {
                 localStorage.removeItem(PLEX_DISCOVERY_CONSTANTS.SERVER_HEALTH_KEY);
@@ -285,7 +287,7 @@ export class ServerSelectScreen {
             const selectButton = document.createElement('button');
             selectButton.id = `btn-server-select-${i}`;
             selectButton.className = 'screen-button secondary';
-            selectButton.textContent = 'Test & Select';
+            selectButton.textContent = 'Connect';
             selectButton.addEventListener('click', () => {
                 this._selectServer(server).catch(console.error);
             });
@@ -359,35 +361,33 @@ export class ServerSelectScreen {
 
     private _buildServerMeta(
         server: PlexServer,
-        healthMap: Record<string, { status?: string; type?: string; latencyMs?: number } | undefined>
+        healthMap: Record<string, { status?: string; type?: string; latencyMs?: number; testedAt?: number } | undefined>
     ): string {
         const ownership = server.owned ? 'Owned' : `Shared by ${server.sourceTitle}`;
         const health = healthMap[server.id];
 
-        const typeLabel = health?.type === 'local'
-            ? 'Local'
-            : health?.type === 'remote'
-                ? 'Remote'
-                : health?.type === 'relay'
-                    ? 'Relay'
-                    : null;
-
-        const latencyLabel = typeof health?.latencyMs === 'number' && health.latencyMs > 0
-            ? `${health.latencyMs}ms`
-            : null;
-
         let lastInfo: string;
-        if (health?.status === 'auth_required') {
-            lastInfo = 'Auth required';
-        } else if (typeLabel && latencyLabel) {
-            lastInfo = `Last: ${typeLabel} ${latencyLabel}`;
-        } else if (typeLabel) {
-            lastInfo = `Last: ${typeLabel}`;
-        } else {
+        if (typeof health?.testedAt !== 'number') {
             lastInfo = 'Last: —';
+        } else if (health?.status === 'ok') {
+            lastInfo = `Last connected: ${this._formatRelativeTime(health.testedAt)}`;
+        } else {
+            lastInfo = `Last checked: ${this._formatRelativeTime(health.testedAt)}`;
         }
 
         return `${ownership} • ${lastInfo}`;
+    }
+
+    private _formatRelativeTime(timestamp: number): string {
+        const deltaMs = Math.max(0, Date.now() - timestamp);
+        const seconds = Math.floor(deltaMs / 1000);
+        if (seconds < 60) return 'just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes} min ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours} hours ago`;
+        const days = Math.floor(hours / 24);
+        return `${days} days ago`;
     }
 
     private _setStatus(status: string, detail: string): void {
