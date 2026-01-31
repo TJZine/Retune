@@ -383,11 +383,11 @@ export class ServerSelectScreen {
         const seconds = Math.floor(deltaMs / 1000);
         if (seconds < 60) return 'just now';
         const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `${minutes} min ago`;
+        if (minutes < 60) return minutes === 1 ? '1 min ago' : `${minutes} mins ago`;
         const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours} hours ago`;
+        if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
         const days = Math.floor(hours / 24);
-        return `${days} days ago`;
+        return days === 1 ? '1 day ago' : `${days} days ago`;
     }
 
     private _setStatus(status: string, detail: string): void {

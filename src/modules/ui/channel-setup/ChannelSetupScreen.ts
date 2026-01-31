@@ -58,12 +58,7 @@ export class ChannelSetupScreen {
         studios: false,
         actors: false,
     };
-    private _strategyAccordions = {
-        contentSources: true,
-        advancedSources: false,
-        buildOptions: true,
-        limits: false,
-    };
+    private _strategyAccordions = ChannelSetupScreen._defaultStrategyAccordions();
     private _buildMode: ChannelSetupConfig['buildMode'] = 'replace';
     private _actorStudioCombineMode: ChannelSetupConfig['actorStudioCombineMode'] = 'separate';
     private _maxChannels: number = DEFAULT_CHANNEL_SETUP_MAX;
@@ -93,6 +88,49 @@ export class ChannelSetupScreen {
     private _previewPanelHeightPx: number | null = null;
     private _previewPanelId = 'setup-preview-panel';
     private _maxPreviewWarnings = 5;
+
+    private static _defaultStrategyAccordions(): Record<StrategyAccordionKey, boolean> {
+        return {
+            contentSources: true,
+            advancedSources: false,
+            buildOptions: true,
+            limits: false,
+        };
+    }
+
+    private _getNearestOptionIndex(options: number[], current: number): number {
+        if (options.length === 0) return -1;
+        let nearestIndex = 0;
+        let smallestDiff = Math.abs(options[0] - current);
+        for (let i = 1; i < options.length; i++) {
+            const diff = Math.abs(options[i] - current);
+            if (diff < smallestDiff) {
+                smallestDiff = diff;
+                nearestIndex = i;
+            }
+        }
+        return nearestIndex;
+    }
+
+    private _stepPreset(
+        options: number[],
+        current: number,
+        dir: 'left' | 'right',
+        mode: 'clamp' | 'wrap'
+    ): number {
+        if (options.length === 0) return current;
+        const currentIndex = options.indexOf(current);
+        const baseIndex = currentIndex >= 0 ? currentIndex : this._getNearestOptionIndex(options, current);
+        const lastIndex = options.length - 1;
+        const nextIndex = mode === 'wrap'
+            ? dir === 'left'
+                ? (baseIndex - 1 + options.length) % options.length
+                : (baseIndex + 1) % options.length
+            : dir === 'left'
+                ? Math.max(0, baseIndex - 1)
+                : Math.min(lastIndex, baseIndex + 1);
+        return options[nextIndex] ?? current;
+    }
 
     private _toDomId(raw: string): string {
         return raw.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -181,18 +219,10 @@ export class ChannelSetupScreen {
                         : null;
                 if (!direction) return;
 
-                const clampStep = (options: number[], current: number, dir: 'left' | 'right'): number => {
-                    const idx = Math.max(0, options.indexOf(current));
-                    const next = dir === 'left'
-                        ? Math.max(0, idx - 1)
-                        : Math.min(options.length - 1, idx + 1);
-                    return options[next] ?? current;
-                };
-
                 if (focusedId === 'setup-max-channels') {
-                    this._maxChannels = clampStep(this._channelLimitOptions, this._maxChannels, direction);
+                    this._maxChannels = this._stepPreset(this._channelLimitOptions, this._maxChannels, direction, 'clamp');
                 } else {
-                    this._minItems = clampStep(this._minItemsOptions, this._minItems, direction);
+                    this._minItems = this._stepPreset(this._minItemsOptions, this._minItems, direction, 'clamp');
                 }
                 event.handled = true;
                 this._preferredFocusId = focusedId;
@@ -247,12 +277,7 @@ export class ChannelSetupScreen {
         this._minItems = DEFAULT_MIN_ITEMS;
         this._buildMode = 'replace';
         this._actorStudioCombineMode = 'separate';
-        this._strategyAccordions = {
-            contentSources: true,
-            advancedSources: false,
-            buildOptions: true,
-            limits: false,
-        };
+        this._strategyAccordions = ChannelSetupScreen._defaultStrategyAccordions();
         this._preview = null;
         this._previewError = null;
         this._review = null;
@@ -481,6 +506,8 @@ export class ChannelSetupScreen {
             body.className = 'setup-accordion-body';
             body.id = `setup-accordion-${options.key}-body`;
             body.hidden = !expanded;
+            body.setAttribute('role', 'region');
+            body.setAttribute('aria-labelledby', header.id);
 
             for (const button of options.buttons) {
                 body.appendChild(button);
@@ -635,11 +662,7 @@ export class ChannelSetupScreen {
 
         maxButton.addEventListener('click', () => {
             this._preferredFocusId = maxButton.id;
-            const currentIndex = this._channelLimitOptions.indexOf(this._maxChannels);
-            const nextIndex = currentIndex >= 0
-                ? (currentIndex + 1) % this._channelLimitOptions.length
-                : 0;
-            this._maxChannels = this._channelLimitOptions[nextIndex] ?? DEFAULT_CHANNEL_SETUP_MAX;
+            this._maxChannels = this._stepPreset(this._channelLimitOptions, this._maxChannels, 'right', 'wrap');
             this._review = null;
             this._reviewError = null;
             this._schedulePreview();
@@ -668,12 +691,7 @@ export class ChannelSetupScreen {
 
         minItemsButton.addEventListener('click', () => {
             this._preferredFocusId = minItemsButton.id;
-            const currentIndex = this._minItemsOptions.indexOf(this._minItems);
-            const defaultIndex = Math.max(0, this._minItemsOptions.indexOf(DEFAULT_MIN_ITEMS));
-            const nextIndex = currentIndex >= 0
-                ? (currentIndex + 1) % this._minItemsOptions.length
-                : defaultIndex; // Default to 10 if present, else first option
-            this._minItems = this._minItemsOptions[nextIndex] ?? DEFAULT_MIN_ITEMS;
+            this._minItems = this._stepPreset(this._minItemsOptions, this._minItems, 'right', 'wrap');
             this._review = null;
             this._reviewError = null;
             this._schedulePreview();
@@ -682,6 +700,8 @@ export class ChannelSetupScreen {
 
         const contentEnabledCount = contentStrategies.filter((key) => this._strategies[key]).length;
         const advancedEnabledCount = advancedStrategies.filter((key) => this._strategies[key]).length;
+        const contentTotal = contentStrategies.length;
+        const advancedTotal = advancedStrategies.length;
         const buildSummary = `Build mode: ${this._buildMode.charAt(0).toUpperCase()}${this._buildMode.slice(1)} • Combine: ${
             this._actorStudioCombineMode === 'combined' ? 'Combined' : 'Separate'
         }`;
@@ -691,7 +711,7 @@ export class ChannelSetupScreen {
             key: 'content-sources',
             stateKey: 'contentSources',
             title: 'Content Sources',
-            countText: `(${contentEnabledCount} of 4 enabled)`,
+            countText: `(${contentEnabledCount} of ${contentTotal} enabled)`,
             buttons: contentButtons,
         });
 
@@ -699,7 +719,7 @@ export class ChannelSetupScreen {
             key: 'advanced-sources',
             stateKey: 'advancedSources',
             title: 'Advanced Sources',
-            countText: `(${advancedEnabledCount} of 5 enabled)`,
+            countText: `(${advancedEnabledCount} of ${advancedTotal} enabled)`,
             buttons: advancedButtons,
         });
 
