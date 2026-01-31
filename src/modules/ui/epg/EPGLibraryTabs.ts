@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Tab bar component for filtering EPG by library.
+ * @module modules/ui/epg/EPGLibraryTabs
+ * @version 1.0.0
+ */
+
 export interface EPGLibraryTabsConfig {
     onSelect: (libraryId: string | null) => void;
 }
@@ -9,7 +15,7 @@ export class EPGLibraryTabs {
     private _selectedId: string | null = null;
     private _focusedIndex = 0;
 
-    constructor(private readonly _config: EPGLibraryTabsConfig) {}
+    constructor(private readonly _config: EPGLibraryTabsConfig) { }
 
     initialize(gridElement: HTMLElement): void {
         if (this._el) return;

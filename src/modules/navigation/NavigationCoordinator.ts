@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Handles key input routing and screen navigation events.
+ * @module modules/navigation/NavigationCoordinator
+ * @version 1.0.0
+ */
+
 import type { INavigationManager, KeyEvent } from './interfaces';
 import type { IEPGComponent } from '../ui/epg';
 import type { IVideoPlayer } from '../player';

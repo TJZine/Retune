@@ -1,5 +1,12 @@
+/**
+ * @fileoverview Type definitions for error recovery module.
+ * @module core/error-recovery/types
+ * @version 1.0.0
+ */
+
 import type { AppErrorCode, AppError, AppPhase, LifecycleAppError } from '../../modules/lifecycle';
 
+/** User-facing action button for error recovery overlay. */
 export interface ErrorRecoveryAction {
     label: string;
     action: () => void;

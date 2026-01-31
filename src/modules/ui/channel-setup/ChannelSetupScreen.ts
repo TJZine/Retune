@@ -99,11 +99,14 @@ export class ChannelSetupScreen {
     }
 
     private _getNearestOptionIndex(options: number[], current: number): number {
-        if (options.length === 0) return -1;
+        const first = options[0];
+        if (first === undefined) return -1;
         let nearestIndex = 0;
-        let smallestDiff = Math.abs(options[0] - current);
+        let smallestDiff = Math.abs(first - current);
         for (let i = 1; i < options.length; i++) {
-            const diff = Math.abs(options[i] - current);
+            const option = options[i];
+            if (option === undefined) continue;
+            const diff = Math.abs(option - current);
             if (diff < smallestDiff) {
                 smallestDiff = diff;
                 nearestIndex = i;
@@ -121,6 +124,7 @@ export class ChannelSetupScreen {
         if (options.length === 0) return current;
         const currentIndex = options.indexOf(current);
         const baseIndex = currentIndex >= 0 ? currentIndex : this._getNearestOptionIndex(options, current);
+        if (baseIndex < 0) return current;
         const lastIndex = options.length - 1;
         const nextIndex = mode === 'wrap'
             ? dir === 'left'

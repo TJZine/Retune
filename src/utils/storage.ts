@@ -33,6 +33,7 @@ export function safeLocalStorageRemove(key: string): boolean {
     }
 }
 
+/** Parse '1'/'0' string to boolean. Returns null if value is null or unrecognized. */
 export function parseStoredBoolean(value: string | null): boolean | null {
     if (value === null) return null;
     if (value === '1') return true;
@@ -44,6 +45,7 @@ export function isStoredTrue(value: string | null): boolean {
     return value === '1';
 }
 
+/** Read a boolean from storage, falling back to defaultValue if missing or invalid. */
 export function readStoredBoolean(key: string, defaultValue: boolean): boolean {
     const parsed = parseStoredBoolean(safeLocalStorageGet(key));
     return parsed ?? defaultValue;

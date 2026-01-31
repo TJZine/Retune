@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Coordinates Now Playing overlay lifecycle, detail fetching, and live updates.
+ * @module modules/ui/now-playing-info/NowPlayingInfoCoordinator
+ * @version 1.0.0
+ */
+
 import type { INavigationManager } from '../../navigation';
 import type { IChannelScheduler, ScheduledProgram } from '../../scheduler/scheduler';
 import type { IChannelManager, ChannelConfig } from '../../scheduler/channel-manager';
@@ -44,7 +50,7 @@ export class NowPlayingInfoCoordinator {
     private nowPlayingInfoDetails: PlexMediaItem | null = null;
     private nowPlayingInfoDetailsRatingKey: string | null = null;
 
-    constructor(private readonly deps: NowPlayingInfoCoordinatorDeps) {}
+    constructor(private readonly deps: NowPlayingInfoCoordinatorDeps) { }
 
     handleModalOpen(modalId: string): void {
         if (modalId !== this.deps.nowPlayingModalId) {

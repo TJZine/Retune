@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Builds human-readable playback summary strings from stream info.
+ * @module utils/playbackSummary
+ * @version 1.0.0
+ */
+
 import { formatAudioCodec } from './mediaFormat';
 
 export type PlaybackInfoSnapshotLike = {

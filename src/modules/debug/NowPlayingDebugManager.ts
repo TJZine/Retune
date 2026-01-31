@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Debug overlay manager for Now Playing stream information.
+ * @module modules/debug/NowPlayingDebugManager
+ * @version 1.0.0
+ */
+
 import { RETUNE_STORAGE_KEYS } from '../../config/storageKeys';
 import { isStoredTrue, safeLocalStorageGet } from '../../utils/storage';
 import type { INavigationManager } from '../navigation';
@@ -24,7 +30,7 @@ export class NowPlayingDebugManager {
     private _nowPlayingStreamDecisionFetchPromise: Promise<StreamDecision['serverDecision']> | null = null;
     private _nowPlayingStreamDecisionFetchSessionId: string | null = null;
 
-    constructor(private readonly deps: NowPlayingDebugManagerDeps) {}
+    constructor(private readonly deps: NowPlayingDebugManagerDeps) { }
 
     // Debug-only behaviors (must preserve current gating)
     maybeAutoShowNowPlayingStreamDebugHud(): void {

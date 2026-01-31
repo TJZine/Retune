@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Toast notification types and input normalization.
+ * @module modules/ui/toast/types
+ * @version 1.0.0
+ */
+
 export const TOAST_TYPES = ['info', 'success', 'warning', 'error'] as const;
 
 export type ToastType = typeof TOAST_TYPES[number];
