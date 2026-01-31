@@ -9,27 +9,35 @@ import {
 describe('dvHdr10Fallback', () => {
     describe('hasHdr10BaseLayer', () => {
         it('returns true for profile 7', () => {
-            expect(hasHdr10BaseLayer(7, '7')).toBe(true);
+            expect(hasHdr10BaseLayer(7, null, '7')).toBe(true);
         });
 
-        it('returns true for profile 8.1', () => {
-            expect(hasHdr10BaseLayer(8, '8.1')).toBe(true);
+        it('returns true for profile 8.1 via levelId', () => {
+            expect(hasHdr10BaseLayer(8, 1, null)).toBe(true);
+        });
+
+        it('returns true for profile 8.1 via raw string', () => {
+            expect(hasHdr10BaseLayer(8, null, '8.1')).toBe(true);
+        });
+
+        it('returns true for profile 8.1 via codec string', () => {
+            expect(hasHdr10BaseLayer(8, 1, 'dvhe.08.01')).toBe(true);
         });
 
         it('returns false for profile 8.2', () => {
-            expect(hasHdr10BaseLayer(8, '8.2')).toBe(false);
+            expect(hasHdr10BaseLayer(8, 2, '8.2')).toBe(false);
         });
 
         it('returns false for profile 8.4', () => {
-            expect(hasHdr10BaseLayer(8, '8.4')).toBe(false);
+            expect(hasHdr10BaseLayer(8, 4, '8.4')).toBe(false);
         });
 
         it('returns false for profile 5', () => {
-            expect(hasHdr10BaseLayer(5, '5')).toBe(false);
+            expect(hasHdr10BaseLayer(5, null, '5')).toBe(false);
         });
 
         it('returns false for unknown profile', () => {
-            expect(hasHdr10BaseLayer(null, null)).toBe(false);
+            expect(hasHdr10BaseLayer(null, null, null)).toBe(false);
         });
     });
 
