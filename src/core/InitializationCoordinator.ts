@@ -24,6 +24,7 @@ import type { IVideoPlayer } from '../modules/player';
 import type { IEPGComponent } from '../modules/ui/epg';
 import type { INowPlayingInfoOverlay } from '../modules/ui/now-playing-info';
 import type { IPlayerOsdOverlay } from '../modules/ui/player-osd';
+import type { IMiniGuideOverlay } from '../modules/ui/mini-guide';
 import type { IChannelTransitionOverlay } from '../modules/ui/channel-transition';
 import type { IPlaybackOptionsModal } from '../modules/ui/playback-options';
 import type { IDisposable } from '../utils/interfaces';
@@ -52,6 +53,7 @@ export interface InitializationDependencies {
     epg: IEPGComponent | null;
     nowPlayingInfo: INowPlayingInfoOverlay | null;
     playerOsd: IPlayerOsdOverlay | null;
+    miniGuide: IMiniGuideOverlay | null;
     channelTransition: IChannelTransitionOverlay | null;
     playbackOptions: IPlaybackOptionsModal | null;
 }
@@ -561,6 +563,17 @@ export class InitializationCoordinator implements IInitializationCoordinator {
             this._deps.playerOsd.initialize(this._config.playerOsdConfig);
             this._callbacks.updateModuleStatus(
                 'player-osd-ui',
+                'ready',
+                undefined,
+                Date.now() - startTime
+            );
+        }
+
+        if (this._deps.miniGuide && this._config) {
+            this._callbacks.updateModuleStatus('mini-guide-ui', 'initializing');
+            this._deps.miniGuide.initialize(this._config.miniGuideConfig);
+            this._callbacks.updateModuleStatus(
+                'mini-guide-ui',
                 'ready',
                 undefined,
                 Date.now() - startTime

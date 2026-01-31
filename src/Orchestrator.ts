@@ -98,6 +98,12 @@ import {
 } from './modules/ui/player-osd';
 import { PlayerOsdCoordinator } from './modules/ui/player-osd/PlayerOsdCoordinator';
 import {
+    MiniGuideOverlay,
+    type IMiniGuideOverlay,
+    type MiniGuideConfig,
+} from './modules/ui/mini-guide';
+import { MiniGuideCoordinator } from './modules/ui/mini-guide/MiniGuideCoordinator';
+import {
     ChannelTransitionOverlay,
     type IChannelTransitionOverlay,
     type ChannelTransitionConfig,
@@ -238,6 +244,7 @@ export interface OrchestratorConfig {
     nowPlayingInfoConfig: NowPlayingInfoConfig;
     playbackOptionsConfig: PlaybackOptionsConfig;
     playerOsdConfig: PlayerOsdConfig;
+    miniGuideConfig: MiniGuideConfig;
     channelTransitionConfig: ChannelTransitionConfig;
 }
 
@@ -323,6 +330,8 @@ export class AppOrchestrator implements IAppOrchestrator {
     private _playerOsd: PlayerOsdOverlay | null = null;
     private _channelTransitionOverlay: ChannelTransitionOverlay | null = null;
     private _playerOsdCoordinator: PlayerOsdCoordinator | null = null;
+    private _miniGuide: IMiniGuideOverlay | null = null;
+    private _miniGuideCoordinator: MiniGuideCoordinator | null = null;
     private _channelTransitionCoordinator: ChannelTransitionCoordinator | null = null;
     private _playbackOptionsModal: IPlaybackOptionsModal | null = null;
     private _playbackOptionsCoordinator: PlaybackOptionsCoordinator | null = null;
@@ -474,6 +483,9 @@ export class AppOrchestrator implements IAppOrchestrator {
         // Player OSD overlay - no constructor args, initialize later
         this._playerOsd = new PlayerOsdOverlay();
 
+        // Mini Guide overlay - no constructor args, initialize later
+        this._miniGuide = new MiniGuideOverlay();
+
         // Channel transition overlay - no constructor args, initialize later
         this._channelTransitionOverlay = new ChannelTransitionOverlay();
 
@@ -587,6 +599,20 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this.getPlaybackInfoSnapshot(),
         });
 
+        this._miniGuideCoordinator = new MiniGuideCoordinator({
+            getOverlay: (): IMiniGuideOverlay | null => this._miniGuide,
+            getChannelManager: (): IChannelManager | null => this._channelManager,
+            getScheduler: (): IChannelScheduler | null => this._scheduler,
+            buildDailyScheduleConfig: (
+                channel: ChannelConfig,
+                items: ResolvedChannelContent['items'],
+                referenceTimeMs: number
+            ): ScheduleConfig => this._buildDailyScheduleConfig(channel, items, referenceTimeMs),
+            switchToChannel: (channelId: string): Promise<void> => this.switchToChannel(channelId),
+            getAutoHideMs: (): number =>
+                this._config?.playerConfig.hideControlsAfterMs ?? 3000,
+        });
+
         this._channelTransitionCoordinator = new ChannelTransitionCoordinator({
             getOverlay: (): IChannelTransitionOverlay | null => this._channelTransitionOverlay,
             getNavigation: (): INavigationManager | null => this._navigation,
@@ -688,6 +714,19 @@ export class AppOrchestrator implements IAppOrchestrator {
                 this._playerOsdCoordinator?.toggle();
             },
             isPlayerOsdVisible: (): boolean => this._playerOsd?.isVisible() ?? false,
+            showMiniGuide: (): void => {
+                this._miniGuideCoordinator?.show();
+            },
+            hideMiniGuide: (): void => {
+                this._miniGuideCoordinator?.hide();
+            },
+            isMiniGuideVisible: (): boolean => this._miniGuide?.isVisible() ?? false,
+            handleMiniGuideNavigation: (direction): boolean =>
+                this._miniGuideCoordinator?.handleNavigation(direction) ?? false,
+            handleMiniGuideSelect: (): void => {
+                this._lastChannelChangeSource = 'remote';
+                this._miniGuideCoordinator?.handleSelect();
+            },
             getSeekIncrementMs: (): number =>
                 (this._config?.playerConfig.seekIncrementSec ?? 10) * 1000,
             isNowPlayingModalOpen: (): boolean => {
@@ -747,6 +786,7 @@ export class AppOrchestrator implements IAppOrchestrator {
                 epg: this._epg,
                 nowPlayingInfo: this._nowPlayingInfo,
                 playerOsd: this._playerOsd,
+                miniGuide: this._miniGuide,
                 channelTransition: this._channelTransitionOverlay,
                 playbackOptions: this._playbackOptionsModal,
             },
@@ -852,6 +892,10 @@ export class AppOrchestrator implements IAppOrchestrator {
         this._playerOsdCoordinator?.hide();
         if (this._playerOsd) {
             this._playerOsd.destroy();
+        }
+        this._miniGuideCoordinator?.hide();
+        if (this._miniGuide) {
+            this._miniGuide.destroy();
         }
         this._channelTransitionCoordinator?.hide();
         if (this._channelTransitionOverlay) {
@@ -1389,6 +1433,7 @@ export class AppOrchestrator implements IAppOrchestrator {
             'epg-ui',
             'now-playing-info-ui',
             'player-osd-ui',
+            'mini-guide-ui',
             'channel-transition-ui',
             'playback-options-ui',
         ];

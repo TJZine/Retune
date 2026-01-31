@@ -95,6 +95,11 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         togglePlayerOsd: jest.fn(),
         getSeekIncrementMs: jest.fn().mockReturnValue(10_000),
         isPlayerOsdVisible: jest.fn().mockReturnValue(false),
+        showMiniGuide: jest.fn(),
+        hideMiniGuide: jest.fn(),
+        isMiniGuideVisible: jest.fn().mockReturnValue(false),
+        handleMiniGuideNavigation: jest.fn().mockReturnValue(true),
+        handleMiniGuideSelect: jest.fn(),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
         showNowPlayingInfoOverlay: jest.fn(),
@@ -201,6 +206,77 @@ describe('NavigationCoordinator', () => {
         expect(deps.togglePlayerOsd).toHaveBeenCalledTimes(1);
         expect(event.handled).toBe(true);
         expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('shows mini-guide on up when player and OSD hidden', () => {
+        const { handlers, deps } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(false),
+            isMiniGuideVisible: jest.fn().mockReturnValue(false),
+        });
+        const event = makeKeyEvent('up');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.showMiniGuide).toHaveBeenCalledTimes(1);
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('does not show mini-guide when OSD is visible', () => {
+        const { handlers, deps } = setup({
+            isPlayerOsdVisible: jest.fn().mockReturnValue(true),
+            isMiniGuideVisible: jest.fn().mockReturnValue(false),
+        });
+        const event = makeKeyEvent('up');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.showMiniGuide).not.toHaveBeenCalled();
+        expect(event.handled).not.toBe(true);
+    });
+
+    it('routes navigation to mini-guide when visible and prevents OSD toggles', () => {
+        const { handlers, deps } = setup({
+            isMiniGuideVisible: jest.fn().mockReturnValue(true),
+        });
+
+        const downEvent = makeKeyEvent('down');
+        handlers.keyPress?.(downEvent);
+        expect(deps.handleMiniGuideNavigation).toHaveBeenCalledWith('down');
+        expect(deps.togglePlayerOsd).not.toHaveBeenCalled();
+        expect(downEvent.handled).toBe(true);
+
+        const okEvent = makeKeyEvent('ok');
+        handlers.keyPress?.(okEvent);
+        expect(deps.handleMiniGuideSelect).toHaveBeenCalledTimes(1);
+        expect(deps.togglePlayerOsd).not.toHaveBeenCalled();
+        expect(okEvent.handled).toBe(true);
+    });
+
+    it('back hides mini-guide and does not open exit-confirm', () => {
+        const { handlers, deps, navigation } = setup({
+            isMiniGuideVisible: jest.fn().mockReturnValue(true),
+        });
+        const event = makeKeyEvent('back');
+
+        handlers.keyPress?.(event);
+
+        expect(deps.hideMiniGuide).toHaveBeenCalledTimes(1);
+        expect(navigation.openModal).not.toHaveBeenCalled();
+        expect(event.handled).toBe(true);
+    });
+
+    it('hides mini-guide before channel up/down', () => {
+        const { handlers, deps } = setup({
+            isMiniGuideVisible: jest.fn().mockReturnValue(true),
+        });
+
+        handlers.keyPress?.(makeKeyEvent('channelUp'));
+        expect(deps.hideMiniGuide).toHaveBeenCalled();
+        expect(deps.switchToPreviousChannel).toHaveBeenCalled();
+
+        handlers.keyPress?.(makeKeyEvent('channelDown'));
+        expect(deps.switchToNextChannel).toHaveBeenCalled();
     });
 
     it('swallows back when now playing modal open', () => {
@@ -390,6 +466,7 @@ describe('NavigationCoordinator', () => {
 
         handlers.screenChange?.({ from: 'player', to: 'settings' });
         expect(videoPlayer.pause).toHaveBeenCalled();
+        expect(deps.hideMiniGuide).toHaveBeenCalled();
 
         handlers.screenChange?.({ from: 'settings', to: 'player' });
         expect(videoPlayer.play).toHaveBeenCalled();
@@ -397,6 +474,15 @@ describe('NavigationCoordinator', () => {
         (navigation.isModalOpen as jest.Mock).mockReturnValue(true);
         handlers.screenChange?.({ from: 'player', to: 'home' });
         expect(navigation.closeModal).toHaveBeenCalledWith(NOW_PLAYING_INFO_MODAL_ID);
+    });
+
+    it('guide hides mini-guide before toggling EPG', () => {
+        const { handlers, deps } = setup();
+
+        handlers.guide?.(undefined);
+
+        expect(deps.hideMiniGuide).toHaveBeenCalledTimes(1);
+        expect(deps.toggleEpg).toHaveBeenCalledTimes(1);
     });
 
     it('does not pause when keep-playing-in-settings is enabled', () => {
@@ -442,6 +528,14 @@ describe('NavigationCoordinator', () => {
 
         handlers.modalClose?.({ modalId: NOW_PLAYING_INFO_MODAL_ID });
         expect(deps.hideNowPlayingInfoOverlay).toHaveBeenCalled();
+    });
+
+    it('modal open hides mini-guide', () => {
+        const { handlers, deps } = setup();
+
+        handlers.modalOpen?.({ modalId: 'any-modal' });
+
+        expect(deps.hideMiniGuide).toHaveBeenCalledTimes(1);
     });
 
     it('does not route to EPG when overlay is not visible', () => {

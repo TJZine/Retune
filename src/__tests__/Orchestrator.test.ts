@@ -85,6 +85,10 @@ const mockPlayerOsdConfig = {
     containerId: 'player-osd-container',
 };
 
+const mockMiniGuideConfig = {
+    containerId: 'mini-guide-container',
+};
+
 const mockChannelTransitionConfig = {
     containerId: 'channel-transition-container',
 };
@@ -96,6 +100,7 @@ const mockConfig: OrchestratorConfig = {
     epgConfig: mockEpgConfig,
     nowPlayingInfoConfig: mockNowPlayingInfoConfig,
     playerOsdConfig: mockPlayerOsdConfig,
+    miniGuideConfig: mockMiniGuideConfig,
     channelTransitionConfig: mockChannelTransitionConfig,
     playbackOptionsConfig: mockPlaybackOptionsConfig,
 };
@@ -207,6 +212,18 @@ jest.mock('../modules/ui/player-osd', () => ({
         isVisible: jest.fn(() => false),
         destroy: jest.fn(),
         setViewModel: jest.fn(),
+    })),
+}));
+
+jest.mock('../modules/ui/mini-guide', () => ({
+    MiniGuideOverlay: jest.fn(() => ({
+        initialize: jest.fn(),
+        show: jest.fn(),
+        hide: jest.fn(),
+        isVisible: jest.fn(() => false),
+        destroy: jest.fn(),
+        setViewModel: jest.fn(),
+        setFocusedIndex: jest.fn(),
     })),
 }));
 

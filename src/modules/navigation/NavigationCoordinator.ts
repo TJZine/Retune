@@ -24,6 +24,11 @@ export interface NavigationCoordinatorDeps {
     togglePlayerOsd: () => void;
     getSeekIncrementMs: () => number;
     isPlayerOsdVisible: () => boolean;
+    showMiniGuide: () => void;
+    hideMiniGuide: () => void;
+    isMiniGuideVisible: () => boolean;
+    handleMiniGuideNavigation: (direction: 'up' | 'down') => boolean;
+    handleMiniGuideSelect: () => void;
 
     isNowPlayingModalOpen: () => boolean;
     toggleNowPlayingInfoOverlay: () => void;
@@ -97,6 +102,7 @@ export class NavigationCoordinator {
         const guideHandler = (): void => {
             // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
             this._stopEpgRepeat('guide');
+            this.deps.hideMiniGuide();
             this.deps.toggleEpg();
         };
         navigation.on('guide', guideHandler);
@@ -125,6 +131,7 @@ export class NavigationCoordinator {
 
         const modalOpenHandler = (payload: { modalId: string }): void => {
             this._stopEpgRepeat('modalOpen');
+            this.deps.hideMiniGuide();
             if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
                 this.deps.showNowPlayingInfoOverlay();
             }
@@ -171,6 +178,7 @@ export class NavigationCoordinator {
             if (navigation?.isModalOpen(NOW_PLAYING_INFO_MODAL_ID)) {
                 navigation.closeModal(NOW_PLAYING_INFO_MODAL_ID);
             }
+            this.deps.hideMiniGuide();
             this.deps.hidePlayerOsd();
             this.deps.hideChannelTransition();
         }
@@ -294,13 +302,63 @@ export class NavigationCoordinator {
             }
         }
 
+        const currentScreen = navigation?.getCurrentScreen();
+        const miniGuideVisible = this.deps.isMiniGuideVisible();
+        if (currentScreen === 'player' && miniGuideVisible && !modalOpen && !shouldRouteToEpg) {
+            switch (event.button) {
+                case 'up':
+                case 'down':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    if (!event.isRepeat) {
+                        this.deps.handleMiniGuideNavigation(event.button);
+                    }
+                    return;
+                case 'ok':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    if (!event.isRepeat) {
+                        this.deps.handleMiniGuideSelect();
+                    }
+                    return;
+                case 'back':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    this.deps.hideMiniGuide();
+                    return;
+                default:
+                    break;
+            }
+        }
+
+        if (
+            currentScreen === 'player'
+            && !miniGuideVisible
+            && !modalOpen
+            && !shouldRouteToEpg
+            && !this.deps.isPlayerOsdVisible()
+        ) {
+            if (event.button === 'up') {
+                event.handled = true;
+                event.originalEvent.preventDefault();
+                if (!event.isRepeat) {
+                    this.deps.showMiniGuide();
+                }
+                return;
+            }
+        }
+
+        if (miniGuideVisible && (event.button === 'channelUp' || event.button === 'channelDown')) {
+            this.deps.hideMiniGuide();
+        }
+
         if (event.button === 'down') {
-            const currentScreen = navigation?.getCurrentScreen();
             if (
                 currentScreen === 'player'
                 && !modalOpen
                 && !shouldRouteToEpg
                 && !this.deps.isPlayerOsdVisible()
+                && !miniGuideVisible
             ) {
                 this.deps.togglePlayerOsd();
                 event.handled = true;
@@ -310,8 +368,12 @@ export class NavigationCoordinator {
         }
 
         if (event.button === 'ok') {
-            const currentScreen = navigation?.getCurrentScreen();
-            if (currentScreen === 'player' && !modalOpen && !this.deps.isPlayerOsdVisible()) {
+            if (
+                currentScreen === 'player'
+                && !modalOpen
+                && !this.deps.isPlayerOsdVisible()
+                && !miniGuideVisible
+            ) {
                 this.deps.togglePlayerOsd();
                 event.handled = true;
                 event.originalEvent.preventDefault();
