@@ -256,9 +256,8 @@
 
 .setup-toggle.focused,
 .setup-toggle:focus {
-  border-color: var(--focus-color);
-  outline: var(--focus-ring-width) solid var(--focus-color);
-  outline-offset: var(--focus-ring-offset);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-color) inset;
+  outline: none;
 }
 
 .setup-toggle-label {

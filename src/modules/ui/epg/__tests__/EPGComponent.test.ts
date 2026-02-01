@@ -810,13 +810,13 @@ describe('EPGComponent', () => {
         });
     });
 
-    describe('library tabs', () => {
+    describe('library picker', () => {
         const libraries = [
             { id: 'lib1', name: 'Movies' },
             { id: 'lib2', name: 'TV' },
         ];
 
-        const setupWithTabs = (): ChannelConfig[] => {
+        const setupWithPicker = (): ChannelConfig[] => {
             const channels = [createMockChannel(0), createMockChannel(1)];
             epg.loadChannels(channels);
             channels.forEach((ch) => {
@@ -824,72 +824,116 @@ describe('EPGComponent', () => {
             });
             epg.setLibraryTabs(libraries, 'lib1');
             epg.focusChannel(0);
+            epg.show();
             return channels;
         };
 
-        it('UP from top enters tabs mode (no wrap)', () => {
-            setupWithTabs();
-            const handled = epg.handleNavigation('up');
-            const focused = epg.getState().focusedCell;
+        it('UP from top enters library pill focus mode', () => {
+            setupWithPicker();
+            epg.handleNavigation('up');
+            const focusedPill = container.querySelector('.epg-library-pill.focused');
+            expect(focusedPill).not.toBeNull();
+        });
+
+        it('DOWN exits pill focus mode and focuses channel 0', () => {
+            setupWithPicker();
+            epg.handleNavigation('up');
+
+            const handled = epg.handleNavigation('down');
+
             expect(handled).toBe(true);
+            const focusedPill = container.querySelector('.epg-library-pill.focused');
+            expect(focusedPill).toBeNull();
+            const focused = epg.getState().focusedCell;
             expect(focused?.channelIndex).toBe(0);
         });
 
-        it('LEFT/RIGHT changes focused tab', () => {
-            setupWithTabs();
-            epg.handleNavigation('up');
-
-            let focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
-            expect(focusedTab?.textContent).toBe('Movies');
-
-            epg.handleNavigation('right');
-            focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
-            expect(focusedTab?.textContent).toBe('TV');
-
-            epg.handleNavigation('left');
-            focusedTab = container.querySelector('.epg-library-tab.focused') as HTMLElement | null;
-            expect(focusedTab?.textContent).toBe('Movies');
-        });
-
-        it('OK emits libraryFilterChanged and does not emit channelSelected', () => {
-            setupWithTabs();
+        it('OK opens picker modal without emitting libraryFilterChanged', () => {
+            setupWithPicker();
             const onFilter = jest.fn();
-            const onChannel = jest.fn();
-            const onProgram = jest.fn();
             epg.on('libraryFilterChanged', onFilter);
-            epg.on('channelSelected', onChannel);
-            epg.on('programSelected', onProgram);
 
             epg.handleNavigation('up');
             epg.handleSelect();
 
-            expect(onFilter).toHaveBeenCalledWith({ libraryId: 'lib1' });
-            expect(onChannel).not.toHaveBeenCalled();
-            expect(onProgram).not.toHaveBeenCalled();
+            expect(onFilter).not.toHaveBeenCalled();
+            const overlay = container.querySelector('.epg-library-picker-overlay');
+            expect(overlay).not.toBeNull();
         });
 
-        it('DOWN exits tabs mode and focuses channel 0 again', () => {
-            setupWithTabs();
+        it('LEFT/RIGHT are no-op but handled while pill focused', () => {
+            setupWithPicker();
             epg.handleNavigation('up');
-            epg.handleNavigation('down');
 
+            const leftHandled = epg.handleNavigation('left');
+            const rightHandled = epg.handleNavigation('right');
+
+            expect(leftHandled).toBe(true);
+            expect(rightHandled).toBe(true);
+            const focusedPill = container.querySelector('.epg-library-pill.focused');
+            expect(focusedPill).not.toBeNull();
             const focused = epg.getState().focusedCell;
             expect(focused?.channelIndex).toBe(0);
         });
 
-        it('UP wraps to last channel when tabs are not visible', () => {
-            const channels = [createMockChannel(0), createMockChannel(1)];
-            epg.loadChannels(channels);
-            channels.forEach((ch) => {
-                epg.loadScheduleForChannel(ch.id, createMockSchedule(ch.id, 2));
-            });
-            epg.setLibraryTabs([{ id: 'lib1', name: 'Movies' }], 'lib1');
-            epg.focusChannel(0);
+        it('UP/DOWN moves highlighted item while picker open', () => {
+            setupWithPicker();
+            epg.handleNavigation('up');
+            epg.handleSelect();
+
+            let focusedItem = container.querySelector('.epg-library-picker-item.focused') as HTMLElement | null;
+            expect(focusedItem?.textContent).toBe('Movies');
+
+            epg.handleNavigation('down');
+            focusedItem = container.querySelector('.epg-library-picker-item.focused') as HTMLElement | null;
+            expect(focusedItem?.textContent).toBe('TV');
 
             epg.handleNavigation('up');
+            focusedItem = container.querySelector('.epg-library-picker-item.focused') as HTMLElement | null;
+            expect(focusedItem?.textContent).toBe('Movies');
+        });
 
-            const focused = epg.getState().focusedCell;
-            expect(focused?.channelIndex).toBe(1);
+        it('LEFT/RIGHT are no-op but handled while picker open', () => {
+            setupWithPicker();
+            epg.handleNavigation('up');
+            epg.handleSelect();
+
+            const before = container.querySelector('.epg-library-picker-item.focused') as HTMLElement | null;
+            const leftHandled = epg.handleNavigation('left');
+            const rightHandled = epg.handleNavigation('right');
+            const after = container.querySelector('.epg-library-picker-item.focused') as HTMLElement | null;
+
+            expect(leftHandled).toBe(true);
+            expect(rightHandled).toBe(true);
+            expect(after?.textContent).toBe(before?.textContent);
+        });
+
+        it('OK selects highlighted item, emits libraryFilterChanged, closes picker', () => {
+            setupWithPicker();
+            const onFilter = jest.fn();
+            epg.on('libraryFilterChanged', onFilter);
+
+            epg.handleNavigation('up');
+            epg.handleSelect();
+            epg.handleNavigation('down');
+            epg.handleSelect();
+
+            expect(onFilter).toHaveBeenCalledWith({ libraryId: 'lib2' });
+            const overlay = container.querySelector('.epg-library-picker-overlay');
+            expect(overlay).toBeNull();
+        });
+
+        it('Back closes picker without closing EPG', () => {
+            setupWithPicker();
+            epg.handleNavigation('up');
+            epg.handleSelect();
+
+            const handled = epg.handleBack();
+
+            expect(handled).toBe(true);
+            expect(epg.isVisible()).toBe(true);
+            const overlay = container.querySelector('.epg-library-picker-overlay');
+            expect(overlay).toBeNull();
         });
     });
 

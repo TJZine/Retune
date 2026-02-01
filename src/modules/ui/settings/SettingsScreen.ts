@@ -52,14 +52,6 @@ const TOGGLE_METADATA: Record<string, ToggleMetadata> = {
         storageKey: SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
         defaultValue: DEFAULT_SETTINGS.playback.keepPlayingInSettings,
     },
-    'settings-smart-hdr10-fallback': {
-        storageKey: SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
-        defaultValue: DEFAULT_SETTINGS.playback.smartHdr10Fallback,
-    },
-    'settings-force-hdr10-fallback': {
-        storageKey: SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
-        defaultValue: DEFAULT_SETTINGS.playback.forceHdr10Fallback,
-    },
     'settings-debug-logging': {
         storageKey: SETTINGS_STORAGE_KEYS.DEBUG_LOGGING,
         defaultValue: DEFAULT_SETTINGS.developer.debugLogging,
@@ -105,6 +97,10 @@ const SELECT_METADATA: Record<string, SelectMetadata> = {
     },
     'settings-subtitle-language': {
         storageKey: SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE,
+        defaultValue: 0,
+    },
+    'settings-hdr10-fallback-mode': {
+        storageKey: SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
         defaultValue: 0,
     },
 };
@@ -219,14 +215,7 @@ export class SettingsScreen {
             SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS,
             DEFAULT_SETTINGS.playback.keepPlayingInSettings
         );
-        const smartHdr10Fallback = this._loadBoolSetting(
-            SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
-            DEFAULT_SETTINGS.playback.smartHdr10Fallback
-        );
-        const forceHdr10Fallback = this._loadBoolSetting(
-            SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
-            DEFAULT_SETTINGS.playback.forceHdr10Fallback
-        );
+        const hdr10FallbackValue = this._readHdr10FallbackSelectValue();
         const subtitlesEnabled = this._loadBoolSetting(
             SETTINGS_STORAGE_KEYS.SUBTITLES_ENABLED,
             DEFAULT_SETTINGS.subtitles.enabled
@@ -370,22 +359,18 @@ export class SettingsScreen {
                             this._saveBoolSetting(SETTINGS_STORAGE_KEYS.KEEP_PLAYING_IN_SETTINGS, value),
                     },
                     {
-                        id: 'settings-smart-hdr10-fallback',
-                        label: 'Smart HDR10 Fallback (Recommended)',
+                        id: 'settings-hdr10-fallback-mode',
+                        label: 'HDR Fallback',
                         description:
-                            'For Dolby Vision MKV: use HDR10 for cinematic aspect ratios (e.g., 2.39:1) to avoid dark letterbox bars. Does not affect MP4/TS.',
-                        value: smartHdr10Fallback,
-                        onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, value),
-                    },
-                    {
-                        id: 'settings-force-hdr10-fallback',
-                        label: 'Force HDR10 Fallback',
-                        description:
-                            'For Dolby Vision MKV: always use HDR10 when possible. Use if Smart fallback is not enough. Does not affect MP4/TS.',
-                        value: forceHdr10Fallback,
-                        onChange: (value: boolean) =>
-                            this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, value),
+                            'For Dolby Vision MKV only. Does not affect MP4/TS. Only applies when an HDR10 base layer exists (DV profile 7 or 8.1).',
+                        value: hdr10FallbackValue,
+                        options: [
+                            { label: 'Off', value: 0 },
+                            { label: 'Smart (Recommended)', value: 1 },
+                            { label: 'Force', value: 2 },
+                        ],
+                        onChange: (value: number) =>
+                            this._applyHdr10FallbackSelectValue(value as 0 | 1 | 2),
                     },
                 ],
             },
@@ -685,6 +670,37 @@ export class SettingsScreen {
         safeLocalStorageSet(SETTINGS_STORAGE_KEYS.SUBTITLE_LANGUAGE, option.code);
     }
 
+    private _readHdr10FallbackSelectValue(): 0 | 1 | 2 {
+        const force = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK,
+            DEFAULT_SETTINGS.playback.forceHdr10Fallback
+        );
+        if (force) return 2;
+        const smart = this._loadBoolSetting(
+            SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK,
+            DEFAULT_SETTINGS.playback.smartHdr10Fallback
+        );
+        if (smart) return 1;
+        return 0;
+    }
+
+    private _applyHdr10FallbackSelectValue(value: 0 | 1 | 2): void {
+        switch (value) {
+            case 1:
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, true);
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, false);
+                return;
+            case 2:
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, false);
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, true);
+                return;
+            case 0:
+            default:
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.SMART_HDR10_FALLBACK, false);
+                this._saveBoolSetting(SETTINGS_STORAGE_KEYS.FORCE_HDR10_FALLBACK, false);
+        }
+    }
+
 
     private _refreshValues(): void {
         for (const [id, meta] of this._toggleMetadata.entries()) {
@@ -701,6 +717,8 @@ export class SettingsScreen {
                 ? this._loadClampedNowPlayingAutoHide()
                 : id === 'settings-subtitle-language'
                     ? this._loadSubtitleLanguageValue()
+                    : id === 'settings-hdr10-fallback-mode'
+                        ? this._readHdr10FallbackSelectValue()
                     : this._loadNumberSetting(meta.storageKey, meta.defaultValue);
             select.update(value);
             meta.onRefresh?.(value);

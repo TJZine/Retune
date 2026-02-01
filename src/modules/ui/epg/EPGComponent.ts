@@ -464,24 +464,19 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
     setLibraryTabs(libraries: Array<{ id: string; name: string }>, selectedId: string | null): void {
         if (!this.gridElement) return;
-        if (!this._libraryTabs && libraries.length <= 1) {
-            return;
-        }
         if (!this._libraryTabs) {
+            if (libraries.length <= 1) {
+                return;
+            }
             this._libraryTabs = new EPGLibraryTabs({
                 onSelect: (libraryId: string | null): void => this.emit('libraryFilterChanged', { libraryId }),
             });
             this._libraryTabs.initialize(this.gridElement);
         }
-        if (libraries.length <= 1) {
-            this._libraryTabs.destroy();
-            this._libraryTabs = null;
-            this._isLibraryTabsFocused = false;
-            return;
-        }
         this._libraryTabs.update(libraries, selectedId);
         if (!this._libraryTabs.isVisible()) {
             this._isLibraryTabsFocused = false;
+            this._libraryTabs.setPillFocused(false);
         }
     }
 
@@ -921,18 +916,32 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (this._isLibraryTabsFocused) {
             if (!this._libraryTabs || !this._libraryTabs.isVisible()) {
                 this._isLibraryTabsFocused = false;
+                this._libraryTabs?.setPillFocused(false);
                 return false;
             }
+            if (this._libraryTabs.isPickerOpen()) {
+                switch (direction) {
+                    case 'up':
+                        this._libraryTabs.moveFocus(-1);
+                        return true;
+                    case 'down':
+                        this._libraryTabs.moveFocus(1);
+                        return true;
+                    case 'left':
+                    case 'right':
+                        return true;
+                    default:
+                        return false;
+                }
+            }
             switch (direction) {
-                case 'left':
-                    this._libraryTabs.moveFocus(-1);
-                    return true;
-                case 'right':
-                    this._libraryTabs.moveFocus(1);
-                    return true;
                 case 'down':
                     this._isLibraryTabsFocused = false;
+                    this._libraryTabs.setPillFocused(false);
                     this.focusProgramAtTime(0, this.state.focusTimeMs);
+                    return true;
+                case 'left':
+                case 'right':
                     return true;
                 case 'up':
                 default:
@@ -984,6 +993,7 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         if (focusedCell.channelIndex === 0 && this._libraryTabs?.isVisible()) {
             this._isLibraryTabsFocused = true;
             this._libraryTabs.setFocusedToSelected();
+            this._libraryTabs.setPillFocused(true);
             return true;
         }
 
@@ -1171,8 +1181,11 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      */
     handleSelect(): boolean {
         if (this._isLibraryTabsFocused) {
-            this._libraryTabs?.selectFocused();
-            return true;
+            if (this._libraryTabs) {
+                this._libraryTabs.selectFocused();
+                return true;
+            }
+            return false;
         }
 
         const { focusedCell } = this.state;
@@ -1226,6 +1239,10 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
      * @returns true if handled (closes EPG), false if already hidden
      */
     handleBack(): boolean {
+        if (this._libraryTabs?.isPickerOpen()) {
+            this._libraryTabs.closePicker();
+            return true;
+        }
         if (this.state.isVisible) {
             this.hide();
             return true;

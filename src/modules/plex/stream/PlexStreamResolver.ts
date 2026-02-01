@@ -744,9 +744,24 @@ export class PlexStreamResolver implements IPlexStreamResolver {
                     itemKey: request.itemKey,
                     isDirectPlay: decision.isDirectPlay,
                     isTranscoding: decision.isTranscoding,
+                    container: media.container,
+                    sourceContainer,
                     hdr: hdrLabel,
                     doviPresent: videoStream?.doviPresent ?? null,
                     doviProfile: videoStream?.doviProfile ?? null,
+                    streamProfile: videoStream?.profile ?? null,
+                    hdr10FallbackMode,
+                    hdr10FallbackApply: fallback.apply,
+                    hdr10FallbackReason: fallback.reason,
+                    hdr10FallbackDebugWhy: fallback.debugWhy,
+                    dvProfile: videoStream?.doviProfile ?? null,
+                    dvProfileInfo: {
+                        raw: dvProfileInfo.raw,
+                        profileId: dvProfileInfo.profileId,
+                        levelId: dvProfileInfo.levelId,
+                        hasHdr10BaseLayer: dvProfileInfo.hasHdr10BaseLayer,
+                    },
+                    forceHlsForDvNoHdr10BaseLayer,
                 });
             }
 

@@ -7,6 +7,7 @@
 import { EPG_CLASSES, EPG_CONSTANTS } from './constants';
 import { appendEpgDebugLog } from './utils';
 import type { EPGConfig, ChannelConfig } from './types';
+import { getChannelNameForDisplay } from '../channelDisplay';
 
 /**
  * EPG Channel List class.
@@ -210,6 +211,10 @@ export class EPGChannelList {
 
     private updateChannelRow(row: HTMLElement, channel: ChannelConfig, channelIndex: number): void {
         row.dataset.channelIndex = channelIndex.toString();
+        const displayName = getChannelNameForDisplay({
+            name: channel.name,
+            sourceLibraryName: channel.sourceLibraryName ?? null,
+        });
 
         // Category colors: only apply when enabled AND when no custom color is used.
         // Note: rows are recycled; always clear stale dataset when not applying.
@@ -240,7 +245,7 @@ export class EPGChannelList {
                 const icon = document.createElement('img');
                 icon.className = 'epg-channel-icon';
                 icon.src = channel.icon;
-                icon.alt = channel.name;
+                icon.alt = displayName;
                 row.appendChild(icon);
             }
         }
@@ -253,7 +258,7 @@ export class EPGChannelList {
         // Channel name
         const name = document.createElement('span');
         name.className = 'epg-channel-name';
-        name.textContent = channel.name;
+        name.textContent = displayName;
 
         row.appendChild(number);
         row.appendChild(name);

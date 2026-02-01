@@ -192,14 +192,13 @@
   height: 48px;
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 0 12px;
   background: rgba(0, 0, 0, 0.6);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
 
-.epg-library-tab {
+.epg-library-pill {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
@@ -209,16 +208,66 @@
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.4px;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.epg-library-tab.selected {
-  border-color: rgba(0, 168, 225, 0.9);
-  background: rgba(0, 168, 225, 0.18);
+.epg-library-pill.focused {
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-color) inset;
+  outline: none;
 }
 
-.epg-library-tab.focused {
-  outline: 3px solid rgba(92, 201, 230, 0.9);
-  outline-offset: 2px;
+.epg-library-picker-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-modal);
+}
+
+.epg-library-picker-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.epg-library-picker-panel {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  width: 240px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: rgba(14, 14, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.epg-library-picker-item {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+}
+
+.epg-library-picker-item.focused {
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-color) inset;
+  outline: none;
+}
+
+.epg-library-picker-item.selected {
+  background: rgba(0, 168, 225, 0.16);
+  border-color: rgba(0, 168, 225, 0.45);
 }
 
 .epg-time-header-slots {
