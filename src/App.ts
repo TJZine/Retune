@@ -21,10 +21,8 @@ import type { ChannelTransitionConfig } from './modules/ui/channel-transition';
 import type { PlaybackOptionsConfig } from './modules/ui/playback-options';
 import type { PlexAuthConfig } from './modules/plex/auth';
 import { AuthScreen } from './modules/ui/auth';
-import { ChannelSetupScreen } from './modules/ui/channel-setup';
 import { ServerSelectScreen } from './modules/ui/server-select';
 import { SplashScreen } from './modules/ui/splash';
-import { SettingsScreen } from './modules/ui/settings';
 import { AudioSetupScreen } from './modules/ui/audio-setup';
 import { ThemeManager } from './modules/ui/theme';
 import { normalizeToastInput, type ToastInput, type ToastType } from './modules/ui/toast/types';
@@ -36,6 +34,8 @@ import {
     safeLocalStorageRemove,
     safeLocalStorageSet,
 } from './utils/storage';
+import type { ChannelSetupScreen } from './modules/ui/channel-setup/ChannelSetupScreen';
+import type { SettingsScreen } from './modules/ui/settings/SettingsScreen';
 
 // ============================================
 // Configuration Defaults
@@ -121,10 +121,14 @@ export class App {
     private _authScreen: AuthScreen | null = null;
     private _serverSelectScreen: ServerSelectScreen | null = null;
     private _channelSetupScreen: ChannelSetupScreen | null = null;
+    private _channelSetupScreenLoad: Promise<ChannelSetupScreen> | null = null;
+    private _channelSetupPrefetchTimerId: number | null = null;
     private _audioSetupContainer: HTMLElement | null = null;
     private _audioSetupScreen: AudioSetupScreen | null = null;
     private _settingsContainer: HTMLElement | null = null;
     private _settingsScreen: SettingsScreen | null = null;
+    private _settingsScreenLoad: Promise<SettingsScreen> | null = null;
+    private _settingsPrefetchTimerId: number | null = null;
 
     private _splashContainer: HTMLElement | null = null;
     private _splashScreen: SplashScreen | null = null;
@@ -232,6 +236,8 @@ export class App {
             document.removeEventListener('keydown', this._globalKeydownHandler);
             this._globalKeydownHandler = null;
         }
+        this._cancelSettingsPrefetch();
+        this._cancelChannelSetupPrefetch();
         try {
             delete (window as { retune?: unknown }).retune;
         } catch {
@@ -429,23 +435,7 @@ export class App {
             this._serverSelectContainer,
             this._orchestrator
         );
-        this._channelSetupScreen = new ChannelSetupScreen(
-            this._channelSetupContainer,
-            this._orchestrator
-        );
-        if (this._settingsContainer && this._orchestrator) {
-            this._settingsScreen = new SettingsScreen(
-                this._settingsContainer,
-                () => this._orchestrator?.getNavigation() ?? null,
-                (enabled): void => {
-                    if (enabled) return;
-                    void this._orchestrator?.setSubtitleTrack(null).catch(() => undefined);
-                },
-                (key, enabled): void => {
-                    this._orchestrator?.onGuideSettingChange(key, enabled);
-                }
-            );
-        }
+        // Channel setup + Settings are intentionally lazy-loaded to reduce initial JS parse/compile cost on webOS.
         if (this._audioSetupContainer && this._orchestrator) {
             this._audioSetupScreen = new AudioSetupScreen(
                 this._audioSetupContainer,
@@ -503,6 +493,7 @@ export class App {
             this._audioSetupScreen?.hide();
             this._channelSetupScreen?.hide();
             this._settingsScreen?.hide();
+            this._scheduleSettingsPrefetch();
             return;
         }
         const showSplash = screen === 'splash';
@@ -536,8 +527,10 @@ export class App {
                     ? { allowAutoConnect }
                     : undefined;
                 this._serverSelectScreen.show(showOptions);
+                this._scheduleChannelSetupPrefetch();
             } else {
                 this._serverSelectScreen.hide();
+                this._cancelChannelSetupPrefetch();
             }
         }
 
@@ -549,21 +542,124 @@ export class App {
             }
         }
 
-        if (this._channelSetupScreen) {
-            if (showChannelSetup) {
-                this._channelSetupScreen.show();
-            } else {
-                this._channelSetupScreen.hide();
-            }
+        if (showChannelSetup) {
+            void this._showChannelSetupScreen();
+        } else {
+            this._channelSetupScreen?.hide();
         }
 
-        if (this._settingsScreen) {
-            if (showSettings) {
-                this._settingsScreen.show();
-            } else {
-                this._settingsScreen.hide();
-            }
+        if (showSettings) {
+            void this._showSettingsScreen();
+        } else {
+            this._settingsScreen?.hide();
         }
+    }
+
+    private _cancelSettingsPrefetch(): void {
+        if (this._settingsPrefetchTimerId !== null) {
+            window.clearTimeout(this._settingsPrefetchTimerId);
+            this._settingsPrefetchTimerId = null;
+        }
+    }
+
+    private _cancelChannelSetupPrefetch(): void {
+        if (this._channelSetupPrefetchTimerId !== null) {
+            window.clearTimeout(this._channelSetupPrefetchTimerId);
+            this._channelSetupPrefetchTimerId = null;
+        }
+    }
+
+    /**
+     * Prefetch Settings shortly after entering the player experience.
+     * This keeps Settings opening instant while still keeping the initial entry chunk smaller.
+     */
+    private _scheduleSettingsPrefetch(): void {
+        if (this._settingsScreen || this._settingsScreenLoad) return;
+        if (this._settingsPrefetchTimerId !== null) return;
+        this._settingsPrefetchTimerId = window.setTimeout(() => {
+            this._settingsPrefetchTimerId = null;
+            if (this._settingsScreen || this._settingsScreenLoad) return;
+            void import('./modules/ui/settings/SettingsScreen').catch((error) => {
+                console.warn('[App] Settings prefetch failed:', error);
+            });
+        }, 1200);
+    }
+
+    /**
+     * Prefetch the channel setup chunk shortly after Server Select becomes visible.
+     * This keeps onboarding UX snappy (no long delay when channel-setup is needed),
+     * while still keeping initial entry chunk smaller at app boot.
+     */
+    private _scheduleChannelSetupPrefetch(): void {
+        if (this._channelSetupScreen || this._channelSetupScreenLoad) return;
+        if (this._channelSetupPrefetchTimerId !== null) return;
+        this._channelSetupPrefetchTimerId = window.setTimeout(() => {
+            this._channelSetupPrefetchTimerId = null;
+            void import('./modules/ui/channel-setup/ChannelSetupScreen').catch((error) => {
+                console.warn('[App] Channel setup prefetch failed:', error);
+            });
+        }, 500);
+    }
+
+    private async _ensureChannelSetupScreen(): Promise<ChannelSetupScreen | null> {
+        if (this._channelSetupScreen) return this._channelSetupScreen;
+        if (!this._orchestrator || !this._channelSetupContainer) return null;
+
+        if (!this._channelSetupScreenLoad) {
+            this._channelSetupScreenLoad = import('./modules/ui/channel-setup/ChannelSetupScreen')
+                .then(({ ChannelSetupScreen }) => {
+                    const screen = new ChannelSetupScreen(this._channelSetupContainer!, this._orchestrator!);
+                    this._channelSetupScreen = screen;
+                    return screen;
+                })
+                .finally(() => {
+                    this._channelSetupScreenLoad = null;
+                });
+        }
+        return this._channelSetupScreenLoad;
+    }
+
+    private async _showChannelSetupScreen(): Promise<void> {
+        const screen = await this._ensureChannelSetupScreen();
+        if (!screen) return;
+        if (this._orchestrator?.getCurrentScreen() !== 'channel-setup') return;
+        screen.show();
+    }
+
+    private async _ensureSettingsScreen(): Promise<SettingsScreen | null> {
+        if (this._settingsScreen) return this._settingsScreen;
+        if (!this._orchestrator || !this._settingsContainer) return null;
+
+        if (!this._settingsScreenLoad) {
+            this._settingsScreenLoad = import('./modules/ui/settings/SettingsScreen')
+                .then(({ SettingsScreen }) => {
+                    const screen = new SettingsScreen(
+                        this._settingsContainer!,
+                        () => this._orchestrator?.getNavigation() ?? null,
+                        (enabled): void => {
+                            if (enabled) return;
+                            void this._orchestrator?.setSubtitleTrack(null).catch(() => undefined);
+                        },
+                        (key, enabled): void => {
+                            this._orchestrator?.onGuideSettingChange(key, enabled);
+                        }
+                    );
+                    this._settingsScreen = screen;
+                    return screen;
+                })
+                .finally(() => {
+                    this._settingsScreenLoad = null;
+                });
+        }
+
+        return this._settingsScreenLoad;
+    }
+
+    private async _showSettingsScreen(): Promise<void> {
+        const screen = await this._ensureSettingsScreen();
+        if (!screen) return;
+        if (this._orchestrator?.getCurrentScreen() !== 'settings') return;
+        screen.show();
     }
 
     /**

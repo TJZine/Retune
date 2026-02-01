@@ -723,6 +723,8 @@ export class AppOrchestrator implements IAppOrchestrator {
             isMiniGuideVisible: (): boolean => this._miniGuide?.isVisible() ?? false,
             handleMiniGuideNavigation: (direction): boolean =>
                 this._miniGuideCoordinator?.handleNavigation(direction) ?? false,
+            handleMiniGuidePage: (direction): boolean =>
+                this._miniGuideCoordinator?.handlePage(direction) ?? false,
             handleMiniGuideSelect: (): void => {
                 this._lastChannelChangeSource = 'remote';
                 this._miniGuideCoordinator?.handleSelect();

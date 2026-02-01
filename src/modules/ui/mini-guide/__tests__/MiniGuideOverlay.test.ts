@@ -36,6 +36,22 @@ const makeViewModel = (): MiniGuideViewModel => ({
             nextTitle: 'Next Three',
             nowProgress: 1,
         },
+        {
+            channelId: 'ch4',
+            channelNumber: 4,
+            channelName: 'Channel Four',
+            nowTitle: 'Now Four',
+            nextTitle: null,
+            nowProgress: 0.75,
+        },
+        {
+            channelId: 'ch5',
+            channelNumber: 5,
+            channelName: 'Channel Five',
+            nowTitle: 'Now Five',
+            nextTitle: 'Next Five',
+            nowProgress: 0.1,
+        },
     ],
 });
 
@@ -94,6 +110,16 @@ describe('MiniGuideOverlay', () => {
         expect(next1.style.display).toBe('none');
     });
 
+    it('renders footer hint text', () => {
+        overlay.setViewModel(makeViewModel());
+        overlay.show();
+
+        const hint = document.querySelector(`.${MINI_GUIDE_CLASSES.FOOTER_HINT}`) as HTMLElement;
+        expect(hint).toBeTruthy();
+        expect(hint.textContent).toContain('UP/DOWN Browse');
+        expect(hint.textContent).toContain('CH± Page');
+    });
+
     it('toggles focused row class', () => {
         overlay.setViewModel(makeViewModel());
         overlay.show();
@@ -102,8 +128,8 @@ describe('MiniGuideOverlay', () => {
         expect(document.getElementById('mini-guide-row-1')?.classList.contains('focused')).toBe(true);
         expect(document.getElementById('mini-guide-row-0')?.classList.contains('focused')).toBe(false);
 
-        overlay.setFocusedIndex(2);
-        expect(document.getElementById('mini-guide-row-2')?.classList.contains('focused')).toBe(true);
+        overlay.setFocusedIndex(4);
+        expect(document.getElementById('mini-guide-row-4')?.classList.contains('focused')).toBe(true);
         expect(document.getElementById('mini-guide-row-1')?.classList.contains('focused')).toBe(false);
     });
 

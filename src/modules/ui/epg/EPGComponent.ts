@@ -644,23 +644,16 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
         const didScroll = this.ensureCellVisible(channelIndex, program);
 
         const focusTimeMs = this.getProgramFocusTime(program);
-        // Try to focus immediately if the cell is already rendered; otherwise defer until renderGridInternal()
-        const cellElement = this.virtualizer.setFocusedCell(
-            channel.id,
-            program.scheduledStartTime,
-            focusTimeMs
-        );
-        if (didScroll || !cellElement) {
-            this.renderGridInternal();
-        }
         this.state.focusTimeMs = focusTimeMs;
+        // Set the focusedCell state BEFORE rendering so renderGridInternal() can correctly
+        // apply focus styling to the new target (and not the previous focused cell).
         this.state.focusedCell = {
             kind: 'program',
             channelIndex,
             programIndex,
             program,
             focusTimeMs,
-            cellElement,
+            cellElement: null,
         };
 
         // Update channel list focus
@@ -668,6 +661,18 @@ export class EPGComponent extends EventEmitter<EPGEventMap> implements IEPGCompo
 
         // Update info panel
         this._scheduleInfoPanelUpdate(program);
+
+        // Try to focus immediately if the cell is already rendered; otherwise let renderGridInternal()
+        // render it and then apply focus styling.
+        const cellElement = this.virtualizer.setFocusedCell(
+            channel.id,
+            program.scheduledStartTime,
+            focusTimeMs
+        );
+        this.state.focusedCell.cellElement = cellElement;
+        if (didScroll || !cellElement) {
+            this.renderGridInternal();
+        }
 
         // Emit focus change event
         this.emit('focusChange', this.state.focusedCell);

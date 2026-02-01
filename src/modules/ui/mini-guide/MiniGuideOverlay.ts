@@ -7,7 +7,7 @@ import { MINI_GUIDE_CLASSES } from './constants';
 import type { IMiniGuideOverlay } from './interfaces';
 import type { MiniGuideConfig, MiniGuideViewModel } from './types';
 
-const ROW_COUNT = 3;
+const ROW_COUNT = 5;
 
 type MiniGuideRowElements = {
     row: HTMLElement | null;
@@ -136,6 +136,9 @@ export class MiniGuideOverlay implements IMiniGuideOverlay {
         return `
       <div class="${MINI_GUIDE_CLASSES.PANEL}">
         ${rows.join('')}
+        <div class="${MINI_GUIDE_CLASSES.FOOTER_HINT}">
+          UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close
+        </div>
       </div>
     `;
     }

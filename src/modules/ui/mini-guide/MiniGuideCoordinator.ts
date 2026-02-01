@@ -10,7 +10,9 @@ import { ScheduleCalculator, ShuffleGenerator } from '../../scheduler/scheduler'
 import type { IMiniGuideOverlay } from './interfaces';
 import type { MiniGuideChannelViewModel, MiniGuideViewModel } from './types';
 
-const ROW_COUNT = 3;
+const ROW_COUNT = 5;
+const CENTER_INDEX = 2;
+const PAGE_JUMP = 5;
 
 export interface MiniGuideCoordinatorDeps {
     getOverlay: () => IMiniGuideOverlay | null;
@@ -30,10 +32,13 @@ export interface MiniGuideCoordinatorDeps {
 export class MiniGuideCoordinator {
     private _autoHideTimer: number | null = null;
     private _abortController: AbortController | null = null;
-    private _focusedIndex = 1;
+    private _focusedIndex = CENTER_INDEX;
+    private _allChannels: ChannelConfig[] = [];
+    private _windowStartIndex = 0;
     private _channels: ChannelConfig[] = [];
     private _viewModel: MiniGuideViewModel | null = null;
     private _showToken = 0;
+    private _playingChannelId: string | null = null;
     private readonly _shuffler = new ShuffleGenerator();
 
     constructor(private readonly deps: MiniGuideCoordinatorDeps) { }
@@ -51,15 +56,11 @@ export class MiniGuideCoordinator {
 
         const current = channelManager.getCurrentChannel() ?? allChannels[0]!;
         const currentIndex = Math.max(0, allChannels.findIndex((channel) => channel.id === current.id));
-        const prevIndex = wrapIndex(currentIndex - 1, allChannels.length);
-        const nextIndex = wrapIndex(currentIndex + 1, allChannels.length);
-
-        this._channels = [
-            allChannels[prevIndex]!,
-            allChannels[currentIndex]!,
-            allChannels[nextIndex]!,
-        ];
-        this._focusedIndex = 1;
+        this._allChannels = allChannels;
+        this._playingChannelId = current?.id ?? null;
+        this._windowStartIndex = wrapIndex(currentIndex - CENTER_INDEX, allChannels.length);
+        this._channels = this._buildWindowChannels(this._windowStartIndex);
+        this._focusedIndex = CENTER_INDEX;
 
         this._abortInFlight();
         const token = this._showToken;
@@ -74,23 +75,7 @@ export class MiniGuideCoordinator {
         const abortController = new AbortController();
         this._abortController = abortController;
 
-        const pendingResolves = new Map<string, { channel: ChannelConfig; indices: number[] }>();
-        for (let i = 0; i < ROW_COUNT; i += 1) {
-            const channel = this._channels[i]!;
-            if (channel.id === current.id) {
-                continue;
-            }
-            const existing = pendingResolves.get(channel.id);
-            if (existing) {
-                existing.indices.push(i);
-            } else {
-                pendingResolves.set(channel.id, { channel, indices: [i] });
-            }
-        }
-
-        for (const entry of pendingResolves.values()) {
-            void this._resolveChannel(entry.channel, entry.indices, abortController, token);
-        }
+        this._startResolveForWindow(current, abortController, token);
     }
 
     hide(): void {
@@ -105,11 +90,35 @@ export class MiniGuideCoordinator {
         if (!overlay || !overlay.isVisible()) {
             return false;
         }
-        const nextIndex = direction === 'up'
-            ? Math.max(0, this._focusedIndex - 1)
-            : Math.min(ROW_COUNT - 1, this._focusedIndex + 1);
-        this._focusedIndex = nextIndex;
-        overlay.setFocusedIndex(this._focusedIndex);
+        if (direction === 'up') {
+            if (this._focusedIndex > 0) {
+                this._focusedIndex -= 1;
+                overlay.setFocusedIndex(this._focusedIndex);
+            } else {
+                this._windowStartIndex = wrapIndex(this._windowStartIndex - 1, this._allChannels.length);
+                this._refreshWindow();
+            }
+        } else {
+            if (this._focusedIndex < ROW_COUNT - 1) {
+                this._focusedIndex += 1;
+                overlay.setFocusedIndex(this._focusedIndex);
+            } else {
+                this._windowStartIndex = wrapIndex(this._windowStartIndex + 1, this._allChannels.length);
+                this._refreshWindow();
+            }
+        }
+        this._scheduleAutoHide();
+        return true;
+    }
+
+    handlePage(direction: 'up' | 'down'): boolean {
+        const overlay = this.deps.getOverlay();
+        if (!overlay || !overlay.isVisible()) {
+            return false;
+        }
+        const delta = direction === 'up' ? -PAGE_JUMP : PAGE_JUMP;
+        this._windowStartIndex = wrapIndex(this._windowStartIndex + delta, this._allChannels.length);
+        this._refreshWindow();
         this._scheduleAutoHide();
         return true;
     }
@@ -125,11 +134,68 @@ export class MiniGuideCoordinator {
         });
     }
 
-    private _buildFastViewModel(current: ChannelConfig): MiniGuideViewModel {
+    private _refreshWindow(): void {
+        if (this._allChannels.length === 0) {
+            return;
+        }
+        const overlay = this.deps.getOverlay();
+        if (!overlay || !overlay.isVisible()) {
+            return;
+        }
+        const current = this._allChannels.find((channel) => channel.id === this._playingChannelId) ?? null;
+        this._channels = this._buildWindowChannels(this._windowStartIndex);
+
+        this._abortInFlight();
+        const token = this._showToken;
+        const fastViewModel = this._buildFastViewModel(current);
+        this._viewModel = fastViewModel;
+        overlay.setViewModel(fastViewModel);
+        overlay.setFocusedIndex(this._focusedIndex);
+
+        const abortController = new AbortController();
+        this._abortController = abortController;
+        this._startResolveForWindow(current, abortController, token);
+    }
+
+    private _buildWindowChannels(startIndex: number): ChannelConfig[] {
+        const channels: ChannelConfig[] = [];
+        const length = this._allChannels.length;
+        for (let i = 0; i < ROW_COUNT; i += 1) {
+            const index = wrapIndex(startIndex + i, length);
+            channels.push(this._allChannels[index]!);
+        }
+        return channels;
+    }
+
+    private _startResolveForWindow(
+        current: ChannelConfig | null,
+        abortController: AbortController,
+        token: number
+    ): void {
+        const pendingResolves = new Map<string, { channel: ChannelConfig; indices: number[] }>();
+        for (let i = 0; i < ROW_COUNT; i += 1) {
+            const channel = this._channels[i]!;
+            if (current && channel.id === current.id) {
+                continue;
+            }
+            const existing = pendingResolves.get(channel.id);
+            if (existing) {
+                existing.indices.push(i);
+            } else {
+                pendingResolves.set(channel.id, { channel, indices: [i] });
+            }
+        }
+
+        for (const entry of pendingResolves.values()) {
+            void this._resolveChannel(entry.channel, entry.indices, abortController, token);
+        }
+    }
+
+    private _buildFastViewModel(current: ChannelConfig | null): MiniGuideViewModel {
         const rows: MiniGuideChannelViewModel[] = [];
         for (let i = 0; i < ROW_COUNT; i += 1) {
             const channel = this._channels[i]!;
-            if (channel.id === current.id) {
+            if (current && channel.id === current.id) {
                 rows.push(this._buildCurrentRow(channel, current));
                 continue;
             }
@@ -253,6 +319,10 @@ export class MiniGuideCoordinator {
 
     private _updateRow(index: number, row: MiniGuideChannelViewModel, token: number): void {
         if (token !== this._showToken || !this._viewModel) {
+            return;
+        }
+        const currentRow = this._viewModel.channels[index];
+        if (!currentRow || currentRow.channelId !== row.channelId) {
             return;
         }
         const overlay = this.deps.getOverlay();

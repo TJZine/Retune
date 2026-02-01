@@ -99,6 +99,7 @@ const setup = (overrides: Partial<NavigationCoordinatorDeps> = {}): {
         hideMiniGuide: jest.fn(),
         isMiniGuideVisible: jest.fn().mockReturnValue(false),
         handleMiniGuideNavigation: jest.fn().mockReturnValue(true),
+        handleMiniGuidePage: jest.fn().mockReturnValue(true),
         handleMiniGuideSelect: jest.fn(),
         isNowPlayingModalOpen: () => false,
         toggleNowPlayingInfoOverlay: jest.fn(),
@@ -253,6 +254,20 @@ describe('NavigationCoordinator', () => {
         expect(okEvent.handled).toBe(true);
     });
 
+    it('does not route mini-guide when input is blocked', () => {
+        const { handlers, deps, navigation } = setup({
+            isMiniGuideVisible: jest.fn().mockReturnValue(true),
+        });
+        (navigation.isInputBlocked as jest.Mock).mockReturnValue(true);
+
+        const event = makeKeyEvent('down');
+        handlers.keyPress?.(event);
+
+        expect(deps.handleMiniGuideNavigation).not.toHaveBeenCalled();
+        expect(event.handled).toBe(true);
+        expect(event.originalEvent.preventDefault).toHaveBeenCalled();
+    });
+
     it('back hides mini-guide and does not open exit-confirm', () => {
         const { handlers, deps, navigation } = setup({
             isMiniGuideVisible: jest.fn().mockReturnValue(true),
@@ -266,17 +281,31 @@ describe('NavigationCoordinator', () => {
         expect(event.handled).toBe(true);
     });
 
-    it('hides mini-guide before channel up/down', () => {
+    it('pages mini-guide on channel up/down without switching channels', () => {
         const { handlers, deps } = setup({
             isMiniGuideVisible: jest.fn().mockReturnValue(true),
         });
 
         handlers.keyPress?.(makeKeyEvent('channelUp'));
-        expect(deps.hideMiniGuide).toHaveBeenCalled();
-        expect(deps.switchToPreviousChannel).toHaveBeenCalled();
+        expect(deps.handleMiniGuidePage).toHaveBeenCalledWith('up');
+        expect(deps.switchToPreviousChannel).not.toHaveBeenCalled();
 
         handlers.keyPress?.(makeKeyEvent('channelDown'));
-        expect(deps.switchToNextChannel).toHaveBeenCalled();
+        expect(deps.handleMiniGuidePage).toHaveBeenCalledWith('down');
+        expect(deps.switchToNextChannel).not.toHaveBeenCalled();
+    });
+
+    it('right hides mini-guide then opens full guide', () => {
+        const { handlers, deps } = setup({
+            isMiniGuideVisible: jest.fn().mockReturnValue(true),
+        });
+
+        const event = makeKeyEvent('right');
+        handlers.keyPress?.(event);
+
+        expect(deps.hideMiniGuide).toHaveBeenCalledTimes(1);
+        expect(deps.toggleEpg).toHaveBeenCalledTimes(1);
+        expect(event.handled).toBe(true);
     });
 
     it('swallows back when now playing modal open', () => {
@@ -595,6 +624,79 @@ describe('NavigationCoordinator', () => {
         handlers.screenChange?.({ from: 'player', to: 'settings' });
 
         expect(epg.hide).toHaveBeenCalled();
+    });
+
+    describe('mini guide repeat', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.setSystemTime(0);
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('accelerated repeat ticks and stops on keyUp', () => {
+            const { handlers, deps, navigation } = setup({
+                isMiniGuideVisible: jest.fn().mockReturnValue(true),
+                handleMiniGuideNavigation: jest.fn().mockReturnValue(true),
+            });
+            (navigation.isModalOpen as jest.Mock).mockReturnValue(false);
+            (navigation.isInputBlocked as jest.Mock).mockReturnValue(false);
+
+            const event = makeKeyEvent('down');
+            handlers.keyPress?.(event);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(2);
+
+            jest.advanceTimersByTime(140);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(3);
+
+            handlers.keyUp?.({ button: 'down' });
+            jest.advanceTimersByTime(1000);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(3);
+        });
+
+        it('repeat stops when input is blocked', () => {
+            const { handlers, deps, navigation } = setup({
+                isMiniGuideVisible: jest.fn().mockReturnValue(true),
+                handleMiniGuideNavigation: jest.fn().mockReturnValue(true),
+            });
+            const isInputBlocked = navigation.isInputBlocked as jest.Mock;
+            isInputBlocked.mockReturnValue(false);
+
+            handlers.keyPress?.(makeKeyEvent('down'));
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(2);
+
+            isInputBlocked.mockReturnValue(true);
+            jest.advanceTimersByTime(1000);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(2);
+        });
+
+        it('repeat stops when leaving player screen', () => {
+            const { handlers, deps, navigation } = setup({
+                isMiniGuideVisible: jest.fn().mockReturnValue(true),
+                handleMiniGuideNavigation: jest.fn().mockReturnValue(true),
+            });
+            (navigation.isInputBlocked as jest.Mock).mockReturnValue(false);
+            const getCurrentScreen = navigation.getCurrentScreen as jest.Mock;
+            getCurrentScreen.mockReturnValue('player');
+
+            handlers.keyPress?.(makeKeyEvent('down'));
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(250);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(2);
+
+            getCurrentScreen.mockReturnValue('settings');
+            jest.advanceTimersByTime(1000);
+            expect(deps.handleMiniGuideNavigation).toHaveBeenCalledTimes(2);
+        });
     });
 
     describe('epg repeat', () => {
