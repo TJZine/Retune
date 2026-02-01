@@ -43,6 +43,8 @@ export class AudioSetupScreen {
     private _onComplete: () => void;
     private _focusableIds: string[] = [];
     private _selectedChoice: AudioChoice['id'] | null = null;
+    private _lastFocusedChoiceId: string = 'audio-choice-tv-speakers';
+    private _fallbackFocusable: FocusableElement | null = null;
     private _directPlayFallbackEnabled: boolean;
 
     constructor(
@@ -89,7 +91,7 @@ export class AudioSetupScreen {
 
         // Choices
         const choicesList = document.createElement('div');
-        choicesList.className = 'setup-list';
+        choicesList.className = 'setup-grid-2col';
 
         for (const choice of AUDIO_CHOICES) {
             const button = document.createElement('button');
@@ -153,7 +155,6 @@ export class AudioSetupScreen {
         continueBtn.id = 'audio-setup-continue';
         continueBtn.className = 'screen-button';
         continueBtn.textContent = 'Continue';
-        continueBtn.disabled = true;
         continueBtn.addEventListener('click', () => this._applyAndContinue());
         actions.appendChild(continueBtn);
 
@@ -166,6 +167,7 @@ export class AudioSetupScreen {
      */
     private _selectChoice(choiceId: AudioChoice['id']): void {
         this._selectedChoice = choiceId;
+        this._setLastFocusedChoiceId(`audio-choice-${choiceId}`);
 
         // Update button states
         for (const choice of AUDIO_CHOICES) {
@@ -184,14 +186,6 @@ export class AudioSetupScreen {
         if (continueBtn) {
             continueBtn.disabled = false;
         }
-
-        const nav = this._getNavigation();
-        const focusedId = nav?.getFocusedElement()?.id ?? null;
-        const desiredFocusId = focusedId ?? `audio-choice-${choiceId}`;
-
-        // Re-register focusables to update continue button state
-        this._unregisterFocusables();
-        this._registerFocusables(desiredFocusId);
     }
 
     /**
@@ -232,6 +226,7 @@ export class AudioSetupScreen {
      */
     public show(): void {
         this._container.classList.add('visible');
+        this._ensureInitialSelectionAndState();
         this._registerFocusables();
     }
 
@@ -250,50 +245,110 @@ export class AudioSetupScreen {
         const nav = this._getNavigation();
         if (!nav) return;
 
-        const buttons: HTMLButtonElement[] = [];
-        for (const choice of AUDIO_CHOICES) {
-            const btn = this._container.querySelector(`#audio-choice-${choice.id}`) as HTMLButtonElement | null;
-            if (btn) buttons.push(btn);
-        }
+        const externalBtn = this._container.querySelector('#audio-choice-external') as HTMLButtonElement | null;
+        const tvBtn = this._container.querySelector('#audio-choice-tv-speakers') as HTMLButtonElement | null;
         const fallbackBtn = this._container.querySelector('#audio-direct-play-fallback') as HTMLButtonElement | null;
-        if (fallbackBtn) {
-            buttons.push(fallbackBtn);
-        }
         const continueBtn = this._container.querySelector('#audio-setup-continue') as HTMLButtonElement | null;
-        if (continueBtn && !continueBtn.disabled) {
-            buttons.push(continueBtn);
+
+        this._fallbackFocusable = null;
+        const focusables: FocusableElement[] = [];
+
+        if (externalBtn) {
+            const neighbors: FocusableElement['neighbors'] = {};
+            if (tvBtn?.id) neighbors.right = tvBtn.id;
+            if (fallbackBtn?.id) neighbors.down = fallbackBtn.id;
+            focusables.push({
+                id: externalBtn.id,
+                element: externalBtn,
+                neighbors,
+                onFocus: () => this._setLastFocusedChoiceId(externalBtn.id),
+                onSelect: () => externalBtn.click(),
+            });
         }
 
-        this._focusableIds = buttons.map(b => b.id);
-
-        for (let i = 0; i < buttons.length; i++) {
-            const btn = buttons[i];
-            if (!btn) continue;
-
+        if (tvBtn) {
             const neighbors: FocusableElement['neighbors'] = {};
-            if (i > 0) {
-                const prevBtn = buttons[i - 1];
-                if (prevBtn) neighbors.up = prevBtn.id;
-            }
-            if (i < buttons.length - 1) {
-                const nextBtn = buttons[i + 1];
-                if (nextBtn) neighbors.down = nextBtn.id;
-            }
-
-            const focusable: FocusableElement = {
-                id: btn.id,
-                element: btn,
+            if (externalBtn?.id) neighbors.left = externalBtn.id;
+            if (fallbackBtn?.id) neighbors.down = fallbackBtn.id;
+            focusables.push({
+                id: tvBtn.id,
+                element: tvBtn,
                 neighbors,
-                onSelect: () => btn.click(),
+                onFocus: () => this._setLastFocusedChoiceId(tvBtn.id),
+                onSelect: () => tvBtn.click(),
+            });
+        }
+
+        if (fallbackBtn) {
+            const neighbors: FocusableElement['neighbors'] = {};
+            if (this._lastFocusedChoiceId) neighbors.up = this._lastFocusedChoiceId;
+            if (continueBtn?.id) neighbors.down = continueBtn.id;
+            const fallbackFocusable: FocusableElement = {
+                id: fallbackBtn.id,
+                element: fallbackBtn,
+                neighbors,
+                onSelect: () => fallbackBtn.click(),
             };
+            this._fallbackFocusable = fallbackFocusable;
+            focusables.push(fallbackFocusable);
+        }
+
+        if (continueBtn) {
+            const neighbors: FocusableElement['neighbors'] = {};
+            if (fallbackBtn?.id) neighbors.up = fallbackBtn.id;
+            focusables.push({
+                id: continueBtn.id,
+                element: continueBtn,
+                neighbors,
+                onSelect: () => continueBtn.click(),
+            });
+        }
+
+        this._focusableIds = focusables.map((focusable) => focusable.id);
+
+        for (const focusable of focusables) {
             nav.registerFocusable(focusable);
         }
 
+        const selectedChoiceId = this._selectedChoice ? `audio-choice-${this._selectedChoice}` : null;
+        const fallbackFocusId = externalBtn?.id ?? tvBtn?.id ?? null;
         const focusId = preferredFocusId && this._focusableIds.includes(preferredFocusId)
             ? preferredFocusId
-            : (buttons[0]?.id ?? null);
+            : (selectedChoiceId && this._focusableIds.includes(selectedChoiceId)
+                ? selectedChoiceId
+                : (fallbackFocusId && this._focusableIds.includes(fallbackFocusId) ? fallbackFocusId : null));
         if (focusId) {
             nav.setFocus(focusId);
+        }
+    }
+
+    private _setLastFocusedChoiceId(choiceId: string): void {
+        this._lastFocusedChoiceId = choiceId;
+        if (this._fallbackFocusable) {
+            this._fallbackFocusable.neighbors.up = this._lastFocusedChoiceId;
+        }
+    }
+
+    private _ensureInitialSelectionAndState(): void {
+        if (this._selectedChoice) {
+            return;
+        }
+        const dtsEnabled = readStoredBoolean(
+            SETTINGS_STORAGE_KEYS.DTS_PASSTHROUGH,
+            DEFAULT_SETTINGS.audio.dtsPassthrough
+        );
+        this._selectedChoice = dtsEnabled ? 'external' : 'tv-speakers';
+        this._lastFocusedChoiceId = `audio-choice-${this._selectedChoice}`;
+
+        for (const choice of AUDIO_CHOICES) {
+            const btn = this._container.querySelector(`#audio-choice-${choice.id}`) as HTMLButtonElement | null;
+            if (!btn) continue;
+            btn.classList.toggle('selected', choice.id === this._selectedChoice);
+        }
+
+        const continueBtn = this._container.querySelector('#audio-setup-continue') as HTMLButtonElement | null;
+        if (continueBtn) {
+            continueBtn.disabled = false;
         }
     }
 
@@ -309,6 +364,7 @@ export class AudioSetupScreen {
             nav.unregisterFocusable(id);
         }
         this._focusableIds = [];
+        this._fallbackFocusable = null;
     }
 
     /**

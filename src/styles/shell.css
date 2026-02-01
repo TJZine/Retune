@@ -217,6 +217,18 @@
   padding-right: 4px;
 }
 
+.setup-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .setup-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
 .setup-accordion-list {
   gap: 0;
 }
@@ -325,6 +337,7 @@
 .setup-empty {
   font-size: 16px;
   color: rgba(255, 255, 255, 0.6);
+  grid-column: 1 / -1;
 }
 
 /* =========================================
