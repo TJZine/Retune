@@ -54,7 +54,7 @@ export class ChannelSetupScreen {
         genres: false,
         directors: false,
         decades: false,
-        recentlyAdded: false,
+        recentlyAdded: true,
         studios: false,
         actors: false,
     };
@@ -93,7 +93,7 @@ export class ChannelSetupScreen {
         return {
             contentSources: true,
             advancedSources: false,
-            buildOptions: true,
+            buildOptions: false,
             limits: false,
         };
     }
@@ -358,7 +358,7 @@ export class ChannelSetupScreen {
         scroll.className = 'setup-scroll';
 
         const list = document.createElement('div');
-        list.className = 'setup-list';
+        list.className = 'setup-grid-2col';
 
         if (this._libraries.length === 0) {
             const empty = document.createElement('div');
@@ -438,7 +438,7 @@ export class ChannelSetupScreen {
         this._contentEl.appendChild(actions);
 
         const listButtons = Array.from(list.querySelectorAll<HTMLButtonElement>('button'));
-        this._registerFocusables([...listButtons, backButton, nextButton]);
+        this._registerFocusables([...listButtons, backButton, nextButton], 'spatial');
 
         this._detailEl.textContent = `Selected ${this._selectedLibraryIds.size} of ${this._libraries.length}.`;
     }
@@ -1388,7 +1388,7 @@ export class ChannelSetupScreen {
         return this._orchestrator.getSelectedServerId();
     }
 
-    private _registerFocusables(buttons: HTMLElement[]): void {
+    private _registerFocusables(buttons: HTMLElement[], mode: 'linear' | 'spatial' = 'linear'): void {
         const nav = this._orchestrator.getNavigation();
         if (!nav) {
             return;
@@ -1407,13 +1407,15 @@ export class ChannelSetupScreen {
                 element: button,
                 neighbors: {},
             };
-            const up = index > 0 ? focusableButtons[index - 1] : undefined;
-            if (up) {
-                focusable.neighbors.up = up.id;
-            }
-            const down = index < focusableButtons.length - 1 ? focusableButtons[index + 1] : undefined;
-            if (down) {
-                focusable.neighbors.down = down.id;
+            if (mode === 'linear') {
+                const up = index > 0 ? focusableButtons[index - 1] : undefined;
+                if (up) {
+                    focusable.neighbors.up = up.id;
+                }
+                const down = index < focusableButtons.length - 1 ? focusableButtons[index + 1] : undefined;
+                if (down) {
+                    focusable.neighbors.down = down.id;
+                }
             }
             nav.registerFocusable(focusable);
         }

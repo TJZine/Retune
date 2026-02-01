@@ -13,6 +13,7 @@ import type { PlayerOsdReason, PlayerOsdViewModel } from './types';
 import type { PlaybackOptionsSectionId } from '../playback-options/types';
 import { buildPlaybackSummary, type PlaybackInfoSnapshotLike } from '../../../utils/playbackSummary';
 import { formatAudioLabel } from '../../../utils/formatAudioLabel';
+import { getChannelNameForDisplay } from '../channelDisplay';
 
 const RECENT_USER_ACTION_MS = 2000;
 const OSD_THROTTLE_MS = 250;
@@ -414,13 +415,17 @@ export class PlayerOsdCoordinator {
 
 function formatChannelPrefix(channel: ChannelConfig | null): string {
     if (!channel) return '';
+    const displayName = getChannelNameForDisplay({
+        name: channel.name,
+        sourceLibraryName: channel.sourceLibraryName ?? null,
+    });
     const hasNumber = typeof channel.number === 'number' && Number.isFinite(channel.number);
-    const hasName = typeof channel.name === 'string' && channel.name.length > 0;
+    const hasName = typeof displayName === 'string' && displayName.length > 0;
     if (hasNumber && hasName) {
-        return `${channel.number} ${channel.name}`;
+        return `${channel.number} ${displayName}`;
     }
     if (hasName) {
-        return channel.name;
+        return displayName;
     }
     if (hasNumber) {
         return `${channel.number}`;

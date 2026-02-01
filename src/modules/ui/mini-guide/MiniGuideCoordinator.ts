@@ -9,6 +9,7 @@ import type { IChannelScheduler, ScheduledProgram, ScheduleConfig } from '../../
 import { ScheduleCalculator, ShuffleGenerator } from '../../scheduler/scheduler';
 import type { IMiniGuideOverlay } from './interfaces';
 import type { MiniGuideChannelViewModel, MiniGuideViewModel } from './types';
+import { getChannelNameForDisplay } from '../channelDisplay';
 
 const ROW_COUNT = 5;
 const CENTER_INDEX = 2;
@@ -226,10 +227,14 @@ export class MiniGuideCoordinator {
     }
 
     private _buildLoadingRow(channel: ChannelConfig): MiniGuideChannelViewModel {
+        const displayName = getChannelNameForDisplay({
+            name: channel.name,
+            sourceLibraryName: channel.sourceLibraryName ?? null,
+        });
         return {
             channelId: channel.id,
             channelNumber: channel.number,
-            channelName: channel.name,
+            channelName: displayName,
             nowTitle: 'Loading...',
             nextTitle: null,
             nowProgress: 0,
@@ -237,10 +242,14 @@ export class MiniGuideCoordinator {
     }
 
     private _buildUnavailableRow(channel: ChannelConfig): MiniGuideChannelViewModel {
+        const displayName = getChannelNameForDisplay({
+            name: channel.name,
+            sourceLibraryName: channel.sourceLibraryName ?? null,
+        });
         return {
             channelId: channel.id,
             channelNumber: channel.number,
-            channelName: channel.name,
+            channelName: displayName,
             nowTitle: 'Unavailable',
             nextTitle: null,
             nowProgress: 0,
@@ -302,6 +311,10 @@ export class MiniGuideCoordinator {
     ): MiniGuideChannelViewModel {
         const nowTitle = now?.item?.title ?? 'Unavailable';
         const nextTitle = next?.item?.title ?? null;
+        const displayName = getChannelNameForDisplay({
+            name: channel.name,
+            sourceLibraryName: channel.sourceLibraryName ?? null,
+        });
 
         const durationMs = getDurationMs(now);
         const elapsedMs = Math.max(0, Math.min(durationMs, now?.elapsedMs ?? 0));
@@ -310,7 +323,7 @@ export class MiniGuideCoordinator {
         return {
             channelId: channel.id,
             channelNumber: channel.number,
-            channelName: channel.name,
+            channelName: displayName,
             nowTitle,
             nextTitle,
             nowProgress,
