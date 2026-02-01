@@ -109,7 +109,7 @@ const setup = (overrides?: Partial<{
     overlay: IMiniGuideOverlay & { _visible: boolean };
     channelManager: IChannelManager;
     scheduler: IChannelScheduler;
-    resolveDeferred: Record<'ch1' | 'ch2' | 'ch3', Deferred<ResolvedChannelContent>>;
+    resolveDeferred: Record<string, Deferred<ResolvedChannelContent>>;
     switchToChannel: jest.Mock<Promise<void>, [string]>;
 } => {
     const overlay = makeOverlay();
@@ -117,26 +117,32 @@ const setup = (overrides?: Partial<{
         makeChannel('ch1', 1),
         makeChannel('ch2', 2),
         makeChannel('ch3', 3),
+        makeChannel('ch4', 4),
+        makeChannel('ch5', 5),
+        makeChannel('ch6', 6),
     ];
     const currentChannel = overrides && 'currentChannel' in overrides
         ? overrides.currentChannel ?? null
-        : (channels[1] ?? channels[0] ?? null);
-    const resolveDeferred: Record<'ch1' | 'ch2' | 'ch3', Deferred<ResolvedChannelContent>> = {
-        ch1: makeDeferred(),
-        ch2: makeDeferred(),
-        ch3: makeDeferred(),
-    };
+        : (channels[2] ?? channels[0] ?? null);
+    const resolveDeferred: Record<string, Deferred<ResolvedChannelContent>> = {};
+    channels.forEach((channel) => {
+        resolveDeferred[channel.id] = makeDeferred<ResolvedChannelContent>();
+    });
 
     const channelManager = {
         getAllChannels: jest.fn().mockReturnValue(channels),
         getCurrentChannel: jest.fn().mockReturnValue(currentChannel),
-        resolveChannelContent: jest.fn((channelId: 'ch1' | 'ch2' | 'ch3') => (
-            resolveDeferred[channelId].promise
-        )),
+        resolveChannelContent: jest.fn((channelId: string) => {
+            const deferred = resolveDeferred[channelId];
+            if (!deferred) {
+                throw new Error(`Missing deferred for ${channelId}`);
+            }
+            return deferred.promise;
+        }),
     } as unknown as IChannelManager;
 
     const scheduler = {
-        getState: jest.fn().mockReturnValue({ isActive: true, channelId: 'ch2' }),
+        getState: jest.fn().mockReturnValue({ isActive: true, channelId: currentChannel?.id ?? 'ch1' }),
         getCurrentProgram: jest.fn().mockReturnValue(makeProgram('Current-Now')),
         getNextProgram: jest.fn().mockReturnValue(makeProgram('Current-Next')),
     } as unknown as IChannelScheduler;
@@ -173,8 +179,8 @@ describe('MiniGuideCoordinator', () => {
         expect(overlay.show).toHaveBeenCalledTimes(1);
         const firstVm = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0];
         expect(firstVm.channels[0].nowTitle).toBe('Loading...');
-        expect(firstVm.channels[2].nowTitle).toBe('Loading...');
-        expect(firstVm.channels[1].nowTitle).toBe('Current-Now');
+        expect(firstVm.channels[4].nowTitle).toBe('Loading...');
+        expect(firstVm.channels[2].nowTitle).toBe('Current-Now');
     });
 
     it('does not show when there are no channels', () => {
@@ -208,6 +214,8 @@ describe('MiniGuideCoordinator', () => {
         expect(firstVm.channels[0].nowTitle).toBe('Current-Now');
         expect(firstVm.channels[1].nowTitle).toBe('Current-Now');
         expect(firstVm.channels[2].nowTitle).toBe('Current-Now');
+        expect(firstVm.channels[3].nowTitle).toBe('Current-Now');
+        expect(firstVm.channels[4].nowTitle).toBe('Current-Now');
     });
 
     it('dedupes resolve for duplicate non-current channels', () => {
@@ -235,8 +243,8 @@ describe('MiniGuideCoordinator', () => {
         coordinator.show();
 
         const firstVm = (overlay.setViewModel as jest.Mock).mock.calls[0]?.[0];
-        expect(firstVm.channels[1].channelId).toBe('ch1');
-        expect(firstVm.channels[1].channelNumber).toBe(1);
+        expect(firstVm.channels[2].channelId).toBe('ch1');
+        expect(firstVm.channels[2].channelNumber).toBe(1);
     });
 
     it('resolves prev/next channels and updates view model', async () => {
@@ -244,34 +252,50 @@ describe('MiniGuideCoordinator', () => {
 
         coordinator.show();
 
-        resolveDeferred['ch1'].resolve(makeResolvedContent('ch1'));
-        resolveDeferred['ch3'].resolve(makeResolvedContent('ch3'));
+        resolveDeferred['ch1']!.resolve(makeResolvedContent('ch1'));
+        resolveDeferred['ch5']!.resolve(makeResolvedContent('ch5'));
 
         await Promise.resolve();
 
         const lastCall = (overlay.setViewModel as jest.Mock).mock.calls.at(-1)?.[0];
         expect(lastCall.channels[0].nowTitle).toBe('ch1-Now');
         expect(lastCall.channels[0].nextTitle).toBe('ch1-Next');
-        expect(lastCall.channels[2].nowTitle).toBe('ch3-Now');
-        expect(lastCall.channels[2].nextTitle).toBe('ch3-Next');
+        expect(lastCall.channels[4].nowTitle).toBe('ch5-Now');
+        expect(lastCall.channels[4].nextTitle).toBe('ch5-Next');
     });
 
-    it('navigation clamps at edges', () => {
+    it('navigation shifts window when moving past edges', () => {
         const { coordinator, overlay } = setup();
         coordinator.show();
 
-        expect(coordinator.handleNavigation('up')).toBe(true);
+        coordinator.handleNavigation('up');
+        coordinator.handleNavigation('up');
         expect(overlay.setFocusedIndex).toHaveBeenCalledWith(0);
 
-        expect(coordinator.handleNavigation('up')).toBe(true);
+        coordinator.handleNavigation('up');
+        const lastVm = (overlay.setViewModel as jest.Mock).mock.calls.at(-1)?.[0];
+        expect(lastVm.channels[0].channelId).toBe('ch6');
         expect(overlay.hide).not.toHaveBeenCalled();
 
         coordinator.show();
-        expect(coordinator.handleNavigation('down')).toBe(true);
-        expect(overlay.setFocusedIndex).toHaveBeenCalledWith(2);
+        coordinator.handleNavigation('down');
+        coordinator.handleNavigation('down');
+        coordinator.handleNavigation('down');
+        expect(overlay.setFocusedIndex).toHaveBeenCalledWith(4);
 
-        expect(coordinator.handleNavigation('down')).toBe(true);
+        const lastVmDown = (overlay.setViewModel as jest.Mock).mock.calls.at(-1)?.[0];
+        expect(lastVmDown.channels[4].channelId).toBe('ch6');
         expect(overlay.hide).not.toHaveBeenCalled();
+    });
+
+    it('pages window by jump size', () => {
+        const { coordinator, overlay } = setup();
+        coordinator.show();
+
+        expect(coordinator.handlePage('down')).toBe(true);
+        const lastVm = (overlay.setViewModel as jest.Mock).mock.calls.at(-1)?.[0];
+        expect(lastVm.channels[0].channelId).toBe('ch6');
+        expect(lastVm.channels[2].channelId).toBe('ch2');
     });
 
     it('ok hides and switches channel', () => {
@@ -281,7 +305,7 @@ describe('MiniGuideCoordinator', () => {
         coordinator.handleSelect();
 
         expect(overlay.hide).toHaveBeenCalled();
-        expect(switchToChannel).toHaveBeenCalledWith('ch2');
+        expect(switchToChannel).toHaveBeenCalledWith('ch3');
     });
 
     it('auto-hide hides after timeout', () => {
@@ -298,10 +322,54 @@ describe('MiniGuideCoordinator', () => {
         coordinator.show();
 
         coordinator.hide();
-        resolveDeferred['ch1'].resolve(makeResolvedContent('ch1'));
+        resolveDeferred['ch1']!.resolve(makeResolvedContent('ch1'));
 
         await Promise.resolve();
 
         expect((overlay.setViewModel as jest.Mock).mock.calls.length).toBe(1);
+    });
+
+    it('ignores resolves that complete after window shifts', async () => {
+        const { coordinator, overlay, resolveDeferred } = setup();
+        coordinator.show();
+
+        coordinator.handlePage('down');
+        const callCountBefore = (overlay.setViewModel as jest.Mock).mock.calls.length;
+
+        resolveDeferred['ch5']!.resolve(makeResolvedContent('ch5'));
+
+        await Promise.resolve();
+
+        const callCountAfter = (overlay.setViewModel as jest.Mock).mock.calls.length;
+        expect(callCountAfter).toBe(callCountBefore);
+        const lastVm = (overlay.setViewModel as jest.Mock).mock.calls.at(-1)?.[0];
+        expect(lastVm.channels[0].channelId).toBe('ch6');
+    });
+
+    it('skips stale row updates when channel id differs', () => {
+        const { coordinator, overlay } = setup();
+        coordinator.show();
+
+        coordinator.handlePage('down');
+
+        const anyCoordinator = coordinator as unknown as {
+            _showToken: number;
+            _updateRow: (index: number, row: unknown, token: number) => void;
+        };
+        const token = anyCoordinator._showToken;
+        const staleRow = {
+            channelId: 'ch1',
+            channelNumber: 1,
+            channelName: 'Channel 1',
+            nowTitle: 'Stale',
+            nextTitle: null,
+            nowProgress: 0,
+        };
+
+        const callCountBefore = (overlay.setViewModel as jest.Mock).mock.calls.length;
+        anyCoordinator._updateRow(0, staleRow, token);
+        const callCountAfter = (overlay.setViewModel as jest.Mock).mock.calls.length;
+
+        expect(callCountAfter).toBe(callCountBefore);
     });
 });

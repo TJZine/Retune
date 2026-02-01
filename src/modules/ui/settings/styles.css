@@ -103,6 +103,11 @@
   margin-top: 10px;
 }
 
+/* Ensure the HTML `hidden` attribute actually collapses the accordion body. */
+.settings-section-items[hidden] {
+  display: none;
+}
+
 /* Toggle disabled state */
 .setup-toggle.disabled {
   opacity: 0.5;

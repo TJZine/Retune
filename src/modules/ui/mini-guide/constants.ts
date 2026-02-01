@@ -15,4 +15,5 @@ export const MINI_GUIDE_CLASSES = {
     PROGRAM_NEXT: 'mini-guide-next',
     PROGRESS_BAR: 'mini-guide-progress',
     PROGRESS_FILL: 'mini-guide-progress-fill',
+    FOOTER_HINT: 'mini-guide-footer-hint',
 } as const;

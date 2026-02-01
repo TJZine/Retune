@@ -19,6 +19,12 @@ const EPG_REPEAT_TIER_2_MS = 1800;
 const EPG_REPEAT_INTERVAL_1_MS = 140;
 const EPG_REPEAT_INTERVAL_2_MS = 90;
 const EPG_REPEAT_INTERVAL_3_MS = 55;
+const MINI_GUIDE_REPEAT_INITIAL_DELAY_MS = 250;
+const MINI_GUIDE_REPEAT_TIER_1_MS = 800;
+const MINI_GUIDE_REPEAT_TIER_2_MS = 1800;
+const MINI_GUIDE_REPEAT_INTERVAL_1_MS = 140;
+const MINI_GUIDE_REPEAT_INTERVAL_2_MS = 90;
+const MINI_GUIDE_REPEAT_INTERVAL_3_MS = 55;
 
 export interface NavigationCoordinatorDeps {
     getNavigation: () => INavigationManager | null;
@@ -34,6 +40,7 @@ export interface NavigationCoordinatorDeps {
     hideMiniGuide: () => void;
     isMiniGuideVisible: () => boolean;
     handleMiniGuideNavigation: (direction: 'up' | 'down') => boolean;
+    handleMiniGuidePage: (direction: 'up' | 'down') => boolean;
     handleMiniGuideSelect: () => void;
 
     isNowPlayingModalOpen: () => boolean;
@@ -64,6 +71,9 @@ export class NavigationCoordinator {
     private _epgRepeatTimer: ReturnType<typeof setTimeout> | null = null;
     private _epgRepeatButton: 'up' | 'down' | 'left' | 'right' | null = null;
     private _epgRepeatStartMs = 0;
+    private _miniGuideRepeatTimer: ReturnType<typeof setTimeout> | null = null;
+    private _miniGuideRepeatButton: 'up' | 'down' | null = null;
+    private _miniGuideRepeatStartMs = 0;
 
     constructor(private readonly deps: NavigationCoordinatorDeps) { }
 
@@ -87,6 +97,9 @@ export class NavigationCoordinator {
             if (payload.button === this._epgRepeatButton) {
                 this._stopEpgRepeat('keyup');
             }
+            if (payload.button === this._miniGuideRepeatButton) {
+                this._stopMiniGuideRepeat('keyup');
+            }
         };
         navigation.on('keyUp', keyUpHandler);
         unsubs.push(() => {
@@ -108,6 +121,7 @@ export class NavigationCoordinator {
         const guideHandler = (): void => {
             // EPG is an overlay, not a navigation screen; toggle based on EPG visibility.
             this._stopEpgRepeat('guide');
+            this._stopMiniGuideRepeat('guide');
             this.deps.hideMiniGuide();
             this.deps.toggleEpg();
         };
@@ -137,6 +151,7 @@ export class NavigationCoordinator {
 
         const modalOpenHandler = (payload: { modalId: string }): void => {
             this._stopEpgRepeat('modalOpen');
+            this._stopMiniGuideRepeat('modalOpen');
             this.deps.hideMiniGuide();
             if (payload.modalId === NOW_PLAYING_INFO_MODAL_ID) {
                 this.deps.showNowPlayingInfoOverlay();
@@ -165,6 +180,7 @@ export class NavigationCoordinator {
 
     private _handleScreenChange(from: string, to: string): void {
         this._stopEpgRepeat('screenChange');
+        this._stopMiniGuideRepeat('screenChange');
         if (to === 'player' && this.deps.shouldRunChannelSetup()) {
             this.deps.getNavigation()?.replaceScreen('channel-setup');
             return;
@@ -235,6 +251,9 @@ export class NavigationCoordinator {
         );
         if (this._epgRepeatButton && !isDirection) {
             this._stopEpgRepeat('nonDirectional');
+        }
+        if (this._miniGuideRepeatButton && !isDirection) {
+            this._stopMiniGuideRepeat('nonDirectional');
         }
 
         const isNowPlayingModalOpen = this.deps.isNowPlayingModalOpen();
@@ -311,18 +330,44 @@ export class NavigationCoordinator {
         const currentScreen = navigation?.getCurrentScreen();
         const miniGuideVisible = this.deps.isMiniGuideVisible();
         if (currentScreen === 'player' && miniGuideVisible && !modalOpen && !shouldRouteToEpg) {
+            if (navigation?.isInputBlocked()) {
+                this._stopMiniGuideRepeat('inputBlocked');
+                event.handled = true;
+                event.originalEvent.preventDefault();
+                return;
+            }
             switch (event.button) {
                 case 'up':
                 case 'down':
                     event.handled = true;
                     event.originalEvent.preventDefault();
-                    if (!event.isRepeat) {
-                        this.deps.handleMiniGuideNavigation(event.button);
+                    if (this._miniGuideRepeatButton && this._miniGuideRepeatButton !== event.button) {
+                        this._stopMiniGuideRepeat('directionChange');
                     }
+                    if (!event.isRepeat || !this._miniGuideRepeatButton) {
+                        if (this.deps.handleMiniGuideNavigation(event.button)) {
+                            this._startMiniGuideRepeat(event.button);
+                        }
+                    }
+                    return;
+                case 'channelUp':
+                case 'channelDown':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    this._stopMiniGuideRepeat('page');
+                    this.deps.handleMiniGuidePage(event.button === 'channelUp' ? 'up' : 'down');
+                    return;
+                case 'right':
+                    event.handled = true;
+                    event.originalEvent.preventDefault();
+                    this._stopMiniGuideRepeat('right');
+                    this.deps.hideMiniGuide();
+                    this.deps.toggleEpg();
                     return;
                 case 'ok':
                     event.handled = true;
                     event.originalEvent.preventDefault();
+                    this._stopMiniGuideRepeat('ok');
                     if (!event.isRepeat) {
                         this.deps.handleMiniGuideSelect();
                     }
@@ -330,6 +375,7 @@ export class NavigationCoordinator {
                 case 'back':
                     event.handled = true;
                     event.originalEvent.preventDefault();
+                    this._stopMiniGuideRepeat('back');
                     this.deps.hideMiniGuide();
                     return;
                 default:
@@ -352,10 +398,6 @@ export class NavigationCoordinator {
                 }
                 return;
             }
-        }
-
-        if (miniGuideVisible && (event.button === 'channelUp' || event.button === 'channelDown')) {
-            this.deps.hideMiniGuide();
         }
 
         if (event.button === 'down') {
@@ -529,6 +571,76 @@ export class NavigationCoordinator {
         this._epgRepeatTimer = setTimeout(
             () => this._scheduleNextEpgRepeatTick(),
             EPG_REPEAT_INITIAL_DELAY_MS
+        );
+    }
+
+    private _stopMiniGuideRepeat(_reason: string): void {
+        if (this._miniGuideRepeatTimer !== null) {
+            clearTimeout(this._miniGuideRepeatTimer);
+            this._miniGuideRepeatTimer = null;
+        }
+        this._miniGuideRepeatButton = null;
+        this._miniGuideRepeatStartMs = 0;
+    }
+
+    private _computeMiniGuideRepeatInterval(heldMs: number): number {
+        if (heldMs < MINI_GUIDE_REPEAT_TIER_1_MS) {
+            return MINI_GUIDE_REPEAT_INTERVAL_1_MS;
+        }
+        if (heldMs < MINI_GUIDE_REPEAT_TIER_2_MS) {
+            return MINI_GUIDE_REPEAT_INTERVAL_2_MS;
+        }
+        return MINI_GUIDE_REPEAT_INTERVAL_3_MS;
+    }
+
+    private _scheduleNextMiniGuideRepeatTick(): void {
+        const navigation = this.deps.getNavigation();
+        if (!navigation) {
+            this._stopMiniGuideRepeat('noNavigation');
+            return;
+        }
+        if (navigation.isModalOpen()) {
+            this._stopMiniGuideRepeat('modalOpen');
+            return;
+        }
+        if (navigation.isInputBlocked()) {
+            this._stopMiniGuideRepeat('inputBlocked');
+            return;
+        }
+        if (navigation.getCurrentScreen() !== 'player') {
+            this._stopMiniGuideRepeat('notPlayer');
+            return;
+        }
+        if (!this.deps.isMiniGuideVisible()) {
+            this._stopMiniGuideRepeat('notVisible');
+            return;
+        }
+        if (!this._miniGuideRepeatButton) {
+            this._stopMiniGuideRepeat('noButton');
+            return;
+        }
+
+        const moved = this.deps.handleMiniGuideNavigation(this._miniGuideRepeatButton);
+        if (!moved) {
+            this._stopMiniGuideRepeat('blocked');
+            return;
+        }
+
+        const heldMs = Date.now() - this._miniGuideRepeatStartMs;
+        const interval = this._computeMiniGuideRepeatInterval(heldMs);
+        this._miniGuideRepeatTimer = setTimeout(
+            () => this._scheduleNextMiniGuideRepeatTick(),
+            interval
+        );
+    }
+
+    private _startMiniGuideRepeat(button: 'up' | 'down'): void {
+        this._stopMiniGuideRepeat('restart');
+        this._miniGuideRepeatButton = button;
+        this._miniGuideRepeatStartMs = Date.now();
+        this._miniGuideRepeatTimer = setTimeout(
+            () => this._scheduleNextMiniGuideRepeatTick(),
+            MINI_GUIDE_REPEAT_INITIAL_DELAY_MS
         );
     }
 
